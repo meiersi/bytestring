@@ -1,0 +1,222 @@
+TODO:
+
+    * back port streams fusion code.
+    * show instance for LPS
+    * stress testing
+    * strictness testing
+    * rewrite C code to Haskell
+    * eliminate use of -fno-warn-orphans
+
+
+Todo items
+----------
+
+* check that api again.
+    - in particular, unsafeHead/Tail for Char8?
+    - scanr,scanr1... in Char8
+
+* would it make sense to move the IO bits into a different module too?
+        - System.IO.ByteString
+        - Data.ByteString.IO
+
+* can we avoid joinWithByte? 
+        - Hard. Can't do it easily with a rule.
+
+* think about Data.ByteString.hGetLines. is it needed in the presence of
+    the cheap "lines =<< Data.ByteString.Lazy.getContents" ?
+
+* unchunk, Data.ByteString.Lazy -> [Data.ByteString]
+    -  and that'd work for any Lazy.ByteString, not just hGetContents >>= lines
+
+* consider if lazy hGetContents should use non-blocking reads. This should
+    allow messaging style applications (eg communication over pipes, sockets)
+    to use lazy ByteStrings. I think that at the moment since we demand 64k
+    it'd just block. With a messaging style app you've got to be careful not
+    to demand more data than is available, hence using non-blocking read
+    should do the right thing. And in the disk file case it doesn't change
+    anything anyway, you can always get a full chunk.
+
+* think about lazy hGetContents and IO exceptions
+
+* consider dropping map' as ghc-6.5 optimises map much better so there's now
+  little difference between them (15% rather than 40%) and with the new fusion
+  system we may be able to get even closer. Look at the benchmarks for filter'
+  to see if we can do the same there.
+
+* It might be nice to have a trim MutableByteArray primitive that can release
+  the tail of an array back to the GC. This would save copying in cases where
+  we choose to realloc to save space. This combined with GC-movable strings
+  might improve fragmentation / space usage for the many small strings case.
+
+* if we can be sure there is very little variance then it might be interesting to look 
+ into the cases where we're doing slightly worse eg the map/up, filter/up cases
+ and why we're doing so much better in the up/up case!?  that one makes no sense
+ since we should be doing the exact same thing as the old loopU for the up/up
+ case
+
+* then there are the strictness issues eg our current foldl & foldr are
+  arguably too strict we could fuse unpack/unpackWith if they wern't so strict
+
+* look at shrinking the chunk size, based on our cache testing.
+
+* think about horizontal fusion (esp. when considering nofib code)
+
+* fuseable reverse.
+
+* 'reverse' is very common in list code, but unnecessary in bytestring
+  code, since it takes a symmertric view.
+    look to eliminate it with rules. loopUp . reverse --> loopDown
+
+* work out how robust the rules are .
+
+* benchmark against C string library benchmarks
+
+* work out if we can convince ghc to remove NoAccs in map and filter.
+
+* Implement Lazy:
+    scanl1
+    partition
+    unzip
+
+* fix documentation in Fusion.hs
+
+* Prelude Data.ByteString.Lazy> List.groupBy (/=) $ [97,99,103,103]
+  [[97,99,103,103]]
+  Prelude Data.ByteString.Lazy> groupBy (/=) $ pack [97,99,103,103]
+  [LPS ["ac","g"],LPS ["g"]]
+
+
+
+Integration of the blaze-builder work into 'bytestring' and a set of new
+libraries.
+========================================================================
+
+[See the end of this file for an explanation of the splitting reasons.]
+
+A package 'system-io-write':
+
+  * compile-time abstraction of writing a bounded number of bytes to memory.
+
+  System.IO.Write
+    - provides both exact and bounded write abstractions
+
+
+Extension to the 'bytestring' package:
+
+  * also provide the ability to execute a builder on the buffer of a Handle;
+    i.e., no buffer allocation required! This is not yet implemented in the
+    blaze-builder library, as it requires changes to the Handle API. I think it
+    is worthwhile to pursue, as it makes Builders full fledged IO citizens: it
+    ensures a good buffer size even when executing multiple small builders
+    sequentially.
+
+  Data.ByteString.Builder.Internal.Buffer
+    - provides the buffer abstraction used for running Puts and Builders
+      (this buffer abstraction is also used by blaze-builder-enumerator)
+      (which would become part of the 'enumerator' library once 'bytestring' provides
+       the builder)
+
+  Data.ByteString.Builder.Internal
+    - provides the types up to Builder and Put
+    - provides execution functions (toByteString, toLazyByteString)
+
+  Data.ByteString.Builder.Write
+    - conversion from writes to builders
+    - higher-order functions for constructing bytestrings using writes
+      (e.g., faster filter, map, unfoldr, .. for strict and lazy bytestrings)
+
+  Data.ByteString.Builder
+    - re-exports functions for using builders together with bytestrings
+      (e.g., faster pack, map, filter, unfoldr, ... for lazy bytestrings)
+
+  Data.ByteString.Put
+    - re-exports functions for using Puts
+
+
+A package 'encoding-writes'
+
+  * allow sharing of implementation of binary encodings of Haskell values that 
+    write only a statically bounded number of bytes.
+
+  System.IO.Write.Char
+    - utf8, utf16, utf32 with both-endiannesses
+  System.IO.Write.Char8
+    - write of the least-significant-byte (often used in low-level network
+      protocol implementations)
+
+  System.IO.Write.Int
+    - binary writes of all sizes and byte orderings
+  System.IO.Write.Word
+    - binary writes of all sizes and byte orderings
+  System.IO.Write.Float
+    - binary writes of all sizes and byte orderings
+
+
+A package 'encoding-builders' provides
+
+  * builders for base types in encodings that are standardized.
+  * Many of them are just lifted versions of the 'encoding-writes'
+
+  Data.ByteString.Builder.Char
+  Data.ByteString.Builder.Char8
+    - also provides an IsString instance
+
+  Data.ByteString.Builder.Int
+  Data.ByteString.Builder.Word
+
+  Data.ByteString.Builder.Base64
+    - a faster on more flexible implementation of bytestring-base64
+
+
+A package 'encoding-builders-http'
+
+  * chunked transfer encoding used in 
+
+  Data.ByteString.Builder.HTTP
+
+
+A package 'encoding-builders-html'
+
+  Data.ByteString.Builder.HTML  
+
+
+Reasons for this splitting
+--------------------------
+
+The splitting is designed such that dependencies of different packages is
+(almost) as small as possible.
+
+  text: could reuse the UTF encoding writes together with a function
+        'writeStream :: (Char -> Write) -> Text -> Builder'
+        to define builders for serializing text values.
+
+        deps: bytestring, encoding-writes, system-io-write
+
+  blaze-html, hamlet: 
+        use encoding-builders-html and encoding-builders to exploit fused HTML
+        escaping and UTF-8 encoding.
+
+        deps: bytestring, encoding-builders-html, encoding-builders
+
+  warp, snap-server: 
+        use the builder transformer for chunking builders according to the
+        HTTP transfer encoding standard. They also use encoding-builders to
+        build the bytestream for the headers.
+       
+        deps: bytestring, encoding-builders-http, encoding-builders
+
+  zlib: 
+        might not require encoding-builders, as all its writes to buffers are
+        handled by the C implementation. Hence, only the builder abstraction
+        for managing the allocation and filling of buffers is required.
+
+        deps: bytestring
+        
+
+Open questions: 
+  - Do system-io-write and encoding-writes need to be split? At least simple
+    writes of WordXXX might be required in all use-cases.
+
+  - Should WordXXX builders should be provided by bytestring?
+    The Builder type is not really usable without these basic building blocks.
+

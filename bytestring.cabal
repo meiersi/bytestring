@@ -1,5 +1,5 @@
 Name:                bytestring
-Version:             0.9.1.10
+Version:             0.10.0.0
 Synopsis:            Fast, packed, strict and lazy byte arrays with a list interface
 Description:
     A time and space-efficient implementation of byte vectors using
@@ -40,6 +40,9 @@ library
                      Data.ByteString.Lazy.Char8
                      Data.ByteString.Lazy.Internal
                      Data.ByteString.Fusion
+                     Data.ByteString.Builder
+                     Data.ByteString.Builder.Internal
+                     Data.ByteString.Builder.Internal.Buffer
 
   extensions:        CPP, ForeignFunctionInterface
 

@@ -39,7 +39,6 @@ Extension to the 'bytestring' package:
 
   Data.ByteString.Builder
     - re-exports functions for using builders together with bytestrings
-      (e.g., faster pack, map, filter, unfoldr, ... for lazy bytestrings)
 
   Data.ByteString.Put
     - re-exports functions for using Puts

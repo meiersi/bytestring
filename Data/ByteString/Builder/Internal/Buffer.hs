@@ -12,7 +12,7 @@
 --
 module Data.ByteString.Builder.Internal.Buffer (
   -- * Buffers
-    Buffer
+    Buffer(..)
 
   -- ** Status information
   , freeSize 

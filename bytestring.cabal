@@ -43,6 +43,7 @@ library
                      Data.ByteString.Builder
                      Data.ByteString.Builder.Internal
                      Data.ByteString.Builder.Internal.Buffer
+                     Data.ByteString.Put
 
   extensions:        CPP, ForeignFunctionInterface
 

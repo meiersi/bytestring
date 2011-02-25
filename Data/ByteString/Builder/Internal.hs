@@ -30,6 +30,7 @@ module Data.ByteString.Builder.Internal (
   , putBuilder
   , putBuildStepCont
   , putLiftIO
+  , runPut
 
   -- * Execution
   , toLazyByteString
@@ -55,6 +56,8 @@ import qualified Data.ByteString               as S
 import qualified Data.ByteString.Internal      as S
 import qualified Data.ByteString.Lazy          as L
 import qualified Data.ByteString.Lazy.Internal as L
+
+import Data.ByteString.Builder.Internal.Buffer
 
 import Foreign
 
@@ -97,9 +100,7 @@ buildStep = BuildStep
 -- The 'Builder' Monoid and the 'Put' Monad
 ------------------------------------------------------------------------------
 
-newtype Builder = Builder { 
-    unBuilder :: forall r. BuildStep r -> BuildStep r 
-  }
+newtype Builder = Builder (forall r. BuildStep r -> BuildStep r)
 
 instance Monoid Builder where
   mempty = Builder id
@@ -505,7 +506,7 @@ toLazyByteString put =
     -- add bytestring directly as a chunk; exploits postcondition of runPut
     -- that bytestrings are non-empty
     outputBS bs = LBSM ((), L.Chunk bs)
-
+-}
 
 {-
 -- | A Builder that traces a message
@@ -529,13 +530,14 @@ test2 x = L.toChunks $ toLazyByteString2 $ fromBuilder $ mconcat
 -- Executing puts on a buffer
 ------------------------------------------------------------------------------
 
+{-
 -- | Execute a build step on the given buffer.
 {-# INLINE execBuildStep #-}
 execBuildStep :: BuildStep a
               -> Buffer  
               -> IO (BuildSignal a)
 execBuildStep step (Buffer _ _ op ope) = runBuildStep step (BufRange op ope)
-
+-}
 
 -- | Execute a put on a buffer.
 --
@@ -575,4 +577,3 @@ runPut liftIO outputBuf outputBS (Put put) =
                   outputBS bs
                   runStep nextStep buf'
 
--}

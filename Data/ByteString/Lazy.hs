@@ -207,6 +207,7 @@ import qualified Data.ByteString        as S  -- S for strict (hmm...)
 import qualified Data.ByteString.Internal as S
 import qualified Data.ByteString.Unsafe as S
 import Data.ByteString.Lazy.Internal
+import Data.ByteString.Builder          as B
 
 import Data.Monoid              (Monoid(..))
 
@@ -291,12 +292,7 @@ singleton w = Chunk (S.singleton w) Empty
 
 -- | /O(n)/ Convert a '[Word8]' into a 'ByteString'. 
 pack :: [Word8] -> ByteString
-pack ws = L.foldr (Chunk . S.pack) Empty (chunks defaultChunkSize ws)
-  where
-    chunks :: Int -> [a] -> [[a]]
-    chunks _    [] = []
-    chunks size xs = case L.splitAt size xs of
-                      (xs', xs'') -> xs' : chunks size xs''
+pack = B.toLazyByteString . B.fromWord8s
 
 -- | /O(n)/ Converts a 'ByteString' to a '[Word8]'.
 unpack :: ByteString -> [Word8]

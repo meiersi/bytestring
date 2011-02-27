@@ -35,9 +35,9 @@ module Data.ByteString.Builder.Internal (
   -- * Execution
   , toLazyByteString
   , toLazyByteStringWith
-  , toByteString
-  , toByteStringIO
-  , toByteStringIOWith
+  -- , toByteString
+  -- , toByteStringIO
+  -- , toByteStringIOWith
 
   -- * Deafult Sizes
   , defaultFirstBufferSize
@@ -46,7 +46,6 @@ module Data.ByteString.Builder.Internal (
   , defaultMaximalCopySize 
 ) where
 
-import Control.Monad (unless)
 #ifdef APPLICATIVE_IN_BASE
 import Control.Applicative
 #endif
@@ -54,7 +53,6 @@ import Control.Applicative
 import Data.Monoid
 import qualified Data.ByteString               as S
 import qualified Data.ByteString.Internal      as S
-import qualified Data.ByteString.Lazy          as L
 import qualified Data.ByteString.Lazy.Internal as L
 
 import Data.ByteString.Builder.Internal.Buffer
@@ -375,9 +373,11 @@ toLazyByteStringWith bufSize minBufSize firstBufSize (Builder b) k =
 --
 toLazyByteString :: Builder -> L.ByteString
 toLazyByteString b = toLazyByteStringWith 
-    defaultBufferSize defaultMinimalBufferSize defaultFirstBufferSize b L.empty
+    defaultBufferSize defaultMinimalBufferSize defaultFirstBufferSize b L.Empty
 {-# INLINE toLazyByteString #-}
 
+{- TODO: Move to Data.ByteString.Lazy
+ 
 -- | Pack the chunks of a lazy bytestring into a single strict bytestring.
 packChunks :: L.ByteString -> S.ByteString
 packChunks lbs = do
@@ -389,6 +389,11 @@ packChunks lbs = do
             copyBytes pf (pbuf `plusPtr` o) l
         copyChunks lbs' (pf `plusPtr` l)
 
+-}
+
+{- TODO: Think if we should really provide this by default. In most cases
+ - performance will not meet the expectations of the user.
+ 
 -- | Run the builder to construct a strict bytestring containing the sequence
 -- of bytes denoted by the builder. This is done by first serializing to a lazy bytestring and then packing its
 -- chunks to a appropriately sized strict bytestring.
@@ -405,8 +410,11 @@ packChunks lbs = do
 --
 toByteString :: Builder -> S.ByteString
 toByteString = packChunks . toLazyByteString
+-}
 
 
+{- TODO: Replace with 'hPut' method for Builders.
+  
 -- | @toByteStringIOWith bufSize io b@ runs the builder @b@ with a buffer of
 -- at least the size @bufSize@ and executes the 'IO' action @io@ whenever the
 -- buffer is full.
@@ -467,6 +475,7 @@ toByteStringIO :: (S.ByteString -> IO ()) -> Builder -> IO ()
 toByteStringIO = toByteStringIOWith defaultBufferSize
 {-# INLINE toByteStringIO #-}
 
+-}
 
 ------------------------------------------------------------------------------
 -- Draft of new builder/put execution code

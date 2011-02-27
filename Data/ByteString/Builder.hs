@@ -24,9 +24,9 @@ module Data.ByteString.Builder
       -- * Executing builders
     , toLazyByteString
     , toLazyByteStringWith
-    , toByteString
-    , toByteStringIO
-    , toByteStringIOWith
+    -- , toByteString
+    -- , toByteStringIO
+    -- , toByteStringIOWith
 
     ) where
 

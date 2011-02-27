@@ -27,7 +27,8 @@ Cabal-Version:       >= 1.2.3
 extra-source-files:  README TODO
 
 library
-  build-depends:     base < 5
+  build-depends:     base < 5, 
+                     system-io-write >= 0.1 && < 0.2
 
   if impl(ghc >= 6.10)
     build-depends:   ghc-prim, base >= 4
@@ -41,6 +42,10 @@ library
                      Data.ByteString.Lazy.Internal
                      Data.ByteString.Fusion
                      Data.ByteString.Builder
+                     Data.ByteString.Builder.Write
+                     Data.ByteString.Builder.Char
+                     Data.ByteString.Builder.Word
+                     Data.ByteString.Builder.Int
                      Data.ByteString.Builder.Internal
                      Data.ByteString.Builder.Internal.Buffer
                      Data.ByteString.Put

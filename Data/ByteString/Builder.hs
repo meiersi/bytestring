@@ -15,8 +15,9 @@ module Data.ByteString.Builder
       Builder
 
       -- * Creating builders
-    -- , module Blaze.ByteString.Builder.Int
-    -- , module Blaze.ByteString.Builder.Word
+    , module Data.ByteString.Builder.Int
+    , module Data.ByteString.Builder.Word
+    , module Data.ByteString.Builder.Char
     -- , module Blaze.ByteString.Builder.ByteString
     , flush
 
@@ -27,16 +28,11 @@ module Data.ByteString.Builder
     , toByteStringIO
     , toByteStringIOWith
 
-    {-
-    -- * 'Write's
-    , Write
-    , fromWrite
-    , fromWriteSingleton
-    , fromWriteList
-    -}
-
     ) where
 
 import Data.ByteString.Builder.Internal
--- import Blaze.ByteString.Builder.Write
+
+import Data.ByteString.Builder.Word
+import Data.ByteString.Builder.Int
+import Data.ByteString.Builder.Char
 

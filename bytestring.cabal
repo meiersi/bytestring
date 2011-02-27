@@ -46,6 +46,7 @@ library
                      Data.ByteString.Builder.Char
                      Data.ByteString.Builder.Word
                      Data.ByteString.Builder.Int
+                     Data.ByteString.Builder.ByteString
                      Data.ByteString.Builder.Internal
                      Data.ByteString.Builder.Internal.Buffer
                      Data.ByteString.Put

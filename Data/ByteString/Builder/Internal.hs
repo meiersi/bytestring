@@ -186,6 +186,8 @@ putLiftIO io = putBuildStepCont $ \k br -> io >>= (`k` br)
 -- | Default size (~32kb) for the buffer that becomes a chunk of the output
 -- stream once it is filled.
 --
+-- TODO: Use constant from Data.ByteString.Lazy.Internal
+--
 defaultBufferSize :: Int
 defaultBufferSize = 32 * 1024 - overhead -- Copied from Data.ByteString.Lazy.
     where overhead = 2 * sizeOf (undefined :: Int)

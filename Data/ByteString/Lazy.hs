@@ -1123,21 +1123,15 @@ tails cs@(Chunk c cs')
 -- ---------------------------------------------------------------------
 -- Low level constructors
 
--- | /O(n)/ Make a copy of the 'ByteString' with its own storage.
---   This is mainly useful to allow the rest of the data pointed
---   to by the 'ByteString' to be garbage collected, for example
---   if a large string has been read in, and only a small part of it
---   is needed in the rest of the program.
+-- | /O(n)/ Make a copy of the 'ByteString' with its own storage and coalesced
+-- chunks. This is useful both to defragment the bytestring and to allow the
+-- rest of the data pointed to by the 'ByteString' to be garbage collected;
+-- e.g., if a large string has been read in, and only a small part of it is
+-- needed in the rest of the program. However, you need to force the copied
+-- bytestring (e.g., by forcing its length) in order to drop all references to
+-- old chunks.
 copy :: ByteString -> ByteString
-copy cs = foldrChunks (Chunk . S.copy) Empty cs
---TODO, we could coalese small blocks here
---FIXME: probably not strict enough, if we're doing this to avoid retaining
--- the parent blocks then we'd better copy strictly.
-
--- ---------------------------------------------------------------------
-
--- TODO defrag func that concatenates block together that are below a threshold
--- defrag :: ByteString -> ByteString
+copy = B.toLazyByteString . B.copyLazyByteString
 
 -- ---------------------------------------------------------------------
 -- Lazy ByteString IO

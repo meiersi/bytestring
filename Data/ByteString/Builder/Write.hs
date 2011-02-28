@@ -16,6 +16,7 @@ module Data.ByteString.Builder.Write (
     fromWrite
   , fromWriteSingleton
   , fromWriteList
+  , fromWriteUnfoldr
 
   ) where
 
@@ -73,3 +74,30 @@ fromWriteList write =
                   !op' <- runWrite (write x') op
                   go xs' op'
               | otherwise = return $ bufferFull bound op (step xs k)
+
+
+-- | A 'Builder' that unfolds a sequence of elements from a seed value and
+-- writes each of them to the buffer.
+{-# INLINE fromWriteUnfoldr #-}
+fromWriteUnfoldr :: (b -> Write) -> (a -> Maybe (b, a)) -> a -> Builder
+fromWriteUnfoldr write = 
+    makeBuilder
+  where
+    bound = getBound' "fromWriteUnfoldr" write
+    makeBuilder f x0 = fromBuildStepCont $ step x0
+      where
+        step x1 !k = fill x1
+          where
+            fill x !(BufRange pf0 pe0) = go (f x) pf0
+              where
+                go !Nothing        !pf = do
+                    let !br' = BufRange pf pe0
+                    k br'
+                go !(Just (y, x')) !pf
+                  | pf `plusPtr` bound <= pe0 = do
+                      !pf' <- runWrite (write y) pf
+                      go (f x') pf'
+                  | otherwise = return $ bufferFull bound pf $ 
+                      \(BufRange pfNew peNew) -> do 
+                          !pfNew' <- runWrite (write y) pfNew
+                          fill x' (BufRange pfNew' peNew)

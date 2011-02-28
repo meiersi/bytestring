@@ -207,7 +207,8 @@ import qualified Data.ByteString        as S  -- S for strict (hmm...)
 import qualified Data.ByteString.Internal as S
 import qualified Data.ByteString.Unsafe as S
 import Data.ByteString.Lazy.Internal
-import Data.ByteString.Builder          as B
+import qualified Data.ByteString.Builder          as B
+import qualified Data.ByteString.Builder.Write    as B
 
 import Data.Monoid              (Monoid(..))
 
@@ -217,6 +218,7 @@ import System.IO                (Handle,stdin,stdout,openBinaryFile,IOMode(..)
                                 ,hClose)
 import System.IO.Error          (mkIOError, illegalOperationErrorType)
 import System.IO.Unsafe
+import qualified System.IO.Write as W
 #ifndef __NHC__
 import Control.Exception        (bracket)
 #else
@@ -644,15 +646,10 @@ cycle cs    = cs' where cs' = foldrChunks Chunk cs' cs
 -- ByteString or returns 'Just' @(a,b)@, in which case, @a@ is a
 -- prepending to the ByteString and @b@ is used as the next element in a
 -- recursive call.
+{-# INLINE unfoldr #-}
 unfoldr :: (a -> Maybe (Word8, a)) -> a -> ByteString
-unfoldr f s0 = unfoldChunk 32 s0
-  where unfoldChunk n s =
-          case S.unfoldrN n f s of
-            (c, Nothing)
-              | S.null c  -> Empty
-              | otherwise -> Chunk c Empty
-            (c, Just s')  -> Chunk c (unfoldChunk (n*2) s')
-
+unfoldr f s0 = B.toLazyByteString $ B.fromWriteUnfoldr W.writeWord8 f s0
+ 
 -- ---------------------------------------------------------------------
 -- Substrings
 

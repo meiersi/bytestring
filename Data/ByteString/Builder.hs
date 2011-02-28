@@ -18,7 +18,7 @@ module Data.ByteString.Builder
     , module Data.ByteString.Builder.Int
     , module Data.ByteString.Builder.Word
     , module Data.ByteString.Builder.Char
-    -- , module Blaze.ByteString.Builder.ByteString
+    , module Data.ByteString.Builder.ByteString
     , flush
 
       -- * Executing builders
@@ -35,4 +35,5 @@ import Data.ByteString.Builder.Internal
 import Data.ByteString.Builder.Word
 import Data.ByteString.Builder.Int
 import Data.ByteString.Builder.Char
+import Data.ByteString.Builder.ByteString
 

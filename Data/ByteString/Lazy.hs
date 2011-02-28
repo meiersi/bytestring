@@ -517,19 +517,11 @@ concat css0 = to css0
     to (cs:css)         = go cs css
 
 -- | Map a function over a 'ByteString' and concatenate the results
+{-# INLINE concatMap #-}
 concatMap :: (Word8 -> ByteString) -> ByteString -> ByteString
-concatMap _ Empty        = Empty
-concatMap f (Chunk c0 cs0) = to c0 cs0
-  where
-    go :: ByteString -> P.ByteString -> ByteString -> ByteString
-    go Empty        c' cs' = to c' cs'
-    go (Chunk c cs) c' cs' = Chunk c (go cs c' cs')
-
-    to :: P.ByteString -> ByteString -> ByteString
-    to c cs | S.null c  = case cs of
-        Empty          -> Empty
-        (Chunk c' cs') -> to c' cs'
-            | otherwise = go (f (S.unsafeHead c)) (S.unsafeTail c) cs
+concatMap f = 
+    B.toLazyByteString . 
+    foldr (\w b -> B.fromLazyByteString (f w )`mappend` b) mempty
 
 -- | /O(n)/ Applied to a predicate and a ByteString, 'any' determines if
 -- any element of the 'ByteString' satisfies the predicate.

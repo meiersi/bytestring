@@ -12,15 +12,22 @@
 --
 module Data.ByteString.Builder.Write (
 
-  -- * Constructing builders from @Write@s
+  -- * Constructing @Builder@s from @Write@s
     fromWrite
   , fromWriteSingleton
   , fromWriteList
   , fromWriteUnfoldr
 
+  -- ** Traversing @ByteString@s
+  , mapWriteByteString
+  , mapWriteLazyByteString
+
   ) where
 
-import Data.ByteString.Builder.Internal
+import Data.Monoid
+import           Data.ByteString.Builder.Internal
+import qualified Data.ByteString.Internal         as S
+import qualified Data.ByteString.Lazy.Internal    as L
 
 import Foreign
 
@@ -101,3 +108,45 @@ fromWriteUnfoldr write =
                       \(BufRange pfNew peNew) -> do 
                           !pfNew' <- runWrite (write y) pfNew
                           fill x' (BufRange pfNew' peNew)
+
+-- | @mapWriteByteString write bs@ consecutively executes the @write b@ action
+-- for every byte @b@ of the strict bytestring @bs@.
+{-# INLINE mapWriteByteString #-}
+mapWriteByteString :: (Word8 -> Write) -> S.ByteString -> Builder
+mapWriteByteString write =
+    \bs -> fromBuildStepCont $ step bs
+  where
+    writeBound   = getBound' "mapWriteByteString" write 
+    step (S.PS ifp ioff isize) !k = 
+        goBS (unsafeForeignPtrToPtr ifp `plusPtr` ioff)
+      where
+        !ipe = unsafeForeignPtrToPtr ifp `plusPtr` (ioff + isize)
+        goBS !ip0 !br@(BufRange op0 ope)
+          | ip0 >= ipe = do 
+              touchForeignPtr ifp -- input buffer consumed
+              k br
+
+          | op0 `plusPtr` writeBound < ope = 
+              goPartial (ip0 `plusPtr` min outRemaining inpRemaining)
+
+          | otherwise  = return $ bufferFull writeBound op0 (goBS ip0) 
+          where
+            outRemaining = (ope `minusPtr` op0) `div` writeBound
+            inpRemaining = ipe `minusPtr` ip0 
+
+            goPartial !ipeTmp = go ip0 op0
+              where
+                go !ip !op
+                  | ip < ipeTmp = do
+                      w   <- peek ip
+                      op' <- runWrite (write w) op
+                      go (ip `plusPtr` 1) op'
+                  | otherwise =
+                      goBS ip (BufRange op ope)
+
+-- | @mapWriteLazyByteString write lbs@ consecutively executes the @write b@ action
+-- for every byte @b@ of the lazy bytestring @lbs@.
+{-# INLINE mapWriteLazyByteString #-}
+mapWriteLazyByteString :: (Word8 -> Write) -> L.ByteString -> Builder
+mapWriteLazyByteString write = 
+    L.foldrChunks (\w b -> mapWriteByteString write w `mappend` b) mempty

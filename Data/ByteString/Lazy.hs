@@ -420,15 +420,9 @@ append xs ys = foldrChunks Chunk ys xs
 
 -- | /O(n)/ 'map' @f xs@ is the ByteString obtained by applying @f@ to each
 -- element of @xs@.
-map :: (Word8 -> Word8) -> ByteString -> ByteString
-map f s = go s
-    where
-        go Empty        = Empty
-        go (Chunk x xs) = Chunk y ys
-            where
-                y  = S.map f x
-                ys = go xs
 {-# INLINE map #-}
+map :: (Word8 -> Word8) -> ByteString -> ByteString
+map f = B.toLazyByteString . B.mapWriteLazyByteString (W.writeWord8 . f)
 
 -- | /O(n)/ 'reverse' @xs@ returns the elements of @xs@ in reverse order.
 reverse :: ByteString -> ByteString
@@ -991,10 +985,9 @@ notElem w cs = not (elem w cs)
 -- returns a ByteString containing those characters that satisfy the
 -- predicate.
 filter :: (Word8 -> Bool) -> ByteString -> ByteString
-filter p s = go s
-    where
-        go Empty        = Empty
-        go (Chunk x xs) = chunk (S.filter p x) (go xs)
+filter p = B.toLazyByteString . B.mapWriteLazyByteString write
+  where
+    write = W.writeIf p W.writeWord8 mempty
 {-# INLINE filter #-}
 
 {-

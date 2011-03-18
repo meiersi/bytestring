@@ -13,8 +13,8 @@
 module Data.ByteString.Builder.Write (
 
   -- * Constructing @Builder@s from @Write@s
-    fromWrite
-  , fromWriteSingleton
+    fromFixedWrite
+  , fromWrite
   , fromWriteList
   , fromWriteUnfoldr
 
@@ -34,40 +34,40 @@ import Foreign
 import System.IO.Write.Internal
 
 -- | Create a builder that execute a single 'Write'.
-{-# INLINE fromWrite #-}
-fromWrite :: Write -> Builder
-fromWrite write =
+{-# INLINE fromFixedWrite #-}
+fromFixedWrite :: FixedWrite -> Builder
+fromFixedWrite w =
     fromBuildStepCont step
   where
     step k (BufRange op ope)
-      | op `plusPtr` getBound write <= ope = do
-          op' <- runWrite write op
+      | op `plusPtr` fixedWriteBound w <= ope = do
+          op' <- runFixedWrite w op
           let !br' = BufRange op' ope
           k br'
-      | otherwise = return $ bufferFull (getBound write) op (step k)
+      | otherwise = return $ bufferFull (fixedWriteBound w) op (step k)
 
-{-# INLINE fromWriteSingleton #-}
-fromWriteSingleton :: (a -> Write) -> (a -> Builder)
-fromWriteSingleton write = 
+{-# INLINE fromWrite #-}
+fromWrite :: Write a -> (a -> Builder)
+fromWrite w = 
     mkBuilder
   where
-    bound = getBound' "fromWriteSingleton" write
+    bound = writeBound w
     mkBuilder x = fromBuildStepCont step
       where
         step k (BufRange op ope)
           | op `plusPtr` bound <= ope = do
-              op' <- runWrite (write x) op
+              op' <- runWrite w x op
               let !br' = BufRange op' ope
               k br'
           | otherwise = return $ bufferFull bound op (step k)
 
 -- | Construct a 'Builder' writing a list of data one element at a time.
 {-# INLINE fromWriteList #-}
-fromWriteList :: (a -> Write) -> [a] -> Builder
-fromWriteList write = 
+fromWriteList :: Write a -> [a] -> Builder
+fromWriteList w = 
     makeBuilder
   where
-    bound = getBound' "fromWriteList" write
+    bound = writeBound w
     makeBuilder xs0 = fromBuildStepCont $ step xs0
       where
         step xs1 k !(BufRange op0 ope0) = go xs1 op0
@@ -78,7 +78,7 @@ fromWriteList write =
 
             go xs@(x':xs') !op
               | op `plusPtr` bound <= ope0 = do
-                  !op' <- runWrite (write x') op
+                  !op' <- runWrite w x' op
                   go xs' op'
               | otherwise = return $ bufferFull bound op (step xs k)
 
@@ -86,11 +86,11 @@ fromWriteList write =
 -- | A 'Builder' that unfolds a sequence of elements from a seed value and
 -- writes each of them to the buffer.
 {-# INLINE fromWriteUnfoldr #-}
-fromWriteUnfoldr :: (b -> Write) -> (a -> Maybe (b, a)) -> a -> Builder
-fromWriteUnfoldr write = 
+fromWriteUnfoldr :: Write b -> (a -> Maybe (b, a)) -> a -> Builder
+fromWriteUnfoldr w = 
     makeBuilder
   where
-    bound = getBound' "fromWriteUnfoldr" write
+    bound = writeBound w
     makeBuilder f x0 = fromBuildStepCont $ step x0
       where
         step x1 !k = fill x1
@@ -102,21 +102,21 @@ fromWriteUnfoldr write =
                     k br'
                 go !(Just (y, x')) !pf
                   | pf `plusPtr` bound <= pe0 = do
-                      !pf' <- runWrite (write y) pf
+                      !pf' <- runWrite w y pf
                       go (f x') pf'
                   | otherwise = return $ bufferFull bound pf $ 
                       \(BufRange pfNew peNew) -> do 
-                          !pfNew' <- runWrite (write y) pfNew
+                          !pfNew' <- runWrite w y pfNew
                           fill x' (BufRange pfNew' peNew)
 
 -- | @mapWriteByteString write bs@ consecutively executes the @write b@ action
 -- for every byte @b@ of the strict bytestring @bs@.
 {-# INLINE mapWriteByteString #-}
-mapWriteByteString :: (Word8 -> Write) -> S.ByteString -> Builder
-mapWriteByteString write =
+mapWriteByteString :: Write Word8 -> S.ByteString -> Builder
+mapWriteByteString w =
     \bs -> fromBuildStepCont $ step bs
   where
-    writeBound   = getBound' "mapWriteByteString" write 
+    bound = writeBound w
     step (S.PS ifp ioff isize) !k = 
         goBS (unsafeForeignPtrToPtr ifp `plusPtr` ioff)
       where
@@ -126,20 +126,20 @@ mapWriteByteString write =
               touchForeignPtr ifp -- input buffer consumed
               k br
 
-          | op0 `plusPtr` writeBound < ope = 
+          | op0 `plusPtr` bound < ope = 
               goPartial (ip0 `plusPtr` min outRemaining inpRemaining)
 
-          | otherwise  = return $ bufferFull writeBound op0 (goBS ip0) 
+          | otherwise  = return $ bufferFull bound op0 (goBS ip0) 
           where
-            outRemaining = (ope `minusPtr` op0) `div` writeBound
+            outRemaining = (ope `minusPtr` op0) `div` bound
             inpRemaining = ipe `minusPtr` ip0 
 
             goPartial !ipeTmp = go ip0 op0
               where
                 go !ip !op
                   | ip < ipeTmp = do
-                      w   <- peek ip
-                      op' <- runWrite (write w) op
+                      x   <- peek ip
+                      op' <- runWrite w x op
                       go (ip `plusPtr` 1) op'
                   | otherwise =
                       goBS ip (BufRange op ope)
@@ -147,6 +147,6 @@ mapWriteByteString write =
 -- | @mapWriteLazyByteString write lbs@ consecutively executes the @write b@ action
 -- for every byte @b@ of the lazy bytestring @lbs@.
 {-# INLINE mapWriteLazyByteString #-}
-mapWriteLazyByteString :: (Word8 -> Write) -> L.ByteString -> Builder
-mapWriteLazyByteString write = 
-    L.foldrChunks (\w b -> mapWriteByteString write w `mappend` b) mempty
+mapWriteLazyByteString :: Write Word8 -> L.ByteString -> Builder
+mapWriteLazyByteString w = 
+    L.foldrChunks (\x b -> mapWriteByteString w x `mappend` b) mempty

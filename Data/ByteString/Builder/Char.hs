@@ -23,7 +23,7 @@ import System.IO.Write.Char
 -- | /O(1)/. Serialize a Unicode character using the UTF-8 encoding.
 --
 fromCharUtf8 :: Char -> Builder
-fromCharUtf8 = fromWriteSingleton writeCharUtf8
+fromCharUtf8 = fromWrite writeCharUtf8
 
 -- | /O(n)/. Serialize a Unicode 'String' using the UTF-8 encoding.
 --

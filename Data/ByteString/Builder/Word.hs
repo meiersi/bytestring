@@ -72,7 +72,7 @@ import Foreign
 -- | Serialize a single byte.
 --
 fromWord8 :: Word8 -> Builder
-fromWord8 = fromWriteSingleton writeWord8
+fromWord8 = fromWrite writeWord8
 
 -- | Serialize a list of bytes.
 --
@@ -85,7 +85,7 @@ fromWord8s = fromWriteList writeWord8
 
 -- | Serialize a 'Word16' in big endian format.
 fromWord16be :: Word16 -> Builder
-fromWord16be = fromWriteSingleton writeWord16be 
+fromWord16be = fromWrite writeWord16be 
 {-# INLINE fromWord16be #-}
 
 -- | Serialize a list of 'Word16's in big endian format.
@@ -95,7 +95,7 @@ fromWord16sbe = fromWriteList writeWord16be
 
 -- | Serialize a 'Word16' in little endian format.
 fromWord16le :: Word16 -> Builder
-fromWord16le = fromWriteSingleton writeWord16le 
+fromWord16le = fromWrite writeWord16le 
 {-# INLINE fromWord16le #-}
 
 -- | Serialize a list of 'Word16's in little endian format.
@@ -109,7 +109,7 @@ fromWord16sle = fromWriteList writeWord16le
 
 -- | Serialize a 'Word32' in big endian format.
 fromWord32be :: Word32 -> Builder
-fromWord32be = fromWriteSingleton writeWord32be 
+fromWord32be = fromWrite writeWord32be 
 {-# INLINE fromWord32be #-}
 
 -- | Serialize a list of 'Word32's in big endian format.
@@ -119,7 +119,7 @@ fromWord32sbe = fromWriteList writeWord32be
 
 -- | Serialize a 'Word32' in little endian format.
 fromWord32le :: Word32 -> Builder
-fromWord32le = fromWriteSingleton writeWord32le 
+fromWord32le = fromWrite writeWord32le 
 {-# INLINE fromWord32le #-}
 
 -- | Serialize a list of 'Word32's in little endian format.
@@ -129,7 +129,7 @@ fromWord32sle = fromWriteList writeWord32le
 
 -- | Serialize a 'Word64' in big endian format.
 fromWord64be :: Word64 -> Builder
-fromWord64be = fromWriteSingleton writeWord64be 
+fromWord64be = fromWrite writeWord64be 
 {-# INLINE fromWord64be #-}
 
 -- | Serialize a list of 'Word64's in big endian format.
@@ -139,7 +139,7 @@ fromWord64sbe = fromWriteList writeWord64be
 
 -- | Serialize a 'Word64' in little endian format.
 fromWord64le :: Word64 -> Builder
-fromWord64le = fromWriteSingleton writeWord64le 
+fromWord64le = fromWrite writeWord64le 
 {-# INLINE fromWord64le #-}
 
 -- | Serialize a list of 'Word64's in little endian format.
@@ -158,7 +158,7 @@ fromWord64sle = fromWriteList writeWord64le
 -- conversion.
 --
 fromWordhost :: Word -> Builder
-fromWordhost = fromWriteSingleton writeWordhost 
+fromWordhost = fromWrite writeWordhost 
 {-# INLINE fromWordhost #-}
 
 -- | Serialize a list of 'Word's.
@@ -169,7 +169,7 @@ fromWordshost = fromWriteList writeWordhost
 
 -- | Write a 'Word16' in native host order and host endianness.
 fromWord16host :: Word16 -> Builder
-fromWord16host = fromWriteSingleton writeWord16host 
+fromWord16host = fromWrite writeWord16host 
 {-# INLINE fromWord16host #-}
 
 -- | Write a list of 'Word16's in native host order and host endianness.
@@ -179,7 +179,7 @@ fromWord16shost = fromWriteList writeWord16host
 
 -- | Write a 'Word32' in native host order and host endianness.
 fromWord32host :: Word32 -> Builder
-fromWord32host = fromWriteSingleton writeWord32host 
+fromWord32host = fromWrite writeWord32host 
 {-# INLINE fromWord32host #-}
 
 -- | Write a list of 'Word32's in native host order and host endianness.
@@ -189,7 +189,7 @@ fromWord32shost = fromWriteList writeWord32host
 
 -- | Write a 'Word64' in native host order and host endianness.
 fromWord64host :: Word64 -> Builder
-fromWord64host = fromWriteSingleton writeWord64host
+fromWord64host = fromWrite writeWord64host
 {-# INLINE fromWord64host #-}
 
 -- | Write a list of 'Word64's in native host order and host endianness.

@@ -1,0 +1,4 @@
+builder/Regression
+*.hi
+*.o
+

@@ -8,7 +8,7 @@
 GHC6 = ghc-6.12.3
 GHC7 = ghc-7.0.1
 
-GHC = $(GHC7)
+GHC = ghc
 
 # regression testing against blaze-builder and old bytestring
 regression:

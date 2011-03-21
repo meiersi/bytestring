@@ -147,6 +147,7 @@ allNewBuffersStrategy bufSize =
     ( allocBuffer bufSize
     , \reqSize _ -> return (allocBuffer (max reqSize bufSize)) )
 
+
 -- | An unsafe, but possibly more efficient buffer allocation strategy:
 -- reuse the buffer, if it is big enough for the next build step to execute.
 reuseBufferStrategy :: IO Buffer          

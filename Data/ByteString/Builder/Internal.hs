@@ -371,10 +371,10 @@ toLazyByteStringWith bufSize minBufSize firstBufSize (Builder b) k =
 -- However, in the second equation, the left-hand-side is generally faster to
 -- execute.
 --
-toLazyByteString :: Builder -> L.ByteString
-toLazyByteString b = toLazyByteStringWith 
-    defaultBufferSize defaultMinimalBufferSize defaultFirstBufferSize b L.Empty
-{-# INLINE toLazyByteString #-}
+-- toLazyByteString :: Builder -> L.ByteString
+-- toLazyByteString b = toLazyByteStringWith 
+    -- defaultBufferSize defaultMinimalBufferSize defaultFirstBufferSize b L.Empty
+-- {-# INLINE toLazyByteString #-}
 
 {- TODO: Move to Data.ByteString.Lazy
  
@@ -481,27 +481,28 @@ toByteStringIO = toByteStringIOWith defaultBufferSize
 -- Draft of new builder/put execution code
 ------------------------------------------------------------------------------
 
-{- FIXME: Generalize this code such that it can replace the above clunky
- - implementations.
-              
 -- | A monad for lazily composing lazy bytestrings using continuations.
 newtype LBSM a = LBSM { unLBSM :: (a, L.ByteString -> L.ByteString) }
 
 instance Monad LBSM where
+    {-# INLINE return #-}
     return x                       = LBSM (x, id)
+    {-# INLINE (>>=) #-}
     (LBSM (x,k)) >>= f             = let LBSM (x',k') = f x in LBSM (x', k . k')
+    {-# INLINE (>>) #-}
     (LBSM (_,k)) >> (LBSM (x',k')) = LBSM (x', k . k')
 
 -- | Execute a put and return the written buffers as the chunks of a lazy
 -- bytestring.
-toLazyByteString :: Put a -> (a, L.ByteString)
-toLazyByteString put = 
-    (fst result, k (bufToLBSCont (snd result) L.empty))
+toLazyByteString :: Builder -> L.ByteString
+toLazyByteString builder = 
+    -- (fst result, k (bufToLBSCont (snd result) L.Empty))
+    k (bufToLBSCont (snd result) L.Empty)
   where
 
     -- FIXME: Check with ByteString guys why allocation in inlinePerformIO is
     -- bad.
-
+    put = putBuilder builder
     -- initial buffer
     buf0 = S.inlinePerformIO $ allocBuffer defaultBufferSize
     -- run put, but don't force result => we're lazy enough
@@ -517,7 +518,6 @@ toLazyByteString put =
     -- add bytestring directly as a chunk; exploits postcondition of runPut
     -- that bytestrings are non-empty
     outputBS bs = LBSM ((), L.Chunk bs)
--}
 
 {-
 -- | A Builder that traces a message
@@ -556,7 +556,7 @@ execBuildStep step (Buffer _ _ op ope) = runBuildStep step (BufRange op ope)
 {-# INLINE runPut #-}
 runPut :: Monad m 
        => (IO (BuildSignal a) -> m (BuildSignal a)) -- lifting of buildsteps
-       -> (Int -> Buffer -> m Buffer) -- output function for a guaranteedly non-empty buffer, the returned buffer will be filled next
+       -> (Int -> Buffer -> m Buffer) -- output function for a buffer, the returned buffer will be filled next
        -> (S.ByteString -> m ())    -- output function for guaranteedly non-empty bytestrings, that are inserted directly into the stream
        -> Put a                     -- put to execute
        -> Buffer                    -- initial buffer to be used
@@ -578,7 +578,7 @@ runPut liftIO outputBuf outputBS (Put put) =
                 runStep nextStep buf'
 
             InsertByteString op' bs nextStep
-              | S.null bs ->   -- flushing of buffer required
+              | S.null bs ->    -- flushing of buffer required
                   outputBuf 1 (Buffer fpbuf p0 op' ope) >>= runStep nextStep
               | p0 == op' -> do -- no bytes written: just insert bytestring
                   outputBS bs
@@ -588,3 +588,49 @@ runPut liftIO outputBuf outputBS (Put put) =
                   outputBS bs
                   runStep nextStep buf'
 
+
+------------------------------------------------------------------------------
+-- To Lazy ByteString with allocation strategy
+------------------------------------------------------------------------------
+
+{-
+toLazyByteStringWith' bufSize (Builder b) k = 
+    S.inlinePerformIO $ fillNewBuffer bufSize (b (buildStep finalStep))
+  where
+    finalStep (BufRange pf _) = return $ Done pf ()
+                    
+    -- allocate and fill a new buffer
+    fillNewBuffer !size !step0 = do
+        fpbuf <- S.mallocByteString size
+        withForeignPtr fpbuf $ fillBuffer fpbuf
+      where
+        fillBuffer fpbuf !pbuf = fill pbuf step0
+          where
+            !pe = pbuf `plusPtr` size
+            fill !pf !step = do
+                next <- runBuildStep step (BufRange pf pe)
+                let mkbs pf' = S.PS fpbuf (pf `minusPtr` pbuf) (pf' `minusPtr` pf)
+                    {-# INLINE mkbs #-}
+                case next of
+                    Done pf' _
+                      | pf' == pf -> return k
+                      | otherwise -> return $ L.Chunk (mkbs pf') k
+
+                    BufferFull newSize pf' nextStep 
+                      | pf' == pf -> 
+                          fillNewBuffer (max newSize bufSize) nextStep
+                      | otherwise -> 
+                          return $ L.Chunk (mkbs pf')
+                              (S.inlinePerformIO $ 
+                                  fillNewBuffer (max newSize bufSize) nextStep)
+                        
+                    InsertByteString  pf' bs nextStep
+                      | pf' == pf                      ->
+                          return $ nonEmptyChunk bs (S.inlinePerformIO $ fill pf' nextStep)
+                      | minBufSize < pe `minusPtr` pf' ->
+                          return $ L.Chunk (mkbs pf')
+                              (nonEmptyChunk bs (S.inlinePerformIO $ fill pf' nextStep))
+                      | otherwise                      ->
+                          return $ L.Chunk (mkbs pf')
+                              (nonEmptyChunk bs (S.inlinePerformIO $ fillNewBuffer bufSize nextStep))
+                              -}

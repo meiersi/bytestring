@@ -34,10 +34,8 @@ module Data.ByteString.Builder.Internal (
 
   -- * Execution
   , toLazyByteString
+  , toLazyByteStringUntrimmed
   , toLazyByteStringWith
-  -- , toByteString
-  -- , toByteStringIO
-  -- , toByteStringIOWith
 
   -- * Deafult Sizes
   , defaultFirstBufferSize
@@ -221,12 +219,6 @@ defaultMaximalCopySize = 2 * defaultMinimalBufferSize
 -- Flushing and running a Builder
 ------------------------------------------------------------------------------
                     
--- | Prepend the chunk if it is non-empty.
-{-# INLINE nonEmptyChunk #-}
-nonEmptyChunk :: S.ByteString -> L.ByteString -> L.ByteString
-nonEmptyChunk bs lbs | S.null bs = lbs 
-                     | otherwise = L.Chunk bs lbs
-
 
 -- | Output all data written in the current buffer and start a new chunk.
 --
@@ -246,6 +238,167 @@ flush = fromBuildStepCont step
   where
     step k !(BufRange op _) = return $ insertByteString op S.empty k
 
+
+
+------------------------------------------------------------------------------
+-- Executing puts on a buffer
+------------------------------------------------------------------------------
+
+{-
+-- | Execute a build step on the given buffer.
+{-# INLINE execBuildStep #-}
+execBuildStep :: BuildStep a
+              -> Buffer  
+              -> IO (BuildSignal a)
+execBuildStep step (Buffer _ _ op ope) = runBuildStep step (BufRange op ope)
+-}
+
+-- | Execute a put on a buffer.
+--
+{-# INLINE runPut #-}
+runPut :: Monad m 
+       => (IO (BuildSignal a) -> m (BuildSignal a)) -- lifting of buildsteps
+       -> (Int -> Buffer -> m Buffer) -- output function for a buffer, the returned buffer will be filled next
+       -> (S.ByteString -> m ())    -- output function for guaranteedly non-empty bytestrings, that are inserted directly into the stream
+       -> Put a                     -- put to execute
+       -> Buffer                    -- initial buffer to be used
+       -> m (a, Buffer)             -- result of put and remaining buffer
+runPut liftIO outputBuf outputBS (Put put) =
+    runStep (put (finalStep))
+  where
+    finalStep x = buildStep $ \(BufRange op _) -> return $ Done op x
+
+    runStep step buf@(Buffer fpbuf p0 op ope) = do
+        let !br = BufRange op ope
+        signal <- liftIO $ runBuildStep step br
+        case signal of 
+            Done op' x ->         -- put completed, buffer partially filled
+                return (x, Buffer fpbuf p0 op' ope)
+
+            BufferFull minSize op' nextStep -> do
+                buf' <- outputBuf minSize (Buffer fpbuf p0 op' ope)
+                runStep nextStep buf'
+
+            InsertByteString op' bs nextStep
+              | S.null bs ->    -- flushing of buffer required
+                  outputBuf 1 (Buffer fpbuf p0 op' ope) >>= runStep nextStep
+              | p0 == op' -> do -- no bytes written: just insert bytestring
+                  outputBS bs
+                  runStep nextStep buf
+              | otherwise -> do   -- bytes written, insert buffer and bytestring
+                  buf' <- outputBuf 1 (Buffer fpbuf p0 op' ope)
+                  outputBS bs
+                  runStep nextStep buf'
+
+
+------------------------------------------------------------------------------
+-- To Lazy ByteString with allocation strategy
+------------------------------------------------------------------------------
+
+data AllocationStrategy = AllocationStrategy 
+         {-# UNPACK #-} !Int  -- initial size
+         (Int -> Int)         -- next size
+         (Int -> Int -> Bool) -- trim
+
+untrimmedStrategy :: Int -- ^ Size of the first buffer
+                  -> Int -- ^ Size of successive buffers
+                  -> AllocationStrategy
+untrimmedStrategy firstSize bufSize = 
+    AllocationStrategy firstSize (const bufSize) (\_ _ -> False)
+
+
+safeStrategy :: Int  -- ^ Size of first buffer
+             -> Int  -- ^ Size of successive buffers
+             -> AllocationStrategy
+safeStrategy firstSize bufSize = 
+    AllocationStrategy firstSize (const bufSize) (\used size -> 2*used < size)
+
+-- | Extract the lazy 'L.ByteString' from the builder by running it with default
+-- buffer sizes. Use this function, if you do not have any special
+-- considerations with respect to buffer sizes.
+--
+-- @ 'toLazyByteString' b = 'toLazyByteStringWith' 'defaultBufferSize' 'defaultMinimalBufferSize' 'defaultFirstBufferSize' b L.empty@
+--
+-- Note that @'toLazyByteString'@ is a 'Monoid' homomorphism.
+--
+-- > toLazyByteString mempty          == mempty
+-- > toLazyByteString (x `mappend` y) == toLazyByteString x `mappend` toLazyByteString y
+--
+-- However, in the second equation, the left-hand-side is generally faster to
+-- execute.
+--
+toLazyByteString :: Builder -> L.ByteString
+toLazyByteString = toLazyByteStringWith
+    (safeStrategy defaultMinimalBufferSize defaultBufferSize) L.Empty
+
+toLazyByteStringUntrimmed :: Builder -> L.ByteString
+toLazyByteStringUntrimmed = toLazyByteStringWith
+    (untrimmedStrategy defaultMinimalBufferSize defaultBufferSize) L.Empty
+
+{-# INLINE toLazyByteStringWith #-}
+toLazyByteStringWith :: AllocationStrategy
+                      -> L.ByteString 
+                      -> Builder 
+                      -> L.ByteString
+toLazyByteStringWith (AllocationStrategy firstSize nextSize trim) k (Builder b) = 
+    S.inlinePerformIO $ fillNew (b (buildStep finalStep)) firstSize 
+  where
+    finalStep (BufRange op _) = return $ Done op ()
+                    
+    fillNew !step0 !size = do
+        S.mallocByteString size >>= fill step0
+      where
+        fill !step !fpbuf = do
+            let op     = unsafeForeignPtrToPtr fpbuf -- safe due to mkbs
+                pe     = op `plusPtr` size
+                !size' = nextSize size
+                !br    = BufRange op pe
+                
+                mkbs !op' lbs
+                  | trim filledSize size = do
+                      fpbuf' <- S.mallocByteString filledSize
+                      copyBytes (unsafeForeignPtrToPtr fpbuf') op filledSize
+                      touchForeignPtr fpbuf
+                      return $ L.Chunk (S.PS fpbuf' 0 filledSize) lbs
+                  | otherwise                     = 
+                      return $ L.Chunk (S.PS fpbuf 0 filledSize) lbs
+                  where
+                    filledSize = op' `minusPtr` op
+
+            next <- runBuildStep step br
+            case next of
+                Done op' _
+                  | op' == op -> return k
+                  | otherwise -> mkbs op' k
+
+                BufferFull minSize op' nextStep 
+                  | op' == op -> fillNew nextStep (max minSize size')
+
+                  | otherwise -> 
+                      mkbs op' $ S.inlinePerformIO
+                               $ fillNew nextStep (max minSize size')
+                    
+                InsertByteString op' bs nextStep
+                  | op' == op ->
+                      return $ nonEmptyChunk bs 
+                             $ S.inlinePerformIO 
+                             $ fill nextStep fpbuf
+
+                  | otherwise ->
+                      mkbs op' $ nonEmptyChunk bs 
+                               $ S.inlinePerformIO 
+                               $ fillNew nextStep size'
+
+-- | Prepend the chunk if it is non-empty.
+{-# INLINE nonEmptyChunk #-}
+nonEmptyChunk :: S.ByteString -> L.ByteString -> L.ByteString
+nonEmptyChunk bs lbs | S.null bs = lbs 
+                     | otherwise = L.Chunk bs lbs
+    -- fill a first very small buffer, if we need more space then copy it
+    -- to the new buffer of size 'minBufSize'. This way we don't pay the
+    -- allocation cost of the big 'bufSize' buffer, when outputting only
+    -- small sequences.
+    --
 -- | Run a 'Builder' with the given buffer sizes.
 --
 -- Use this function for integrating the 'Builder' type with other libraries
@@ -272,6 +425,7 @@ flush = fromBuildStepCont step
 -- @firstBufSize = bufSize@ means that all chunks will use an underlying buffer
 -- of size @bufSize@. This is recommended, if you know that you always output
 -- more than @minBufSize@ bytes.
+{-
 toLazyByteStringWith 
     :: Int           -- ^ Buffer size (upper-bounds the resulting chunk size).
     -> Int           -- ^ Minimal free buffer space for continuing filling
@@ -284,353 +438,4 @@ toLazyByteStringWith
     -> L.ByteString  -- ^ Lazy bytestring to output after the builder is
                      -- finished.
     -> L.ByteString  -- ^ Resulting lazy bytestring
-toLazyByteStringWith bufSize minBufSize firstBufSize (Builder b) k = 
-    S.inlinePerformIO $ fillFirstBuffer (b (buildStep finalStep))
-  where
-    finalStep (BufRange pf _) = return $ Done pf ()
-    -- fill a first very small buffer, if we need more space then copy it
-    -- to the new buffer of size 'minBufSize'. This way we don't pay the
-    -- allocation cost of the big 'bufSize' buffer, when outputting only
-    -- small sequences.
-    fillFirstBuffer !step0
-      | minBufSize <= firstBufSize = fillNewBuffer firstBufSize step0
-      | otherwise                  = do
-          fpbuf <- S.mallocByteString firstBufSize
-          withForeignPtr fpbuf $ \pf -> do
-              let !pe      = pf `plusPtr` firstBufSize
-                  mkbs pf' = S.PS fpbuf 0 (pf' `minusPtr` pf)
-                  {-# INLINE mkbs #-}
-              next <- runBuildStep step0 (BufRange pf pe)
-              case next of
-                  Done pf' _
-                    | pf' == pf -> return k
-                    | otherwise -> return $ L.Chunk (mkbs pf') k
-
-                  BufferFull newSize pf' nextStep  -> do
-                      let !l  = pf' `minusPtr` pf
-                      fillNewBuffer (max (l + newSize) minBufSize) $ buildStep $
-                          \(BufRange pfNew peNew) -> do
-                              copyBytes pfNew pf l
-                              let !br' = BufRange (pfNew `plusPtr` l) peNew
-                              runBuildStep nextStep br'
-                      
-                  InsertByteString pf' bs nextStep 
-                      | pf' == pf ->
-                          return $ nonEmptyChunk bs (S.inlinePerformIO $ fillNewBuffer bufSize nextStep)
-                      | otherwise ->
-                          return $ L.Chunk (mkbs pf')
-                              (nonEmptyChunk bs (S.inlinePerformIO $ fillNewBuffer bufSize nextStep))
-                    
-    -- allocate and fill a new buffer
-    fillNewBuffer !size !step0 = do
-        fpbuf <- S.mallocByteString size
-        withForeignPtr fpbuf $ fillBuffer fpbuf
-      where
-        fillBuffer fpbuf !pbuf = fill pbuf step0
-          where
-            !pe = pbuf `plusPtr` size
-            fill !pf !step = do
-                next <- runBuildStep step (BufRange pf pe)
-                let mkbs pf' = S.PS fpbuf (pf `minusPtr` pbuf) (pf' `minusPtr` pf)
-                    {-# INLINE mkbs #-}
-                case next of
-                    Done pf' _
-                      | pf' == pf -> return k
-                      | otherwise -> return $ L.Chunk (mkbs pf') k
-
-                    BufferFull newSize pf' nextStep 
-                      | pf' == pf -> 
-                          fillNewBuffer (max newSize bufSize) nextStep
-                      | otherwise -> 
-                          return $ L.Chunk (mkbs pf')
-                              (S.inlinePerformIO $ 
-                                  fillNewBuffer (max newSize bufSize) nextStep)
-                        
-                    InsertByteString  pf' bs nextStep
-                      | pf' == pf                      ->
-                          return $ nonEmptyChunk bs (S.inlinePerformIO $ fill pf' nextStep)
-                      | minBufSize < pe `minusPtr` pf' ->
-                          return $ L.Chunk (mkbs pf')
-                              (nonEmptyChunk bs (S.inlinePerformIO $ fill pf' nextStep))
-                      | otherwise                      ->
-                          return $ L.Chunk (mkbs pf')
-                              (nonEmptyChunk bs (S.inlinePerformIO $ fillNewBuffer bufSize nextStep))
-
-
--- | Extract the lazy 'L.ByteString' from the builder by running it with default
--- buffer sizes. Use this function, if you do not have any special
--- considerations with respect to buffer sizes.
---
--- @ 'toLazyByteString' b = 'toLazyByteStringWith' 'defaultBufferSize' 'defaultMinimalBufferSize' 'defaultFirstBufferSize' b L.empty@
---
--- Note that @'toLazyByteString'@ is a 'Monoid' homomorphism.
---
--- > toLazyByteString mempty          == mempty
--- > toLazyByteString (x `mappend` y) == toLazyByteString x `mappend` toLazyByteString y
---
--- However, in the second equation, the left-hand-side is generally faster to
--- execute.
---
--- toLazyByteString :: Builder -> L.ByteString
--- toLazyByteString b = toLazyByteStringWith 
-    -- defaultBufferSize defaultMinimalBufferSize defaultFirstBufferSize b L.Empty
--- {-# INLINE toLazyByteString #-}
-
-{- TODO: Move to Data.ByteString.Lazy
- 
--- | Pack the chunks of a lazy bytestring into a single strict bytestring.
-packChunks :: L.ByteString -> S.ByteString
-packChunks lbs = do
-    S.unsafeCreate (fromIntegral $ L.length lbs) (copyChunks lbs)
-  where
-    copyChunks !L.Empty                         !_pf = return ()
-    copyChunks !(L.Chunk (S.PS fpbuf o l) lbs') !pf  = do
-        withForeignPtr fpbuf $ \pbuf ->
-            copyBytes pf (pbuf `plusPtr` o) l
-        copyChunks lbs' (pf `plusPtr` l)
-
 -}
-
-{- TODO: Think if we should really provide this by default. In most cases
- - performance will not meet the expectations of the user.
- 
--- | Run the builder to construct a strict bytestring containing the sequence
--- of bytes denoted by the builder. This is done by first serializing to a lazy bytestring and then packing its
--- chunks to a appropriately sized strict bytestring.
---
--- > toByteString = packChunks . toLazyByteString
---
--- Note that @'toByteString'@ is a 'Monoid' homomorphism.
---
--- > toByteString mempty          == mempty
--- > toByteString (x `mappend` y) == toByteString x `mappend` toByteString y
---
--- However, in the second equation, the left-hand-side is generally faster to
--- execute.
---
-toByteString :: Builder -> S.ByteString
-toByteString = packChunks . toLazyByteString
--}
-
-
-{- TODO: Replace with 'hPut' method for Builders.
-  
--- | @toByteStringIOWith bufSize io b@ runs the builder @b@ with a buffer of
--- at least the size @bufSize@ and executes the 'IO' action @io@ whenever the
--- buffer is full.
---
--- Compared to 'toLazyByteStringWith' this function requires less allocation,
--- as the output buffer is only allocated once at the start of the
--- serialization and whenever something bigger than the current buffer size has
--- to be copied into the buffer, which should happen very seldomly for the
--- default buffer size of 32kb. Hence, the pressure on the garbage collector is
--- reduced, which can be an advantage when building long sequences of bytes.
---
-toByteStringIOWith :: Int                      -- ^ Buffer size (upper bounds
-                                               -- the number of bytes forced
-                                               -- per call to the 'IO' action).
-                   -> (S.ByteString -> IO ())  -- ^ 'IO' action to execute per
-                                               -- full buffer, which is
-                                               -- referenced by a strict
-                                               -- 'S.ByteString'.
-                   -> Builder                  -- ^ 'Builder' to run.
-                   -> IO ()                    -- ^ Resulting 'IO' action.
-toByteStringIOWith bufSize io (Builder b) = 
-    fillBuffer bufSize (b (buildStep finalStep))
-  where
-    finalStep !(BufRange pf _) = return $ Done pf ()
-
-    fillBuffer !size step = do
-        S.mallocByteString size >>= fill
-      where
-        fill fpbuf = do
-            let !pf = unsafeForeignPtrToPtr fpbuf
-                !br = BufRange pf (pf `plusPtr` size)
-                -- safe due to later reference of fpbuf
-                -- BETTER than withForeignPtr, as we lose a tail call otherwise
-            signal <- runBuildStep step br
-            case signal of
-                Done pf' _ -> io $ S.PS fpbuf 0 (pf' `minusPtr` pf)
-
-                BufferFull minSize pf' nextStep  -> do
-                    io $ S.PS fpbuf 0 (pf' `minusPtr` pf)
-                    fillBuffer (max bufSize minSize) nextStep
-                    
-                InsertByteString pf' bs nextStep  -> do
-                    io $ S.PS fpbuf 0 (pf' `minusPtr` pf)
-                    unless (S.null bs) (io bs)
-                    fillBuffer bufSize nextStep
-
--- | Run the builder with a 'defaultBufferSize'd buffer and execute the given
--- 'IO' action whenever the buffer is full or gets flushed.
---
--- @ 'toByteStringIO' = 'toByteStringIOWith' 'defaultBufferSize'@
---
--- This is a 'Monoid' homomorphism in the following sense.
---
--- > toByteStringIO io mempty          == return ()
--- > toByteStringIO io (x `mappend` y) == toByteStringIO io x >> toByteStringIO io y
---
-toByteStringIO :: (S.ByteString -> IO ()) -> Builder -> IO ()
-toByteStringIO = toByteStringIOWith defaultBufferSize
-{-# INLINE toByteStringIO #-}
-
--}
-
-------------------------------------------------------------------------------
--- Draft of new builder/put execution code
-------------------------------------------------------------------------------
-
--- | A monad for lazily composing lazy bytestrings using continuations.
-newtype LBSM a = LBSM { unLBSM :: (a, L.ByteString -> L.ByteString) }
-
-instance Monad LBSM where
-    {-# INLINE return #-}
-    return x                       = LBSM (x, id)
-    {-# INLINE (>>=) #-}
-    (LBSM (x,k)) >>= f             = let LBSM (x',k') = f x in LBSM (x', k . k')
-    {-# INLINE (>>) #-}
-    (LBSM (_,k)) >> (LBSM (x',k')) = LBSM (x', k . k')
-
--- | Execute a put and return the written buffers as the chunks of a lazy
--- bytestring.
-toLazyByteString :: Builder -> L.ByteString
-toLazyByteString builder = 
-    -- (fst result, k (bufToLBSCont (snd result) L.Empty))
-    k (bufToLBSCont (snd result) L.Empty)
-  where
-
-    -- FIXME: Check with ByteString guys why allocation in inlinePerformIO is
-    -- bad.
-    put = putBuilder builder
-    -- initial buffer
-    buf0 = S.inlinePerformIO $ allocBuffer defaultBufferSize
-    -- run put, but don't force result => we're lazy enough
-    LBSM (result, k) = runPut liftIO outputBuf outputBS put buf0
-    -- convert a buffer to a lazy bytestring continuation
-    bufToLBSCont = maybe id L.Chunk . unsafeFreezeNonEmptyBuffer
-    -- lifting an io putsignal to a lazy bytestring monad
-    liftIO io = LBSM (S.inlinePerformIO io, id)
-    -- add buffer as a chunk prepare allocation of new one
-    outputBuf minSize buf = LBSM
-        ( S.inlinePerformIO $ allocBuffer (max minSize defaultBufferSize)
-        , bufToLBSCont buf )
-    -- add bytestring directly as a chunk; exploits postcondition of runPut
-    -- that bytestrings are non-empty
-    outputBS bs = LBSM ((), L.Chunk bs)
-
-{-
--- | A Builder that traces a message
-traceBuilder :: String -> Builder 
-traceBuilder msg = fromBuildStepCont $ \k br@(BufRange op ope) -> do
-    putStrLn $ "traceBuilder " ++ show (op, ope) ++ ": " ++ msg
-    k br
-
-test2 :: Word8 -> [S.ByteString]
-test2 x = L.toChunks $ toLazyByteString2 $ fromBuilder $ mconcat
-  [ traceBuilder "before flush" 
-  , fromWord8 48
-  , flushBuilder
-  , flushBuilder
-  , traceBuilder "after flush"
-  , fromWord8 x
-  ]
-
--}
-------------------------------------------------------------------------------
--- Executing puts on a buffer
-------------------------------------------------------------------------------
-
-{-
--- | Execute a build step on the given buffer.
-{-# INLINE execBuildStep #-}
-execBuildStep :: BuildStep a
-              -> Buffer  
-              -> IO (BuildSignal a)
-execBuildStep step (Buffer _ _ op ope) = runBuildStep step (BufRange op ope)
--}
-
--- | Execute a put on a buffer.
---
--- TODO: Generalize over buffer allocation strategy.
-{-# INLINE runPut #-}
-runPut :: Monad m 
-       => (IO (BuildSignal a) -> m (BuildSignal a)) -- lifting of buildsteps
-       -> (Int -> Buffer -> m Buffer) -- output function for a buffer, the returned buffer will be filled next
-       -> (S.ByteString -> m ())    -- output function for guaranteedly non-empty bytestrings, that are inserted directly into the stream
-       -> Put a                     -- put to execute
-       -> Buffer                    -- initial buffer to be used
-       -> m (a, Buffer)             -- result of put and remaining buffer
-runPut liftIO outputBuf outputBS (Put put) =
-    runStep (put (finalStep))
-  where
-    finalStep x = buildStep $ \(BufRange op _) -> return $ Done op x
-
-    runStep step buf@(Buffer fpbuf p0 op ope) = do
-        let !br = BufRange op ope
-        signal <- liftIO $ runBuildStep step br
-        case signal of 
-            Done op' x ->         -- put completed, buffer partially runSteped
-                return (x, Buffer fpbuf p0 op' ope)
-
-            BufferFull minSize op' nextStep -> do
-                buf' <- outputBuf minSize (Buffer fpbuf p0 op' ope)
-                runStep nextStep buf'
-
-            InsertByteString op' bs nextStep
-              | S.null bs ->    -- flushing of buffer required
-                  outputBuf 1 (Buffer fpbuf p0 op' ope) >>= runStep nextStep
-              | p0 == op' -> do -- no bytes written: just insert bytestring
-                  outputBS bs
-                  runStep nextStep buf
-              | otherwise -> do   -- bytes written, insert buffer and bytestring
-                  buf' <- outputBuf 1 (Buffer fpbuf p0 op' ope)
-                  outputBS bs
-                  runStep nextStep buf'
-
-
-------------------------------------------------------------------------------
--- To Lazy ByteString with allocation strategy
-------------------------------------------------------------------------------
-
-{-
-toLazyByteStringWith' bufSize (Builder b) k = 
-    S.inlinePerformIO $ fillNewBuffer bufSize (b (buildStep finalStep))
-  where
-    finalStep (BufRange pf _) = return $ Done pf ()
-                    
-    -- allocate and fill a new buffer
-    fillNewBuffer !size !step0 = do
-        fpbuf <- S.mallocByteString size
-        withForeignPtr fpbuf $ fillBuffer fpbuf
-      where
-        fillBuffer fpbuf !pbuf = fill pbuf step0
-          where
-            !pe = pbuf `plusPtr` size
-            fill !pf !step = do
-                next <- runBuildStep step (BufRange pf pe)
-                let mkbs pf' = S.PS fpbuf (pf `minusPtr` pbuf) (pf' `minusPtr` pf)
-                    {-# INLINE mkbs #-}
-                case next of
-                    Done pf' _
-                      | pf' == pf -> return k
-                      | otherwise -> return $ L.Chunk (mkbs pf') k
-
-                    BufferFull newSize pf' nextStep 
-                      | pf' == pf -> 
-                          fillNewBuffer (max newSize bufSize) nextStep
-                      | otherwise -> 
-                          return $ L.Chunk (mkbs pf')
-                              (S.inlinePerformIO $ 
-                                  fillNewBuffer (max newSize bufSize) nextStep)
-                        
-                    InsertByteString  pf' bs nextStep
-                      | pf' == pf                      ->
-                          return $ nonEmptyChunk bs (S.inlinePerformIO $ fill pf' nextStep)
-                      | minBufSize < pe `minusPtr` pf' ->
-                          return $ L.Chunk (mkbs pf')
-                              (nonEmptyChunk bs (S.inlinePerformIO $ fill pf' nextStep))
-                      | otherwise                      ->
-                          return $ L.Chunk (mkbs pf')
-                              (nonEmptyChunk bs (S.inlinePerformIO $ fillNewBuffer bufSize nextStep))
-                              -}

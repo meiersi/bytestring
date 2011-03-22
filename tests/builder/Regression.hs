@@ -26,10 +26,10 @@ import Criterion.Main
 ------------------------------------------------------------------------------
 
 n :: Int
-n = 100000
+n = 10000
 
 nShort :: Int
-nShort = 8
+nShort = 64
 
 {-# NOINLINE word8s #-}
 word8s :: [Word8]
@@ -50,12 +50,18 @@ blaze = "blaze"
 
 main :: IO ()
 main = defaultMain
-    [ benchmark "packing [Word8]"
+    [ benchmark ("packing [Word8] length " ++ show n)
         [ (newBS, NewL.length . NewL.pack)
         , (oldBS, OldL.length . OldL.pack)
         , (blaze, OldL.length . Blaze.toLazyByteString . Blaze.fromWord8s)
         ]
         word8s
+    , benchmark ("packing [Word8] length" ++ show nShort)
+        [ (newBS, NewL.length . NewL.pack)
+        , (oldBS, OldL.length . OldL.pack)
+        , (blaze, OldL.length . Blaze.toLazyByteString . Blaze.fromWord8s)
+        ]
+        shortWord8s
     ]
   where
     benchmark gname tasks x =

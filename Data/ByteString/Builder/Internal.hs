@@ -37,7 +37,7 @@ module Data.ByteString.Builder.Internal (
   , toLazyByteStringUntrimmed
   , toLazyByteStringWith
 
-  -- * Deafult Sizes
+  -- * Default Sizes
   , defaultFirstBufferSize
   , defaultMinimalBufferSize
   , defaultBufferSize
@@ -56,6 +56,8 @@ import qualified Data.ByteString.Lazy.Internal as L
 import Data.ByteString.Builder.Internal.Buffer
 
 import Foreign
+
+import System.IO
 
 
 ------------------------------------------------------------------------------
@@ -244,14 +246,20 @@ flush = fromBuildStepCont step
 -- Executing puts on a buffer
 ------------------------------------------------------------------------------
 
-{-
--- | Execute a build step on the given buffer.
-{-# INLINE execBuildStep #-}
-execBuildStep :: BuildStep a
-              -> Buffer  
-              -> IO (BuildSignal a)
-execBuildStep step (Buffer _ _ op ope) = runBuildStep step (BufRange op ope)
--}
+-- TODO: Use the handle's associated buffer if possible!
+hPutPut :: Handle -> Put a -> IO a
+hPutPut h put = do
+    firstBuf      <- allocBuffer defaultMinimalBufferSize
+    (x, finalBuf) <- runPut id outputBuf (S.hPut h) put firstBuf
+    S.hPut h $ unsafeFreezeBuffer finalBuf
+    return x
+  where
+    outputBuf minSize buf = do
+        S.hPut h $ unsafeFreezeBuffer buf
+        allocBuffer (max minSize defaultBufferSize)
+
+hPutBuilder :: Handle -> Builder -> IO ()
+hPutBuilder h = hPutPut h . putBuilder
 
 -- | Execute a put on a buffer.
 --
@@ -296,22 +304,22 @@ runPut liftIO outputBuf outputBS (Put put) =
 ------------------------------------------------------------------------------
 
 data AllocationStrategy = AllocationStrategy 
-         {-# UNPACK #-} !Int  -- initial size
-         (Int -> Int)         -- next size
+         {-# UNPACK #-} !Int  -- size of first buffer
+         {-# UNPACK #-} !Int  -- size of successive buffers
          (Int -> Int -> Bool) -- trim
 
 untrimmedStrategy :: Int -- ^ Size of the first buffer
                   -> Int -- ^ Size of successive buffers
                   -> AllocationStrategy
 untrimmedStrategy firstSize bufSize = 
-    AllocationStrategy firstSize (const bufSize) (\_ _ -> False)
+    AllocationStrategy firstSize bufSize (\_ _ -> False)
 
 
 safeStrategy :: Int  -- ^ Size of first buffer
              -> Int  -- ^ Size of successive buffers
              -> AllocationStrategy
 safeStrategy firstSize bufSize = 
-    AllocationStrategy firstSize (const bufSize) (\used size -> 2*used < size)
+    AllocationStrategy firstSize bufSize (\used size -> 2*used < size)
 
 -- | Extract the lazy 'L.ByteString' from the builder by running it with default
 -- buffer sizes. Use this function, if you do not have any special
@@ -340,7 +348,7 @@ toLazyByteStringWith :: AllocationStrategy
                       -> L.ByteString 
                       -> Builder 
                       -> L.ByteString
-toLazyByteStringWith (AllocationStrategy firstSize nextSize trim) k (Builder b) = 
+toLazyByteStringWith (AllocationStrategy firstSize bufSize trim) k (Builder b) = 
     S.inlinePerformIO $ fillNew (b (buildStep finalStep)) firstSize 
   where
     finalStep (BufRange op _) = return $ Done op ()
@@ -351,7 +359,6 @@ toLazyByteStringWith (AllocationStrategy firstSize nextSize trim) k (Builder b) 
         fill !step !fpbuf = do
             let op     = unsafeForeignPtrToPtr fpbuf -- safe due to mkbs
                 pe     = op `plusPtr` size
-                !size' = nextSize size
                 !br    = BufRange op pe
                 
                 mkbs !op' lbs
@@ -372,11 +379,11 @@ toLazyByteStringWith (AllocationStrategy firstSize nextSize trim) k (Builder b) 
                   | otherwise -> mkbs op' k
 
                 BufferFull minSize op' nextStep 
-                  | op' == op -> fillNew nextStep (max minSize size')
+                  | op' == op -> fillNew nextStep (max minSize bufSize)
 
                   | otherwise -> 
                       mkbs op' $ S.inlinePerformIO
-                               $ fillNew nextStep (max minSize size')
+                               $ fillNew nextStep (max minSize bufSize)
                     
                 InsertByteString op' bs nextStep
                   | op' == op ->
@@ -387,7 +394,7 @@ toLazyByteStringWith (AllocationStrategy firstSize nextSize trim) k (Builder b) 
                   | otherwise ->
                       mkbs op' $ nonEmptyChunk bs 
                                $ S.inlinePerformIO 
-                               $ fillNew nextStep size'
+                               $ fillNew nextStep bufSize
 
 -- | Prepend the chunk if it is non-empty.
 {-# INLINE nonEmptyChunk #-}

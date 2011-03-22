@@ -56,7 +56,7 @@ main = defaultMain
         , (blaze, OldL.length . Blaze.toLazyByteString . Blaze.fromWord8s)
         ]
         word8s
-    , benchmark ("packing [Word8] length" ++ show nShort)
+    , benchmark ("packing [Word8] length " ++ show nShort)
         [ (newBS, NewL.length . NewL.pack)
         , (oldBS, OldL.length . OldL.pack)
         , (blaze, OldL.length . Blaze.toLazyByteString . Blaze.fromWord8s)

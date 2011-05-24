@@ -43,7 +43,7 @@ library
                      Data.ByteString.Fusion
                      Data.ByteString.Builder
                      Data.ByteString.Builder.Write
-                     Data.ByteString.Builder.Char
+                     Data.ByteString.Builder.Char.Utf8
                      Data.ByteString.Builder.ByteString
                      Data.ByteString.Builder.Internal
                      Data.ByteString.Builder.Internal.Buffer

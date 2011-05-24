@@ -635,7 +635,7 @@ cycle cs    = cs' where cs' = foldrChunks Chunk cs' cs
 -- recursive call.
 {-# INLINE unfoldr #-}
 unfoldr :: (a -> Maybe (Word8, a)) -> a -> ByteString
-unfoldr f s0 = B.toLazyByteString $ B.fromWriteUnfoldr W.word8 f s0
+unfoldr f s0 = B.toLazyByteString $ B.unfoldrWrite W.word8 f s0
  
 -- ---------------------------------------------------------------------
 -- Substrings

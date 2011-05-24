@@ -16,7 +16,7 @@ module Data.ByteString.Builder.Write (
     fromFixedWrite
   , fromWrite
   , fromWriteList
-  , fromWriteUnfoldr
+  , unfoldrWrite
 
   -- ** Traversing @ByteString@s
   , mapWriteByteString
@@ -85,9 +85,9 @@ fromWriteList w =
 
 -- | A 'Builder' that unfolds a sequence of elements from a seed value and
 -- writes each of them to the buffer.
-{-# INLINE fromWriteUnfoldr #-}
-fromWriteUnfoldr :: Write b -> (a -> Maybe (b, a)) -> a -> Builder
-fromWriteUnfoldr w = 
+{-# INLINE unfoldrWrite #-}
+unfoldrWrite :: Write b -> (a -> Maybe (b, a)) -> a -> Builder
+unfoldrWrite w = 
     makeBuilder
   where
     bound = writeBound w

@@ -18,17 +18,17 @@ module Data.ByteString.Builder.Char
 import Data.ByteString.Builder.Internal
 import Data.ByteString.Builder.Write
 
-import System.IO.Write.Char
+import qualified System.IO.Write.Char.Utf8 as Utf8
 
 -- | /O(1)/. Serialize a Unicode character using the UTF-8 encoding.
 --
 fromCharUtf8 :: Char -> Builder
-fromCharUtf8 = fromWrite writeCharUtf8
+fromCharUtf8 = fromWrite Utf8.char
 
 -- | /O(n)/. Serialize a Unicode 'String' using the UTF-8 encoding.
 --
 fromStringUtf8 :: String -> Builder
-fromStringUtf8 = fromWriteList writeCharUtf8
+fromStringUtf8 = fromWriteList Utf8.char
 
 -- | /O(n)/. Serialize a value by 'Show'ing it and UTF-8 encoding the resulting
 -- 'String'.

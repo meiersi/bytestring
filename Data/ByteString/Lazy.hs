@@ -423,7 +423,7 @@ append xs ys = foldrChunks Chunk ys xs
 {-# INLINE map #-}
 map :: (Word8 -> Word8) -> ByteString -> ByteString
 map f = B.toLazyByteString . 
-        B.mapWriteLazyByteString (W.comapWrite f W.writeWord8)
+        B.mapWriteLazyByteString (W.comapWrite f W.word8)
 
 -- | /O(n)/ 'reverse' @xs@ returns the elements of @xs@ in reverse order.
 reverse :: ByteString -> ByteString
@@ -635,7 +635,7 @@ cycle cs    = cs' where cs' = foldrChunks Chunk cs' cs
 -- recursive call.
 {-# INLINE unfoldr #-}
 unfoldr :: (a -> Maybe (Word8, a)) -> a -> ByteString
-unfoldr f s0 = B.toLazyByteString $ B.fromWriteUnfoldr W.writeWord8 f s0
+unfoldr f s0 = B.toLazyByteString $ B.fromWriteUnfoldr W.word8 f s0
  
 -- ---------------------------------------------------------------------
 -- Substrings
@@ -988,7 +988,7 @@ notElem w cs = not (elem w cs)
 filter :: (Word8 -> Bool) -> ByteString -> ByteString
 filter p = B.toLazyByteString . B.mapWriteLazyByteString write
   where
-    write = W.writeIf p W.writeWord8 W.writeNothing
+    write = W.writeIf p W.word8 W.writeNothing
 {-# INLINE filter #-}
 
 {-

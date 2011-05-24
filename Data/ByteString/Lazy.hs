@@ -516,7 +516,7 @@ concat css0 = to css0
 concatMap :: (Word8 -> ByteString) -> ByteString -> ByteString
 concatMap f = 
     B.toLazyByteString . 
-    foldr (\w b -> B.fromLazyByteString (f w )`mappend` b) mempty
+    foldr (\w b -> B.lazyByteString (f w ) `mappend` b) mempty
 
 -- | /O(n)/ Applied to a predicate and a ByteString, 'any' determines if
 -- any element of the 'ByteString' satisfies the predicate.

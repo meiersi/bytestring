@@ -20,14 +20,14 @@
 module Data.ByteString.Builder.ByteString
     ( 
     -- * Strict bytestrings
-      fromByteString
-    , fromByteStringWith
+      byteString
+    , byteStringWith
     , copyByteString
     , insertByteString
 
     -- * Lazy bytestrings
-    , fromLazyByteString
-    , fromLazyByteStringWith
+    , lazyByteString
+    , lazyByteStringWith
     , copyLazyByteString
     , insertLazyByteString
 
@@ -51,7 +51,7 @@ import qualified Data.ByteString.Lazy.Internal as L
 
 -- | Smart serialization of a strict bytestring.
 --
--- @'fromByteString' = 'fromByteStringWith' 'defaultMaximalCopySize'@
+-- @'byteString' = 'byteStringWith' 'defaultMaximalCopySize'@
 --
 -- Use this function to serialize strict bytestrings. It guarantees an
 -- average chunk size of 4kb, which has been shown to be a reasonable size in
@@ -62,12 +62,12 @@ import qualified Data.ByteString.Lazy.Internal as L
 -- always the best choice, then you can use the 'copyByteString' or
 -- 'insertByteString' functions. 
 --
-fromByteString :: S.ByteString -> Builder
-fromByteString = fromByteStringWith defaultMaximalCopySize
-{-# INLINE fromByteString #-}
+{-# INLINE byteString #-}
+byteString :: S.ByteString -> Builder
+byteString = byteStringWith defaultMaximalCopySize
 
 
--- | @fromByteStringWith maximalCopySize bs@ serializes the strict bytestring
+-- | @byteStringWith maximalCopySize bs@ serializes the strict bytestring
 -- @bs@ according to the following rules.
 --
 --   [@S.length bs <= maximalCopySize@:] @bs@ is copied to the output buffer.
@@ -78,11 +78,11 @@ fromByteString = fromByteStringWith defaultMaximalCopySize
 -- These rules guarantee that average chunk size in the output stream is at
 -- least half the @maximalCopySize@.
 --
-{-# INLINE fromByteStringWith #-}
-fromByteStringWith :: Int          -- ^ Maximal number of bytes to copy.
+{-# INLINE byteStringWith #-}
+byteStringWith :: Int          -- ^ Maximal number of bytes to copy.
                    -> S.ByteString -- ^ Strict 'S.ByteString' to serialize.
                    -> Builder      -- ^ Resulting 'Builder'.
-fromByteStringWith maxCopySize = 
+byteStringWith maxCopySize = 
     \bs -> fromBuildStepCont $ step bs
   where
     step !bs !k br@(BufRange !op _)
@@ -95,9 +95,9 @@ fromByteStringWith maxCopySize =
 -- Use this function to serialize strict bytestrings that are statically known
 -- to be smallish (@<= 4kb@).
 --
+{-# INLINE copyByteString #-}
 copyByteString :: S.ByteString -> Builder
 copyByteString = \bs -> fromBuildStepCont $ copyByteStringStep bs
-{-# INLINE copyByteString #-}
 
 {-# INLINE copyByteStringStep #-}
 copyByteStringStep :: S.ByteString 
@@ -142,7 +142,7 @@ insertByteString =
 
 -- | /O(n)/. Smart serialization of a lazy bytestring.
 --
--- @'fromLazyByteString' = 'fromLazyByteStringWith' 'defaultMaximalCopySize'@
+-- @'lazyByteString' = 'lazyByteStringWith' 'defaultMaximalCopySize'@
 --
 -- Use this function to serialize lazy bytestrings. It guarantees an average
 -- chunk size of 4kb, which has been shown to be a reasonable size in
@@ -153,28 +153,28 @@ insertByteString =
 -- bytestring is always the best choice, then you can use the
 -- 'copyLazyByteString' or 'insertLazyByteString' functions. 
 --
-{-# INLINE fromLazyByteString #-}
-fromLazyByteString :: L.ByteString -> Builder
-fromLazyByteString = fromLazyByteStringWith defaultMaximalCopySize
+{-# INLINE lazyByteString #-}
+lazyByteString :: L.ByteString -> Builder
+lazyByteString = lazyByteStringWith defaultMaximalCopySize
 
 -- | /O(n)/. Serialize a lazy bytestring chunk-wise according to the same rules
--- as in 'fromByteStringWith'.
+-- as in 'byteStringWith'.
 --
 -- Semantically, it holds that
 --
--- >   fromLazyByteStringWith maxCopySize
--- > = mconcat . map (fromByteStringWith maxCopySize) . L.toChunks
+-- >   lazyByteStringWith maxCopySize
+-- > = mconcat . map (byteStringWith maxCopySize) . L.toChunks
 --
 -- However, the left-hand-side is much more efficient, as it moves the
 -- end-of-buffer pointer out of the inner loop and provides the compiler with
 -- more strictness information.
 --
-{-# INLINE fromLazyByteStringWith #-}
-fromLazyByteStringWith :: Int          -- ^ Maximal number of bytes to copy.
-                       -> L.ByteString -- ^ Lazy 'L.ByteString' to serialize.
-                       -> Builder      -- ^ Resulting 'Builder'.
-fromLazyByteStringWith maxCopySize = 
-  L.foldrChunks (\bs b -> fromByteStringWith maxCopySize bs `mappend` b) mempty
+{-# INLINE lazyByteStringWith #-}
+lazyByteStringWith :: Int          -- ^ Maximal number of bytes to copy.
+                   -> L.ByteString -- ^ Lazy 'L.ByteString' to serialize.
+                   -> Builder      -- ^ Resulting 'Builder'.
+lazyByteStringWith maxCopySize = 
+  L.foldrChunks (\bs b -> byteStringWith maxCopySize bs `mappend` b) mempty
 
 
 -- | /O(n)/. Serialize a lazy bytestring by copying /all/ chunks sequentially

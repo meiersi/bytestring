@@ -25,7 +25,7 @@ import qualified Data.ByteString.Lazy.Internal as L
 import Data.ByteString.Builder.Internal
 import Data.ByteString.Builder.Write
 
-import qualified System.IO.Write.Char.Utf8 as Utf8
+import qualified System.IO.Write.Char.Utf8 as W
 
 import Foreign
 
@@ -44,8 +44,8 @@ instance Utf8 a => Utf8 [a] where
 instance Utf8 Char where
     {-# INLINE utf8 #-}
     {-# INLINE utf8List #-}
-    utf8     = fromWrite Utf8.char
-    utf8List = fromWriteList Utf8.char
+    utf8     = fromWrite W.utf8
+    utf8List = fromWriteList W.utf8
 
 
 -- | /O(n)/. Serialize a value by 'Show'ing it and UTF-8 encoding the resulting
@@ -72,13 +72,12 @@ instance Hex a => Hex [a] where
 instance Hex Int8 where
     {-# INLINE hexLower #-}
     {-# INLINE hexLowerList #-}
-    hexLower     = fromWrite     Utf8.hexLower
-    hexLowerList = fromWriteList Utf8.hexLower
+    hexLower     = fromWrite     W.utf8HexLower
+    hexLowerList = fromWriteList W.utf8HexLower
     
 
 instance Hex S.ByteString where
-    hexLower = mapWriteByteString Utf8.hexLower
-
+    hexLower = mapWriteByteString W.utf8HexLower
 
 instance Hex L.ByteString where
-    hexLower = mapWriteLazyByteString Utf8.hexLower
+    hexLower = mapWriteLazyByteString W.utf8HexLower

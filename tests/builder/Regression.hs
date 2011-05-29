@@ -71,8 +71,8 @@ splitAtInput =
   where
     n'      = fromIntegral n
     nShort' = fromIntegral nShort
-    newLBS  = NewL.cycle $ NewL.pack [0..100]
-    oldLBS  = OldL.cycle $ OldL.pack [0..100]
+    newLBS  = NewL.take (n' + nShort') $ NewL.cycle $ NewL.pack [0..100]
+    oldLBS  = OldL.take (n' + nShort') $ OldL.cycle $ OldL.pack [0..100]
 
 
 ------------------------------------------------------------------------------
@@ -96,9 +96,17 @@ blaze = ( "blaze"
 benchmarks :: [Benchmark]
 testResults :: [String]
 (benchmarks, testResults) = unzip $ 
-    [ comparison "splitAt on LBS with chunksize 100" $
-        [ impl newBS (fst . uncurry NewL.splitAt . snd) splitAtInput
+    [ comparison "drop on LBS with chunksize 100" $
+        [ impl newBS (uncurry NewL.drop . snd) splitAtInput
+        , impl oldBS (uncurry OldL.drop . fst) splitAtInput
+        ]
+    , comparison "take on LBS with chunksize 100" $
+        [ impl newBS (uncurry NewL.take . snd) splitAtInput
         , impl oldBS (uncurry OldL.take . fst) splitAtInput
+        ]
+    , comparison "splitAt on LBS with chunksize 100" $
+        [ impl newBS (fst . uncurry NewL.splitAt . snd) splitAtInput
+        , impl oldBS (fst . uncurry OldL.splitAt . fst) splitAtInput
         ]
     , comparison "unfoldr countToZero starting from" $
         [ impl newBS (NewL.unfoldr countToZero) intInput

@@ -643,6 +643,9 @@ unfoldr f s0 = B.toLazyByteString $ B.unfoldrWrite W.word8 f s0
 -- | /O(n\/c)/ 'take' @n@, applied to a ByteString @xs@, returns the prefix
 -- of @xs@ of length @n@, or @xs@ itself if @n > 'length' xs@.
 take :: Int64 -> ByteString -> ByteString
+#if WORD_SIZE_IN_BITS < 64
+take i cs0 | i <= fromIntegral (maxBound :: Int) = take32 (fromIntegral i) cs0
+#endif
 take i _ | i <= 0 = Empty
 take i cs0         = take' i cs0
   where take' 0 _            = Empty
@@ -652,10 +655,25 @@ take i cs0         = take' i cs0
             then Chunk (S.take (fromIntegral n) c) Empty
             else Chunk c (take' (n - fromIntegral (S.length c)) cs)
 
+#if WORD_SIZE_IN_BITS < 64
+take32 :: Int -> ByteString -> ByteString
+take32 i _ | i <= 0 = Empty
+take32 i cs0         = take' i cs0
+  where take' 0 _            = Empty
+        take' _ Empty        = Empty
+        take' n (Chunk c cs) =
+          if n < S.length c
+            then Chunk (S.take n c) Empty
+            else Chunk c (take' (n - S.length c) cs)
+#endif
+
 -- | /O(n\/c)/ 'drop' @n xs@ returns the suffix of @xs@ after the first @n@
 -- elements, or @[]@ if @n > 'length' xs@.
 drop  :: Int64 -> ByteString -> ByteString
-drop i p | i <= 0 = p
+#if WORD_SIZE_IN_BITS < 64
+drop i cs0 | i <= fromIntegral (maxBound :: Int) = take32 (fromIntegral i) cs0
+#endif
+drop i cs0 | i <= 0 = cs0
 drop i cs0 = drop' i cs0
   where drop' 0 cs           = cs
         drop' _ Empty        = Empty
@@ -663,6 +681,19 @@ drop i cs0 = drop' i cs0
           if n < fromIntegral (S.length c)
             then Chunk (S.drop (fromIntegral n) c) cs
             else drop' (n - fromIntegral (S.length c)) cs
+
+#if WORD_SIZE_IN_BITS < 64
+-- TODO: Don't duplicate code. Use polymorphism and inlinling.
+drop32  :: Int -> ByteString -> ByteString
+drop32 i cs0 | i <= 0 = cs0
+drop32 i cs0 = drop' i cs0
+  where drop' 0 cs           = cs
+        drop' _ Empty        = Empty
+        drop' n (Chunk c cs) =
+          if n < S.length c
+            then Chunk (S.drop n c) cs
+            else drop' (n - S.length c) cs
+#endif
 
 -- | /O(n\/c)/ 'splitAt' @n xs@ is equivalent to @('take' n xs, 'drop' n xs)@.
 splitAt :: Int64 -> ByteString -> (ByteString, ByteString)

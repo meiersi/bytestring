@@ -62,6 +62,18 @@ countToZero :: Int -> Maybe (Word8, Int)
 countToZero 0 = Nothing
 countToZero i = Just (fromIntegral i, i - 1)
 
+{-# NOINLINE splitAtInput #-}
+splitAtInput :: [(String, ((Int64, OldL.ByteString), (Int64, NewL.ByteString)))]
+splitAtInput = 
+  [ (show n,      ((n',      oldLBS), (n',      newLBS)))
+  , (show nShort, ((nShort', oldLBS), (nShort', newLBS)))
+  ]
+  where
+    n'      = fromIntegral n
+    nShort' = fromIntegral nShort
+    newLBS  = NewL.cycle $ NewL.pack [0..100]
+    oldLBS  = OldL.cycle $ OldL.pack [0..100]
+
 
 ------------------------------------------------------------------------------
 -- Main
@@ -84,7 +96,11 @@ blaze = ( "blaze"
 benchmarks :: [Benchmark]
 testResults :: [String]
 (benchmarks, testResults) = unzip $ 
-    [ comparison "unfoldr countToZero starting from" $
+    [ comparison "splitAt on LBS with chunksize 100" $
+        [ impl newBS (fst . uncurry NewL.splitAt . snd) splitAtInput
+        , impl oldBS (uncurry OldL.take . fst) splitAtInput
+        ]
+    , comparison "unfoldr countToZero starting from" $
         [ impl newBS (NewL.unfoldr countToZero) intInput
         , impl oldBS (OldL.unfoldr countToZero) intInput
         ]

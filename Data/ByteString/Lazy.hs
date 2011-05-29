@@ -666,17 +666,43 @@ drop i cs0 = drop' i cs0
 
 -- | /O(n\/c)/ 'splitAt' @n xs@ is equivalent to @('take' n xs, 'drop' n xs)@.
 splitAt :: Int64 -> ByteString -> (ByteString, ByteString)
-splitAt i cs0 | i <= 0 = (Empty, cs0)
-splitAt i cs0 = splitAt' i cs0
-  where splitAt' 0 cs           = (Empty, cs)
-        splitAt' _ Empty        = (Empty, Empty)
-        splitAt' n (Chunk c cs) =
-          if n < fromIntegral (S.length c)
-            then (Chunk (S.take (fromIntegral n) c) Empty 
-                 ,Chunk (S.drop (fromIntegral n) c) cs)
-            else let (cs', cs'') = splitAt' (n - fromIntegral (S.length c)) cs
-                   in (Chunk c cs', cs'')
+splitAt n0 cs0
+#if WORD_SIZE_IN_BITS < 64
+  | n0 <= fromIntegral (maxBound :: Int) = splitAt32 (fromIntegral n0) cs0
+#endif
+  | n0 <= 0   = (Empty, cs0)
+  | otherwise = go n0 cs0
+  where
+    -- invariant 'n > 0'
+    STRICT2(go)
+    go _ Empty        = (Empty, Empty)
+    go n (Chunk c cs) = case compare n len of
+      LT -> case S.splitAt (fromIntegral n) c of 
+              (pre, suf) -> (Chunk pre Empty, Chunk suf cs)
+      EQ ->                 (Chunk c   Empty, cs          )
+      GT -> case go (n - len) cs of 
+              (pre, suf) -> (Chunk c   pre  , suf         )
+      where
+        len = fromIntegral $ S.length c
 
+#if WORD_SIZE_IN_BITS < 64
+splitAt32 :: Int -> ByteString -> (ByteString, ByteString)
+splitAt32 n0 cs0
+  | n0 <= 0   = (Empty, cs0)
+  | otherwise = go n0 cs0
+  where
+    -- invariant 'n > 0'
+    STRICT2(go)
+    go _ Empty        = (Empty, Empty)
+    go n (Chunk c cs) = case compare n len of
+      LT -> case S.splitAt n c of 
+              (pre, suf) -> (Chunk pre Empty, Chunk suf cs)
+      EQ ->                 (Chunk c   Empty, cs          )
+      GT -> case go (n - len) cs of 
+              (pre, suf) -> (Chunk c   pre  , suf         )
+      where
+        len = S.length c
+#endif
 
 -- | 'takeWhile', applied to a predicate @p@ and a ByteString @xs@,
 -- returns the longest prefix (possibly empty) of @xs@ of elements that

@@ -13,8 +13,7 @@
 module Data.ByteString.Builder.Write (
 
   -- * Constructing @Builder@s from @Write@s
-    fromFixedWrite
-  , fromWrite
+    fromWrite
   , fromWriteList
   , unfoldrWrite
 
@@ -33,25 +32,12 @@ import Foreign
 
 import System.IO.Write.Internal
 
--- | Create a builder that execute a single 'Write'.
-{-# INLINE fromFixedWrite #-}
-fromFixedWrite :: FixedWrite -> Builder
-fromFixedWrite w =
-    fromBuildStepCont step
-  where
-    step k (BufRange op ope)
-      | op `plusPtr` fixedWriteBound w <= ope = do
-          op' <- runFixedWrite w op
-          let !br' = BufRange op' ope
-          k br'
-      | otherwise = return $ bufferFull (fixedWriteBound w) op (step k)
-
 {-# INLINE fromWrite #-}
 fromWrite :: Write a -> (a -> Builder)
 fromWrite w = 
     mkBuilder
   where
-    bound = writeBound w
+    bound = getBound w
     mkBuilder x = fromBuildStepCont step
       where
         step k (BufRange op ope)
@@ -67,7 +53,7 @@ fromWriteList :: Write a -> [a] -> Builder
 fromWriteList w = 
     makeBuilder
   where
-    bound = writeBound w
+    bound = getBound w
     makeBuilder xs0 = fromBuildStepCont $ step xs0
       where
         step xs1 k !(BufRange op0 ope0) = go xs1 op0
@@ -90,7 +76,7 @@ unfoldrWrite :: Write b -> (a -> Maybe (b, a)) -> a -> Builder
 unfoldrWrite w = 
     makeBuilder
   where
-    bound = writeBound w
+    bound = getBound w
     makeBuilder f x0 = fromBuildStepCont $ step x0
       where
         step x1 !k = fill x1
@@ -116,7 +102,7 @@ mapWriteByteString :: Write Word8 -> S.ByteString -> Builder
 mapWriteByteString w =
     \bs -> fromBuildStepCont $ step bs
   where
-    bound = writeBound w
+    bound = getBound w
     step (S.PS ifp ioff isize) !k = 
         goBS (unsafeForeignPtrToPtr ifp `plusPtr` ioff)
       where

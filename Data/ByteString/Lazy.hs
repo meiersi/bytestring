@@ -646,54 +646,37 @@ take :: Int64 -> ByteString -> ByteString
 #if WORD_SIZE_IN_BITS < 64
 take i cs0 | i <= fromIntegral (maxBound :: Int) = take32 (fromIntegral i) cs0
 #endif
-take i _ | i <= 0 = Empty
-take i cs0         = take' i cs0
-  where take' 0 _            = Empty
-        take' _ Empty        = Empty
-        take' n (Chunk c cs) =
-          if n < fromIntegral (S.length c)
-            then Chunk (S.take (fromIntegral n) c) Empty
-            else Chunk c (take' (n - fromIntegral (S.length c)) cs)
+take i cs0 | otherwise                           = takePoly i cs0
 
 #if WORD_SIZE_IN_BITS < 64
 take32 :: Int -> ByteString -> ByteString
-take32 i _ | i <= 0 = Empty
-take32 i cs0         = take' i cs0
-  where take' 0 _            = Empty
-        take' _ Empty        = Empty
-        take' n (Chunk c cs) =
-          if n < S.length c
-            then Chunk (S.take n c) Empty
-            else Chunk c (take' (n - S.length c) cs)
+take32 = takePoly
 #endif
+
+{-# INLINE takePoly #-}
+takePoly :: Integral a => a -> ByteString -> ByteString
+takePoly i _ | i <= 0 = Empty
+takePoly i cs0         = go i cs0
+  where go 0 _            = Empty
+        go _ Empty        = Empty
+        go n (Chunk c cs)
+          | n < len   = Chunk (S.take (fromIntegral n) c) Empty
+          | otherwise = Chunk c (go (n - len) cs)
+          where
+            len = fromIntegral $ S.length c
 
 -- | /O(n\/c)/ 'drop' @n xs@ returns the suffix of @xs@ after the first @n@
 -- elements, or @[]@ if @n > 'length' xs@.
 drop  :: Int64 -> ByteString -> ByteString
-#if WORD_SIZE_IN_BITS < 64
-drop i cs0 | i <= fromIntegral (maxBound :: Int) = take32 (fromIntegral i) cs0
-#endif
 drop i cs0 | i <= 0 = cs0
-drop i cs0 = drop' i cs0
-  where drop' 0 cs           = cs
-        drop' _ Empty        = Empty
-        drop' n (Chunk c cs) =
-          if n < fromIntegral (S.length c)
-            then Chunk (S.drop (fromIntegral n) c) cs
-            else drop' (n - fromIntegral (S.length c)) cs
-
-#if WORD_SIZE_IN_BITS < 64
--- TODO: Don't duplicate code. Use polymorphism and inlinling.
-drop32  :: Int -> ByteString -> ByteString
-drop32 i cs0 | i <= 0 = cs0
-drop32 i cs0 = drop' i cs0
-  where drop' 0 cs           = cs
-        drop' _ Empty        = Empty
-        drop' n (Chunk c cs) =
-          if n < S.length c
-            then Chunk (S.drop n c) cs
-            else drop' (n - S.length c) cs
-#endif
+drop i cs0 = go i cs0
+  where go 0 cs           = cs
+        go _ Empty        = Empty
+        go n (Chunk c cs)
+          | n < len   = Chunk (S.drop (fromIntegral n) c) cs
+          | otherwise = go (n - len) cs
+          where
+            len = fromIntegral $ S.length c
 
 -- | /O(n\/c)/ 'splitAt' @n xs@ is equivalent to @('take' n xs, 'drop' n xs)@.
 splitAt :: Int64 -> ByteString -> (ByteString, ByteString)
@@ -701,6 +684,16 @@ splitAt n0 cs0
 #if WORD_SIZE_IN_BITS < 64
   | n0 <= fromIntegral (maxBound :: Int) = splitAt32 (fromIntegral n0) cs0
 #endif
+  | otherwise = splitAtPoly n0 cs0
+
+#if WORD_SIZE_IN_BITS < 64
+splitAt32 :: Int -> ByteString -> (ByteString, ByteString)
+splitAt32 = splitAtPoly
+#endif
+
+{-# INLINE splitAtPoly #-}
+splitAtPoly :: Integral a => a -> ByteString -> (ByteString, ByteString)
+splitAtPoly n0 cs0
   | n0 <= 0   = (Empty, cs0)
   | otherwise = go n0 cs0
   where
@@ -715,25 +708,6 @@ splitAt n0 cs0
               (pre, suf) -> (Chunk c   pre  , suf         )
       where
         len = fromIntegral $ S.length c
-
-#if WORD_SIZE_IN_BITS < 64
-splitAt32 :: Int -> ByteString -> (ByteString, ByteString)
-splitAt32 n0 cs0
-  | n0 <= 0   = (Empty, cs0)
-  | otherwise = go n0 cs0
-  where
-    -- invariant 'n > 0'
-    STRICT2(go)
-    go _ Empty        = (Empty, Empty)
-    go n (Chunk c cs) = case compare n len of
-      LT -> case S.splitAt n c of 
-              (pre, suf) -> (Chunk pre Empty, Chunk suf cs)
-      EQ ->                 (Chunk c   Empty, cs          )
-      GT -> case go (n - len) cs of 
-              (pre, suf) -> (Chunk c   pre  , suf         )
-      where
-        len = S.length c
-#endif
 
 -- | 'takeWhile', applied to a predicate @p@ and a ByteString @xs@,
 -- returns the longest prefix (possibly empty) of @xs@ of elements that

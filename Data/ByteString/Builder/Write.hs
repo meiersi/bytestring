@@ -54,6 +54,15 @@ fromWrite w =
   #-}
 
 -- | Construct a 'Builder' writing a list of data one element at a time.
+--
+-- The expression 'fromWriteList' @w@ is currently (GHC 7.0.2, 32-bit) up to 5x
+-- faster than the equivalent @mconcat . map (fromWrite w)@. Sadly, 'fromWriteList'
+-- cannot be used for foldr/build fusion. Its performance relies on hoisting several
+-- variables out of the inner loop. That's not possible when writing
+-- 'fromWriteList' as a 'foldr'. If we had stream fusion for lists, then we
+-- could fuse 'fromWriteList', as 'fromWriteStream' can keep control over the
+-- execution.
+--
 {-# INLINE fromWriteList #-}
 fromWriteList :: Write a -> [a] -> Builder
 fromWriteList w = 

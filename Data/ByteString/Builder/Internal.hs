@@ -24,6 +24,8 @@ module Data.ByteString.Builder.Internal (
   , fromBuildStepCont
   , fromPut
   , flush
+  , append
+  , unfusableAppend
 
   -- * Put
   , Put
@@ -100,13 +102,24 @@ buildStep = BuildStep
 
 newtype Builder = Builder (forall r. BuildStep r -> BuildStep r)
 
+-- Retain the append markers in phase 0 such that the boundary checks of
+-- fromWrite can be fused. The unfusableAppend is just the append that
+-- no rule matches on.
+{-# INLINE[1] append #-}
+append :: Builder -> Builder -> Builder
+append = unfusableAppend
+
+{-# INLINE unfusableAppend #-}
+unfusableAppend :: Builder -> Builder -> Builder
+unfusableAppend (Builder b1) (Builder b2) = Builder $ b1 . b2
+
 instance Monoid Builder where
-  mempty = Builder id
   {-# INLINE mempty #-}
-  (Builder b1) `mappend` (Builder b2) = Builder $ b1 . b2
+  mempty = Builder id
   {-# INLINE mappend #-}
-  mconcat = foldr mappend mempty
+  mappend = append
   {-# INLINE mconcat #-}
+  mconcat = foldr mappend mempty
 
 newtype Put a = Put {
     unPut :: forall r. (a -> BuildStep r) -> BuildStep r

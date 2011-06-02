@@ -61,6 +61,7 @@ import Foreign
 
 -- | Serialize a single unsigned byte.
 --
+{-# INLINE word8 #-}
 word8 :: Word8 -> Builder
 word8 = fromWrite W.word8
 
@@ -71,6 +72,7 @@ word8s = fromWriteList W.word8
 
 -- | Serialize a single signed byte.
 --
+{-# INLINE int8 #-}
 int8 :: Int8 -> Builder
 int8 = fromWrite W.int8
 

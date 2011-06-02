@@ -30,9 +30,9 @@ import qualified Data.ByteString.Lazy.Internal    as L
 
 import Foreign
 
-import System.IO.Write.Internal
+import System.IO.Write.Internal hiding (append)
 
-{-# INLINE fromWrite #-}
+{-# INLINE[1] fromWrite #-}
 fromWrite :: Write a -> (a -> Builder)
 fromWrite w = 
     mkBuilder
@@ -46,6 +46,12 @@ fromWrite w =
               let !br' = BufRange op' ope
               k br'
           | otherwise = return $ bufferFull bound op (step k)
+
+{-# RULES 
+   "append/fromWrite" forall w1 w2 x1 x2.
+       append (fromWrite w1 x1) (fromWrite w2 x2) 
+     = fromWrite (write2 w1 w2) (x1, x2) 
+  #-}
 
 -- | Construct a 'Builder' writing a list of data one element at a time.
 {-# INLINE fromWriteList #-}

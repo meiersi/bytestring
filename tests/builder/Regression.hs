@@ -13,15 +13,19 @@ module Regression where
 
 import qualified "blaze-builder" Blaze.ByteString.Builder as Blaze
 
-import qualified "new-bytestring" Data.ByteString.Lazy    as NewL
-import qualified "new-bytestring" Data.ByteString.Builder as NewL
+import qualified "new-bytestring" Data.ByteString.Lazy              as NewL
+import qualified "new-bytestring" Data.ByteString.Builder           as NewL
+import qualified "new-bytestring" Data.ByteString.Builder.Write     as NewL
 import qualified "new-bytestring" Data.ByteString.Builder.Char.Utf8 as NewL
 
 import qualified "bytestring" Data.ByteString.Lazy as OldL
 import qualified Data.ByteString.Base16.Lazy       as OldBase16
 
+import qualified System.IO.Write as W
+
 import Foreign
 import Criterion.Main
+import Data.Monoid
 
 ------------------------------------------------------------------------------
 -- Benchmark Data
@@ -82,6 +86,12 @@ splitAtInput =
 newBS :: ([Char], NewL.ByteString -> Int64, NewL.ByteString -> [Word8])
 newBS = ("new-bytestring",  NewL.length, NewL.unpack)
 
+newBuilder :: ([Char], NewL.Builder -> Int64, NewL.Builder -> [Word8])
+newBuilder = ( "new-builder"
+        , NewL.length . NewL.toLazyByteString
+        , NewL.unpack . NewL.toLazyByteString )
+
+
 oldBS :: ([Char], OldL.ByteString -> Int64, OldL.ByteString -> [Word8])
 oldBS = ("old-bytestring",  OldL.length, OldL.unpack)
 
@@ -96,7 +106,12 @@ blaze = ( "blaze"
 benchmarks :: [Benchmark]
 testResults :: [String]
 (benchmarks, testResults) = unzip $ 
-    [ comparison "drop on LBS with chunksize 100" $
+    [ comparison "fromWrite `mappend` fromWrite" $
+        [ impl newBuilder (mconcat . map (\x -> NewL.word8 x `mappend` NewL.word8 x)) word8Input
+        , impl blaze      (mconcat . map (\x -> Blaze.fromWord8 x `mappend` Blaze.fromWord8 x)) word8Input
+        ]
+    {-
+    , comparison "drop on LBS with chunksize 100" $
         [ impl newBS (uncurry NewL.drop . snd) splitAtInput
         , impl oldBS (uncurry OldL.drop . fst) splitAtInput
         ]
@@ -129,6 +144,7 @@ testResults :: [String]
         , impl oldBS OldL.pack word8Input
         , impl blaze Blaze.fromWord8s word8Input
         ]
+        -}
     ]
   where
     comparison :: Eq d => String -> [([Benchmark], [d])] -> (Benchmark, String)

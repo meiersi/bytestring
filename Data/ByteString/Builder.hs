@@ -18,9 +18,7 @@ module Data.ByteString.Builder
 
       -- ** Signed and unsigned integers
     , word8
-    , word8s
     , int8
-    , int8s
 
     , BigEndian(..)
     , LittleEndian(..)
@@ -65,21 +63,11 @@ import Foreign
 word8 :: Word8 -> Builder
 word8 = fromWrite W.word8
 
--- | Serialize a list of unsigned bytes.
---
-word8s :: [Word8] -> Builder
-word8s = fromWriteList W.word8
-
 -- | Serialize a single signed byte.
 --
 {-# INLINE int8 #-}
 int8 :: Int8 -> Builder
 int8 = fromWrite W.int8
-
--- | Serialize a list of signed bytes.
---
-int8s :: [Int8] -> Builder
-int8s = fromWriteList W.int8
 
 
 -- multiple bytes: class based endianness selection

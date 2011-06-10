@@ -19,3 +19,11 @@ regression:
 
 core-regression:
 	$(GHC)-core -- --make -O2 -fforce-recomp -main-is Regression Regression.hs
+
+# test writeList fusion 
+writelist:
+	$(GHC) --make -O2 $(DEBUG) -fforce-recomp -main-is WriteListFusion WriteListFusion.hs
+	./WriteListFusion --resamples 10000
+
+core-writelist:
+	$(GHC)-core -- --make -O2 -fforce-recomp -main-is WriteListFusion WriteListFusion.hs

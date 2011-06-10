@@ -1,4 +1,5 @@
-builder/Regression
+/builder/Regression
+/builder/WriteListFusion
 *.hi
 *.o
 

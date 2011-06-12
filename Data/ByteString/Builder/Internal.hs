@@ -9,18 +9,21 @@
 --
 -- Core types and functions for the 'Builder' monoid and the 'Put' monad.
 --
+-- TODO: Cleanup export. Its impossible to keep it abstract, as otherwise
+-- we cannot implement builder transformers.
+--
 module Data.ByteString.Builder.Internal (
 
   -- * Build Steps
     BufRange(..)
-  , BuildSignal
-  , BuildStep
+  , BuildSignal(..)
+  , BuildStep(..)
   , done
   , bufferFull
   , insertByteString
 
   -- * Builder
-  , Builder
+  , Builder(..)
   , fromBuildStepCont
   , fromPut
   , flush

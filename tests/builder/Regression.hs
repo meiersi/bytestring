@@ -110,7 +110,6 @@ testResults :: [String]
         [ impl newBuilder (mconcat . map (\x -> NewL.word8 x `mappend` NewL.word8 x)) word8Input
         , impl blaze      (mconcat . map (\x -> Blaze.fromWord8 x `mappend` Blaze.fromWord8 x)) word8Input
         ]
-    {-
     , comparison "drop on LBS with chunksize 100" $
         [ impl newBS (uncurry NewL.drop . snd) splitAtInput
         , impl oldBS (uncurry OldL.drop . fst) splitAtInput
@@ -144,7 +143,6 @@ testResults :: [String]
         , impl oldBS OldL.pack word8Input
         , impl blaze Blaze.fromWord8s word8Input
         ]
-        -}
     ]
   where
     comparison :: Eq d => String -> [([Benchmark], [d])] -> (Benchmark, String)

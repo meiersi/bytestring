@@ -129,3 +129,4 @@ smallChunkSize = 4 * k - chunkOverhead
 -- | The memory management overhead. Currently this is tuned for GHC only.
 chunkOverhead :: Int
 chunkOverhead = 2 * sizeOf (undefined :: Int)
+

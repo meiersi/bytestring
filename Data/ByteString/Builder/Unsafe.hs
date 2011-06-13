@@ -218,7 +218,7 @@ mapFilterMapByteString f p g =
         goBS (unsafeForeignPtrToPtr ifp `plusPtr` ioff)
       where
         !ipe = unsafeForeignPtrToPtr ifp `plusPtr` (ioff + isize)
-        goBS !ip0 !br@(BufRange op0 ope)
+        goBS !ip0 !br@(BufferRange op0 ope)
           | ip0 >= ipe = do touchForeignPtr ifp -- input buffer consumed
                             k br
           | op0 < ope  = goPartial (ip0 `plusPtr` min outRemaining inpRemaining)
@@ -236,7 +236,7 @@ mapFilterMapByteString f p g =
                         then poke op (f w') >> go (ip `plusPtr` 1) (op `plusPtr` 1)
                         else                   go (ip `plusPtr` 1) op
                   | otherwise =
-                      goBS ip (BufRange op ope)
+                      goBS ip (BufferRange op ope)
 {-# INLINE mapFilterMapByteString #-}
 
 mapFilterMapLazyByteString :: (Word8 -> Word8) -> (Word8 -> Bool) -> (Word8 -> Word8) 
@@ -275,19 +275,19 @@ fromWriteReplicated write =
         bound = getBound $ write x
         step !k = fill n0
           where
-            fill !n1 !(BufRange pf0 pe0) = go n1 pf0
+            fill !n1 !(BufferRange pf0 pe0) = go n1 pf0
               where
                 go 0 !pf = do
-                    let !br' = BufRange pf pe0
+                    let !br' = BufferRange pf pe0
                     k br'
                 go n !pf
                   | pf `plusPtr` bound <= pe0 = do
                       pf' <- runWrite (write x) pf
                       go (n-1) pf'
                   | otherwise = return $ bufferFull bound pf $ 
-                      \(BufRange pfNew peNew) -> do 
+                      \(BufferRange pfNew peNew) -> do 
                           pfNew' <- runWrite (write x) pfNew
-                          fill (n-1) (BufRange pfNew' peNew)
+                          fill (n-1) (BufferRange pfNew' peNew)
 {-# INLINE fromWriteReplicated #-}
 
 -- FIXME: Output repeated bytestrings for large replications.
@@ -297,11 +297,11 @@ fromReplicateWord8 !n0 x =
   where
     step !k = fill n0
       where
-        fill !n !br@(BufRange pf pe)
+        fill !n !br@(BufferRange pf pe)
           | n <= 0    = k br
           | pf' <= pe = do
               _ <- S.memset pf x (fromIntegral n) -- FIXME: This conversion looses information for 64 bit systems.
-              let !br' = BufRange pf' pe
+              let !br' = BufferRange pf' pe
               k br'
           | otherwise  = do
               let !l = pe `minusPtr` pf
@@ -549,7 +549,7 @@ putWriteBlocks blockSize write =
         goBS (unsafeForeignPtrToPtr ifp `plusPtr` ioff)
       where
         !ipe = unsafeForeignPtrToPtr ifp `plusPtr` (ioff + isize)
-        goBS !ip0 !br@(BufRange op0 ope)
+        goBS !ip0 !br@(BufferRange op0 ope)
           | ip0 `plusPtr` blockSize > ipe = do 
               touchForeignPtr ifp -- input buffer consumed
               let !bs' = S.PS ifp (ip0 `minusPtr` unsafeForeignPtrToPtr ifp) 
@@ -572,7 +572,7 @@ putWriteBlocks blockSize write =
                       op' <- runWrite (write ip) op
                       go (ip `plusPtr` blockSize) op'
                   | otherwise =
-                      goBS ip (BufRange op ope)
+                      goBS ip (BufferRange op ope)
 
 
 {-# INLINE putWriteLazyBlocks #-}

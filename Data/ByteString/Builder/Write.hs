@@ -38,12 +38,12 @@ fromWrite w =
     mkBuilder
   where
     bound = getBound w
-    mkBuilder x = fromBuildStepCont step
+    mkBuilder x = builder step
       where
-        step k (BufRange op ope)
+        step k (BufferRange op ope)
           | op `plusPtr` bound <= ope = do
               op' <- runWrite w x op
-              let !br' = BufRange op' ope
+              let !br' = BufferRange op' ope
               k br'
           | otherwise = return $ bufferFull bound op (step k)
 
@@ -69,12 +69,12 @@ fromWriteList w =
     makeBuilder
   where
     bound = getBound w
-    makeBuilder xs0 = fromBuildStepCont $ step xs0
+    makeBuilder xs0 = builder $ step xs0
       where
-        step xs1 k !(BufRange op0 ope0) = go xs1 op0
+        step xs1 k !(BufferRange op0 ope0) = go xs1 op0
           where
             go [] !op = do
-               let !br' = BufRange op ope0
+               let !br' = BufferRange op ope0
                k br'
 
             go xs@(x':xs') !op
@@ -92,37 +92,37 @@ unfoldrWrite w =
     makeBuilder
   where
     bound = getBound w
-    makeBuilder f x0 = fromBuildStepCont $ step x0
+    makeBuilder f x0 = builder $ step x0
       where
         step x1 !k = fill x1
           where
-            fill x !(BufRange pf0 pe0) = go (f x) pf0
+            fill x !(BufferRange pf0 pe0) = go (f x) pf0
               where
                 go !Nothing        !pf = do
-                    let !br' = BufRange pf pe0
+                    let !br' = BufferRange pf pe0
                     k br'
                 go !(Just (y, x')) !pf
                   | pf `plusPtr` bound <= pe0 = do
                       !pf' <- runWrite w y pf
                       go (f x') pf'
                   | otherwise = return $ bufferFull bound pf $ 
-                      \(BufRange pfNew peNew) -> do 
+                      \(BufferRange pfNew peNew) -> do 
                           !pfNew' <- runWrite w y pfNew
-                          fill x' (BufRange pfNew' peNew)
+                          fill x' (BufferRange pfNew' peNew)
 
 -- | @mapWriteByteString write bs@ consecutively executes the @write b@ action
 -- for every byte @b@ of the strict bytestring @bs@.
 {-# INLINE mapWriteByteString #-}
 mapWriteByteString :: Write Word8 -> S.ByteString -> Builder
 mapWriteByteString w =
-    \bs -> fromBuildStepCont $ step bs
+    \bs -> builder $ step bs
   where
     bound = getBound w
     step (S.PS ifp ioff isize) !k = 
         goBS (unsafeForeignPtrToPtr ifp `plusPtr` ioff)
       where
         !ipe = unsafeForeignPtrToPtr ifp `plusPtr` (ioff + isize)
-        goBS !ip0 !br@(BufRange op0 ope)
+        goBS !ip0 !br@(BufferRange op0 ope)
           | ip0 >= ipe = do 
               touchForeignPtr ifp -- input buffer consumed
               k br
@@ -143,7 +143,7 @@ mapWriteByteString w =
                       op' <- runWrite w x op
                       go (ip `plusPtr` 1) op'
                   | otherwise =
-                      goBS ip (BufRange op ope)
+                      goBS ip (BufferRange op ope)
 
 -- | @mapWriteLazyByteString write lbs@ consecutively executes the @write b@ action
 -- for every byte @b@ of the lazy bytestring @lbs@.

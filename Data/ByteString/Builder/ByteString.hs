@@ -33,8 +33,7 @@ module Data.ByteString.Builder.ByteString
 
     ) where
 
-import           Data.ByteString.Builder.Internal hiding (insertByteString)
-import qualified Data.ByteString.Builder.Internal as I   (insertByteString)
+import Data.ByteString.Builder.Internal 
 
 import Foreign
 import Data.Monoid
@@ -83,10 +82,10 @@ byteStringWith :: Int          -- ^ Maximal number of bytes to copy.
                    -> S.ByteString -- ^ Strict 'S.ByteString' to serialize.
                    -> Builder      -- ^ Resulting 'Builder'.
 byteStringWith maxCopySize = 
-    \bs -> fromBuildStepCont $ step bs
+    \bs -> builder $ step bs
   where
-    step !bs !k br@(BufRange !op _)
-      | maxCopySize < S.length bs = return $ I.insertByteString op bs k
+    step !bs !k br@(BufferRange !op _)
+      | maxCopySize < S.length bs = return $ insertChunk op bs k
       | otherwise                 = copyByteStringStep bs k br
 
 -- | @copyByteString bs@ serialize the strict bytestring @bs@ by copying it to
@@ -97,21 +96,21 @@ byteStringWith maxCopySize =
 --
 {-# INLINE copyByteString #-}
 copyByteString :: S.ByteString -> Builder
-copyByteString = \bs -> fromBuildStepCont $ copyByteStringStep bs
+copyByteString = \bs -> builder $ copyByteStringStep bs
 
 {-# INLINE copyByteStringStep #-}
 copyByteStringStep :: S.ByteString 
-                   -> (BufRange -> IO (BuildSignal a))
-                   -> (BufRange -> IO (BuildSignal a))
+                   -> (BufferRange -> IO (BuildSignal a))
+                   -> (BufferRange -> IO (BuildSignal a))
 copyByteStringStep (S.PS ifp ioff isize) !k = 
     goBS (unsafeForeignPtrToPtr ifp `plusPtr` ioff)
   where
     !ipe = unsafeForeignPtrToPtr ifp `plusPtr` (ioff + isize)
-    goBS !ip !(BufRange op ope)
+    goBS !ip !(BufferRange op ope)
       | inpRemaining <= outRemaining = do
           copyBytes op ip inpRemaining
           touchForeignPtr ifp -- input consumed: OK to release from here
-          let !br' = BufRange (op `plusPtr` inpRemaining) ope
+          let !br' = BufferRange (op `plusPtr` inpRemaining) ope
           k br'
       | otherwise = do
           copyBytes op ip outRemaining
@@ -132,9 +131,9 @@ copyByteStringStep (S.PS ifp ioff isize) !k =
 {-# INLINE insertByteString #-}
 insertByteString :: S.ByteString -> Builder
 insertByteString = 
-    \bs -> fromBuildStepCont $ step bs
+    \bs -> builder $ step bs
   where
-    step !bs !k !(BufRange op _) = return $ I.insertByteString op bs k
+    step !bs !k !(BufferRange op _) = return $ insertChunk op bs k
 
 
 -- Lazy bytestrings
@@ -200,3 +199,8 @@ insertLazyByteString :: L.ByteString -> Builder
 insertLazyByteString =
   L.foldrChunks (\bs b -> insertByteString bs `mappend` b) mempty
 
+-- | The maxiamal size of a bytestring that is copied. 
+-- @2 * 'L.smallChunkSize'@ to guarantee that on average a chunk is of
+-- 'L.smallChunkSize'.
+defaultMaximalCopySize :: Int
+defaultMaximalCopySize = 2 * L.smallChunkSize

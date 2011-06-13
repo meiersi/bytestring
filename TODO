@@ -11,6 +11,15 @@ TODO:
 Todo items
 ----------
 
+* builder integration
+    - rules to eliminate intermediate builders 
+      (e.g. 'lazyByteString (toLazyByteString b) = b')
+    - add asserts where possible (e.g., in 'bufferFull minSize nextStep' make
+      'nextStep' check in debug mode that the next buffer-range is larger than
+      the required minimum size.)
+    - check if a 'freezeAndTrimByteArray' primitive could be supported
+      efficiently by GHC
+
 * check that api again.
     - in particular, unsafeHead/Tail for Char8?
     - scanr,scanr1... in Char8

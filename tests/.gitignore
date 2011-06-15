@@ -1,5 +1,6 @@
 /builder/Regression
 /builder/WriteListFusion
+/builder/Test_RewriteFoldr
 *.hi
 *.o
 

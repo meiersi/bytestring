@@ -27,3 +27,11 @@ writelist:
 
 core-writelist:
 	$(GHC)-core -- --make -O2 -fforce-recomp -main-is WriteListFusion WriteListFusion.hs
+
+# reduced test for writeList fusion 
+test_RewriteFoldr:
+	$(GHC) --make -O2 $(DEBUG) -fforce-recomp -main-is Test_RewriteFoldr Test_RewriteFoldr.hs -ddump-rule-firings
+	./Test_RewriteFoldr --resamples 10000
+
+core-test_RewriteFoldr:
+	$(GHC)-core -- --make -O2 -fforce-recomp -main-is Test_RewriteFoldr Test_RewriteFoldr.hs

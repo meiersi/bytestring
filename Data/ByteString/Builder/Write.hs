@@ -1,7 +1,8 @@
 {-# LANGUAGE CPP, BangPatterns, MonoPatBinds #-}
 -- |
+-- Module      : Data.ByteString.Builder.Write
 -- Copyright   : (c) 2010-2011 Simon Meier
---               (c) 2010      Jasper van der Jeugt
+--             . (c) 2010      Jasper van der Jeugt
 -- License     : BSD3-style (see LICENSE)
 -- 
 -- Maintainer  : Simon Meier <iridcode@gmail.com>

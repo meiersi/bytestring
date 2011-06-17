@@ -216,6 +216,7 @@ import Data.Word                (Word8)
 import Data.Int                 (Int64)
 import System.IO                (Handle,stdin,stdout,openBinaryFile,IOMode(..)
                                 ,hClose)
+import System.IO.Write          (word8)
 import System.IO.Error          (mkIOError, illegalOperationErrorType)
 import System.IO.Unsafe
 import qualified System.IO.Write as W
@@ -294,7 +295,7 @@ singleton w = Chunk (S.singleton w) Empty
 
 -- | /O(n)/ Convert a '[Word8]' into a 'ByteString'. 
 pack :: [Word8] -> ByteString
-pack = B.toLazyByteString . B.bigEndian
+pack = B.toLazyByteString . B.fromWriteList word8
 
 -- | /O(n)/ Converts a 'ByteString' to a '[Word8]'.
 unpack :: ByteString -> [Word8]

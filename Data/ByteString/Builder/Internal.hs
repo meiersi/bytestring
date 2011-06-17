@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP, BangPatterns, Rank2Types, MonoPatBinds #-}
+{-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Copyright   : (c) 2010 Simon Meier
 -- License     : BSD3-style (see LICENSE)
@@ -91,8 +92,14 @@ import qualified Data.ByteString               as S
 import Foreign
 
 
+-- | A range of bytes in a buffer represented by the pointer to the first byte
+-- of the range and the pointer to the first byte /after/ the range.
+data BufferRange = BufferRange {-# UNPACK #-} !(Ptr Word8)  -- First byte of range
+                               {-# UNPACK #-} !(Ptr Word8)  -- First byte /after/ range
+
+
 ------------------------------------------------------------------------------
--- Build Signals
+-- Build signals
 ------------------------------------------------------------------------------
 
 -- | 'BuildSignal's abstract signals to the caller of a 'BuildStep'. There are
@@ -144,13 +151,8 @@ insertChunk :: Ptr Word8
 insertChunk op bs step = InsertByteString op bs (buildStep step)
 
 ------------------------------------------------------------------------------
--- The core: BuildSteps
+-- Build steps
 ------------------------------------------------------------------------------
-
--- | A range of bytes in a buffer represented by the pointer to the first byte
--- of the range and the pointer to the first byte /after/ the range.
-data BufferRange = BufferRange {-# UNPACK #-} !(Ptr Word8)  -- First byte of range
-                               {-# UNPACK #-} !(Ptr Word8)  -- First byte /after/ range
 
 -- | 'BuildStep's abstract 'IO' functions that fill a 'BufferRange' and signal 
 -- the caller how to proceed. They are constructed using 'runBuilder' and
@@ -200,24 +202,13 @@ fillWithBuildStep step fDone fFull fChunk br = do
 
 
 ------------------------------------------------------------------------------
--- The 'Builder' Monoid and the 'Put' Monad
+-- The 'Builder' monoid
 ------------------------------------------------------------------------------
 
 -- | A 'Builder' denotes a stream of bytes that can be efficiently converted to
 -- a sequence of byte arrays. 'Builder's can be concatenated with /O(1)/ cost
--- using 'mappend'. 
+-- using 'mappend'. The zero-length 'Builder' is denoted by 'mempty'.
 newtype Builder = Builder (forall r. BuildStep r -> BuildStep r)
-
--- | Run a 'Builder'.
-{-# INLINE runBuilder #-}
-runBuilder :: Builder      -- ^ 'Builder' to run
-           -> BuildStep () -- ^ 'BuildStep' that writes the byte stream of this
-                           -- 'Builder' and signals 'done' upon completion.
-runBuilder (Builder b) =
-    b (buildStep finalStep)
-  where
-    finalStep (BufferRange op _) = return $ done op ()
-                    
 
 -- | Construct a 'Builder'. In contrast to 'BuildStep's, 'Builder's are
 -- referentially transparent. 
@@ -240,6 +231,16 @@ builder :: (forall r. (BufferRange -> IO (BuildSignal r)) ->
         -- sensitive data might leak.
         -> Builder
 builder step = Builder (\k -> buildStep (step (runBuildStep k)))
+
+-- | Run a 'Builder'.
+{-# INLINE runBuilder #-}
+runBuilder :: Builder      -- ^ 'Builder' to run
+           -> BuildStep () -- ^ 'BuildStep' that writes the byte stream of this
+                           -- 'Builder' and signals 'done' upon completion.
+runBuilder (Builder b) =
+    b (buildStep finalStep)
+  where
+    finalStep (BufferRange op _) = return $ done op ()
 
 -- | The 'Builder' denoting a zero-length sequence of bytes. This function is
 -- only exported for use in rewriting rules. Use 'mempty' otherwise.
@@ -295,17 +296,6 @@ flush = builder step
 -- carry a computed value.
 newtype Put a = Put { unPut :: forall r. (a -> BuildStep r) -> BuildStep r }
 
--- | Run a 'Put'.
-{-# INLINE runPut #-}
-runPut :: Put a       -- ^ Put to run
-       -> BuildStep a -- ^ 'BuildStep' that first writes the byte stream of
-                      -- this 'Put' and then yields the computed value using
-                      -- the 'done' signal.
-runPut (Put p) = 
-    p finalStep
-  where
-    finalStep x = buildStep $ \(BufferRange op _) -> return $ Done op x
-
 -- | Construct a 'Put' action. In contrast to 'BuildStep's, 'Put's are
 -- referentially transparent in the sense that sequencing the same 'Put'
 -- multiple times yields every time the same value with the same side-effect.
@@ -330,7 +320,16 @@ put :: (forall r. (a -> BufferRange -> IO (BuildSignal r)) ->
        -> Put a
 put step = Put (\k -> BuildStep (step (\x -> runBuildStep (k x))))
 
-
+-- | Run a 'Put'.
+{-# INLINE runPut #-}
+runPut :: Put a       -- ^ Put to run
+       -> BuildStep a -- ^ 'BuildStep' that first writes the byte stream of
+                      -- this 'Put' and then yields the computed value using
+                      -- the 'done' signal.
+runPut (Put p) = 
+    p finalStep
+  where
+    finalStep x = buildStep $ \(BufferRange op _) -> return $ Done op x
 
 instance Functor Put where
   fmap f p = Put $ \k -> unPut p (\x -> k (f x))
@@ -357,22 +356,19 @@ instance Monad Put where
   m >>  n  = Put $ \k -> unPut m (\_ -> unPut n k)
 
 
-
-
-
 -- Conversion between Put and Builder
-------------------------------------------------------------------------------
+-------------------------------------
 
 -- | Run a 'Builder' as a side-effect of a @Put ()@ action.
 {-# INLINE putBuilder #-}
 putBuilder :: Builder -> Put ()
 putBuilder (Builder b) = Put $ \k -> b (k ())
 
-
 -- | Convert a @Put ()@ action to a 'Builder'.
 {-# INLINE fromPut #-}
 fromPut :: Put () -> Builder
 fromPut p = Builder $ \k -> unPut p (\_ -> k)
+
 
 -- Lifting IO actions
 ---------------------

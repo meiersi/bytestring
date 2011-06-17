@@ -1,9 +1,9 @@
 {-# LANGUAGE BangPatterns, MonoPatBinds #-}
 -----------------------------------------------------------------------------
--- |
--- Copyright   : (c) 2010 Jasper Van der Jeugt & Simon Meier
+-- | Copyright : (c) 2010 Jasper Van der Jeugt 
+--               (c) 2010 - 2011 Simon Meier
 -- License     : BSD3-style (see LICENSE)
--- 
+--   
 -- Maintainer  : Simon Meier <iridcode@gmail.com>
 -- Stability   : experimental
 -- Portability : tested on GHC only
@@ -18,33 +18,34 @@ module Data.ByteString.Builder
       -- * Creating builders
     , flush
 
-      -- ** Signed and unsigned integers
-    , word8
-    , int8
-
-    , BigEndian(..)
-    , LittleEndian(..)
-    , HostEndian(..)
+      -- ** Encoding integers
+    , module Data.ByteString.Builder.Word
+    , module Data.ByteString.Builder.Int
       
-      -- ** Strict and lazy ByteStrings
+      -- ** Encoding ByteStrings
     , module Data.ByteString.Builder.ByteString
 
 
       -- * Executing builders
     , toLazyByteString
+
+      -- ** Controlling buffer allocation
+    , AllocationStrategy(..)
     , toLazyByteStringWith
+    , safeStrategy
+    , untrimmedStrategy
     , toLazyByteStringUntrimmed
     ) where
 
 import Data.ByteString.Builder.Internal
 import Data.ByteString.Builder.ByteString
-import Data.ByteString.Builder.Write
+import Data.ByteString.Builder.Word
+import Data.ByteString.Builder.Int
+import Data.ByteString.Builder.Write ()
 
 import qualified Data.ByteString               as S
 import qualified Data.ByteString.Internal      as S
 import qualified Data.ByteString.Lazy.Internal as L
-
-import qualified System.IO.Write as W
 
 import Foreign
 
@@ -157,126 +158,3 @@ toLazyByteStringWith (AllocationStrategy firstSize bufSize trim) k b =
 nonEmptyChunk :: S.ByteString -> L.ByteString -> L.ByteString
 nonEmptyChunk bs lbs | S.null bs = lbs 
                      | otherwise = L.Chunk bs lbs
-
-
-------------------------------------------------------------------------------
--- Word and Int serialization
-------------------------------------------------------------------------------
-
--- single bytes
----------------
-
--- | Encode a single unsigned byte as-is.
---
-{-# INLINE word8 #-}
-word8 :: Word8 -> Builder
-word8 = fromWrite W.word8
-
--- | Encode a single signed byte as-is.
---
-{-# INLINE int8 #-}
-int8 :: Int8 -> Builder
-int8 = fromWrite W.int8
-
-
--- multiple bytes: class based endianness selection
----------------------------------------------------
-
--- | Encode a value using big-endian byte order. 
-class BigEndian a where
-    bigEndian     :: a -> Builder
-
--- | Encode a value using little-endian byte-order.
-class LittleEndian a where
-    littleEndian     :: a -> Builder
-
--- | Encode a value using host-native byte-order. Note that values encoded in
--- this way are not portable.
-class HostEndian a where
-    hostEndian     :: a -> Builder
-
-
--- word instances
-
-instance BigEndian Word16 where
-    {-# INLINE bigEndian #-}
-    bigEndian     = fromWrite     W.word16BE
-
-instance BigEndian Word32 where
-    {-# INLINE bigEndian #-}
-    bigEndian     = fromWrite     W.word32BE
-
-instance BigEndian Word64 where
-    {-# INLINE bigEndian #-}
-    bigEndian     = fromWrite     W.word64BE
-
-instance LittleEndian Word16 where
-    {-# INLINE littleEndian #-}
-    littleEndian     = fromWrite     W.word16LE
-
-instance LittleEndian Word32 where
-    {-# INLINE littleEndian #-}
-    littleEndian     = fromWrite     W.word32LE
-
-instance LittleEndian Word64 where
-    {-# INLINE littleEndian #-}
-    littleEndian     = fromWrite     W.word64LE
-
-instance HostEndian Word16 where
-    {-# INLINE hostEndian #-}
-    hostEndian     = fromWrite     W.word16Host
-
-instance HostEndian Word32 where
-    {-# INLINE hostEndian #-}
-    hostEndian     = fromWrite     W.word32Host
-
-instance HostEndian Word64 where
-    {-# INLINE hostEndian #-}
-    hostEndian     = fromWrite     W.word64Host
-
-instance HostEndian Word where
-    {-# INLINE hostEndian #-}
-    hostEndian     = fromWrite     W.wordHost
-
-
--- int instances
-
-instance BigEndian Int16 where
-    {-# INLINE bigEndian #-}
-    bigEndian     = fromWrite     W.int16BE
-
-instance BigEndian Int32 where
-    {-# INLINE bigEndian #-}
-    bigEndian     = fromWrite     W.int32BE
-
-instance BigEndian Int64 where
-    {-# INLINE bigEndian #-}
-    bigEndian     = fromWrite     W.int64BE
-
-instance LittleEndian Int16 where
-    {-# INLINE littleEndian #-}
-    littleEndian     = fromWrite     W.int16LE
-
-instance LittleEndian Int32 where
-    {-# INLINE littleEndian #-}
-    littleEndian     = fromWrite     W.int32LE
-
-instance LittleEndian Int64 where
-    {-# INLINE littleEndian #-}
-    littleEndian     = fromWrite     W.int64LE
-
-instance HostEndian Int16 where
-    {-# INLINE hostEndian #-}
-    hostEndian     = fromWrite     W.int16Host
-
-instance HostEndian Int32 where
-    {-# INLINE hostEndian #-}
-    hostEndian     = fromWrite     W.int32Host
-
-instance HostEndian Int64 where
-    {-# INLINE hostEndian #-}
-    hostEndian     = fromWrite     W.int64Host
-
-instance HostEndian Int where
-    {-# INLINE hostEndian #-}
-    hostEndian     = fromWrite     W.intHost

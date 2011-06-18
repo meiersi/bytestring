@@ -8,6 +8,7 @@
 -- Stability   : experimental
 -- Portability : tested on GHC only
 --
+-- This module is intended to be imported qualifed.
 -----------------------------------------------------------------------------
 
 module Data.ByteString.Builder
@@ -15,18 +16,16 @@ module Data.ByteString.Builder
       -- * The Builder type
       Builder
 
-      -- * Creating builders
+      -- * Creating Builders
     , flush
+    , byteString
+    , lazyByteString
 
       -- ** Encoding integers
     , module Data.ByteString.Builder.Word
     , module Data.ByteString.Builder.Int
       
-      -- ** Encoding ByteStrings
-    , module Data.ByteString.Builder.ByteString
-
-
-      -- * Executing builders
+      -- * Executing Builders
     , toLazyByteString
 
       -- ** Controlling buffer allocation

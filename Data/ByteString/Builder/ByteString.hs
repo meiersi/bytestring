@@ -1,32 +1,24 @@
 {-# LANGUAGE CPP, BangPatterns, OverloadedStrings, MonoPatBinds #-}
-
--- |
+-- | Module    : Data.ByteString.Builder.ByteString
 -- Copyright   : (c) 2010      Jasper Van der Jeugt 
 --               (c) 2010-2011 Simon Meier
 -- License     : BSD3-style (see LICENSE)
--- 
 -- Maintainer  : Simon Meier <iridcode@gmail.com>
 -- Stability   : experimental
 -- Portability : tested on GHC only
 --
--- We assume the following qualified imports in order to differentiate between
--- strict and lazy bytestrings in the code examples.
---
--- > import qualified Data.ByteString      as S
--- > import qualified Data.ByteString.Lazy as L
---
--- TODO: Think about moving this module's code to Data.ByteString.Builder.
+-- Converting strict and lazy ByteStrings to 'Builder's.
 --
 module Data.ByteString.Builder.ByteString
     ( 
-    -- * Strict bytestrings
       byteString
+    , lazyByteString
+
+    -- * Controlling copying and chunk insertion
     , byteStringWith
     , copyByteString
     , insertByteString
 
-    -- * Lazy bytestrings
-    , lazyByteString
     , lazyByteStringWith
     , copyLazyByteString
     , insertLazyByteString
@@ -48,39 +40,29 @@ import qualified Data.ByteString.Lazy.Internal as L
 -- Strict ByteStrings
 ------------------------------------------------------------------------------
 
--- | Smart serialization of a strict bytestring.
+-- | Create a 'Builder' denoting the same sequence of bytes as a strict
+-- 'S.ByteString'.
 --
--- @'byteString' = 'byteStringWith' 'defaultMaximalCopySize'@
---
--- Use this function to serialize strict bytestrings. It guarantees an
--- average chunk size of 4kb, which has been shown to be a reasonable size in
--- benchmarks. Note that the check whether to copy or to insert is (almost)
--- free as the builder performance is mostly memory-bound.
---
--- If you statically know that copying or inserting the strict bytestring is
--- always the best choice, then you can use the 'copyByteString' or
--- 'insertByteString' functions. 
+-- The 'Builder' copies short 'S.ByteString's and inserts long (>= 8kb)
+-- 'S.ByteString's directly. This way the 'Builder' will always generate large
+-- enough (> 4kb) chunks on average, which is important for the efficiency of
+-- consumers of the generated chunks. If you have a special application that
+-- requires more precise control over chunk handling, then see the module
+-- "Data.ByteString.Builder.ByteString".
 --
 {-# INLINE byteString #-}
 byteString :: S.ByteString -> Builder
 byteString = byteStringWith defaultMaximalCopySize
 
 
--- | @byteStringWith maximalCopySize bs@ serializes the strict bytestring
--- @bs@ according to the following rules.
+-- | Create a 'Builder' denoting the same sequence of bytes as a strict
+-- 'S.ByteString'.
 --
---   [@S.length bs <= maximalCopySize@:] @bs@ is copied to the output buffer.
---
---   [@S.length bs >  maximalCopySize@:] @bs@ the output buffer is flushed and
---   @bs@ is inserted directly as separate chunk in the output stream.
---
--- These rules guarantee that average chunk size in the output stream is at
--- least half the @maximalCopySize@.
+-- A 'Builder' defined as @'byteStringWith' maxCopySize bs@ copies @bs@, if
+-- it is shorter than @maxCopySize@, and inserts it directly, otherwise.
 --
 {-# INLINE byteStringWith #-}
-byteStringWith :: Int          -- ^ Maximal number of bytes to copy.
-                   -> S.ByteString -- ^ Strict 'S.ByteString' to serialize.
-                   -> Builder      -- ^ Resulting 'Builder'.
+byteStringWith :: Int -> S.ByteString -> Builder     
 byteStringWith maxCopySize = 
     \bs -> builder $ step bs
   where
@@ -88,11 +70,10 @@ byteStringWith maxCopySize =
       | maxCopySize < S.length bs = return $ insertChunk op bs k
       | otherwise                 = copyByteStringStep bs k br
 
--- | @copyByteString bs@ serialize the strict bytestring @bs@ by copying it to
--- the output buffer. 
---
--- Use this function to serialize strict bytestrings that are statically known
--- to be smallish (@<= 4kb@).
+-- | The created 'Builder' always copies the 'S.ByteString'. Use this function
+-- to create 'Builder's from smallish (@<= 4kb@) 'S.ByteString's or if you need
+-- to guarantee that the 'S.ByteString' is not shared with the chunks generated
+-- by the 'Builder'.
 --
 {-# INLINE copyByteString #-}
 copyByteString :: S.ByteString -> Builder
@@ -120,13 +101,11 @@ copyByteStringStep (S.PS ifp ioff isize) !k =
         outRemaining = ope `minusPtr` op
         inpRemaining = ipe `minusPtr` ip
 
--- | @insertByteString bs@ serializes the strict bytestring @bs@ by inserting
--- it directly as a chunk of the output stream. 
---
+-- | The created 'Builder' always inserts the 'S.ByteString' directly as a chunk. 
 -- Note that this implies flushing the output buffer; even if it contains just
--- a single byte. Hence, you should use this operation only for large (@> 8kb@)
--- bytestrings, as otherwise the resulting output stream may be too fragmented
--- to be processed efficiently.
+-- a single byte. Hence, you should use 'insertByteString' only for large (@>
+-- 8kb@) 'S.ByteString's. Otherwise, the generated chunks are too fragmented to
+-- be processed efficiently.
 --
 {-# INLINE insertByteString #-}
 insertByteString :: S.ByteString -> Builder
@@ -139,34 +118,13 @@ insertByteString =
 -- Lazy bytestrings
 ------------------------------------------------------------------------------
 
--- | /O(n)/. Smart serialization of a lazy bytestring.
---
--- @'lazyByteString' = 'lazyByteStringWith' 'defaultMaximalCopySize'@
---
--- Use this function to serialize lazy bytestrings. It guarantees an average
--- chunk size of 4kb, which has been shown to be a reasonable size in
--- benchmarks. Note that the check whether to copy or to insert is (almost)
--- free as the builder performance is mostly memory-bound.
---
--- If you statically know that copying or inserting /all/ chunks of the lazy
--- bytestring is always the best choice, then you can use the
--- 'copyLazyByteString' or 'insertLazyByteString' functions. 
+-- | Chunk-wise application of 'byteString' to a lazy 'L.ByteString'.
 --
 {-# INLINE lazyByteString #-}
 lazyByteString :: L.ByteString -> Builder
 lazyByteString = lazyByteStringWith defaultMaximalCopySize
 
--- | /O(n)/. Serialize a lazy bytestring chunk-wise according to the same rules
--- as in 'byteStringWith'.
---
--- Semantically, it holds that
---
--- >   lazyByteStringWith maxCopySize
--- > = mconcat . map (byteStringWith maxCopySize) . L.toChunks
---
--- However, the left-hand-side is much more efficient, as it moves the
--- end-of-buffer pointer out of the inner loop and provides the compiler with
--- more strictness information.
+-- | Chunk-wise application of 'byteStringWith' to a lazy 'L.ByteString'.
 --
 {-# INLINE lazyByteStringWith #-}
 lazyByteStringWith :: Int          -- ^ Maximal number of bytes to copy.
@@ -175,24 +133,19 @@ lazyByteStringWith :: Int          -- ^ Maximal number of bytes to copy.
 lazyByteStringWith maxCopySize = 
   L.foldrChunks (\bs b -> byteStringWith maxCopySize bs `mappend` b) mempty
 
-
--- | /O(n)/. Serialize a lazy bytestring by copying /all/ chunks sequentially
--- to the output buffer.
---
--- See 'copyByteString' for usage considerations.
+-- | Chunk-wise application of 'copyByteString' to a lazy 'L.ByteString'.
 --
 {-# INLINE copyLazyByteString #-}
 copyLazyByteString :: L.ByteString -> Builder
 copyLazyByteString = 
   L.foldrChunks (\bs b -> copyByteString bs `mappend` b) mempty
 
--- | /O(n)/. Serialize a lazy bytestring by inserting /all/ its chunks directly
--- into the output stream.
---
--- See 'insertByteString' for usage considerations.
---
--- For library developers, see the 'ModifyChunks' build signal, if you
--- need an /O(1)/ lazy bytestring insert based on difference lists.
+-- This function costs /O(n)/ where /n/ is the number of chunks of the lazy
+-- 'L.ByteString'. The design of the 'Builder' could be changed to support an
+-- /O(1)/ insertion of a difference-list style lazy bytestring. Please contact
+-- me, if you have a use case for that.
+
+-- | Chunk-wise application of 'insertByteString' to a lazy 'L.ByteString'.
 --
 {-# INLINE insertLazyByteString #-}
 insertLazyByteString :: L.ByteString -> Builder

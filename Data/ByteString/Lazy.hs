@@ -207,8 +207,9 @@ import qualified Data.ByteString        as S  -- S for strict (hmm...)
 import qualified Data.ByteString.Internal as S
 import qualified Data.ByteString.Unsafe as S
 import Data.ByteString.Lazy.Internal
-import qualified Data.ByteString.Builder          as B
-import qualified Data.ByteString.Builder.Write    as B
+import qualified Data.ByteString.Builder            as B
+import qualified Data.ByteString.Builder.ByteString as B
+import qualified Data.ByteString.Builder.Write      as B
 
 import Data.Monoid              (Monoid(..))
 

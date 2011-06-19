@@ -1,5 +1,4 @@
--- |
--- Copyright   : (c) 2010      Jasper Van der Jeugt 
+-- | Copyright : (c) 2010      Jasper Van der Jeugt 
 --               (c) 2010-2011 Simon Meier
 -- License     : BSD3-style (see LICENSE)
 -- 
@@ -9,75 +8,45 @@
 --
 module Data.ByteString.Builder.Char.Utf8
     ( 
-      -- * Creating Builders by UTF-8 encoding character sequences
+      -- * UTF-8 encoded characters
       Utf8(..)
-    , utf8Show
 
-      -- ** Special encodings as character sequences fused with UTF-8 encoding
-    , Hex(..)
+      -- * Hexadecimal encoding using UTF-8 encoded characters
+    , utf8HexLower
+    , utf8HexUpper
+    , utf8HexLowerNoLead
+    , utf8HexUpperNoLead
     ) where
 
-import Data.Monoid
-
-import qualified Data.ByteString.Internal      as S
-import qualified Data.ByteString.Lazy.Internal as L
+import Data.Foldable (foldMap)
 
 import Data.ByteString.Builder.Internal
 import Data.ByteString.Builder.Write
+import Data.ByteString.Builder.Char.Ascii
 
-import qualified System.IO.Write.Char.Utf8 as W
+import qualified System.IO.Write.Char.Ascii as W
+import qualified System.IO.Write.Char.Utf8  as W
 
-import Foreign
 
 class Utf8 a where
     utf8 :: a -> Builder
 
-    {-# INLINE utf8List #-}
-    utf8List :: [a] -> Builder
-    utf8List = mconcat . map utf8
+instance Utf8 Char where
+    {-# INLINE utf8 #-}
+    utf8 = fromWrite W.utf8
 
 instance Utf8 a => Utf8 [a] where
     {-# INLINE utf8 #-}
-    utf8 = utf8List
+    utf8 = foldMap utf8
 
+utf8HexLower :: AsciiHex a => a -> Builder
+utf8HexLower = asciiHexLower
 
-instance Utf8 Char where
-    {-# INLINE utf8 #-}
-    {-# INLINE utf8List #-}
-    utf8     = fromWrite W.utf8
-    utf8List = fromWriteList W.utf8
+utf8HexUpper :: AsciiHex a => a -> Builder
+utf8HexUpper = asciiHexUpper
 
+utf8HexLowerNoLead :: W.AsciiHexWritable a => a -> Builder
+utf8HexLowerNoLead = asciiHexLowerNoLead
 
--- | /O(n)/. Serialize a value by 'Show'ing it and UTF-8 encoding the resulting
--- 'String'.
---
-utf8Show :: Show a => a -> Builder
-utf8Show = utf8 . show
-
-
--- TODO: Create ASCII encoding module that provides this hex encoding
-
-class Hex a where
-    hexLower     :: a   -> Builder
-
-    {-# INLINE hexLowerList #-}
-    hexLowerList :: [a] -> Builder
-    hexLowerList = mconcat . map hexLower
-
-instance Hex a => Hex [a] where
-    {-# INLINE hexLower #-}
-    hexLower = hexLowerList
-
-
-instance Hex Int8 where
-    {-# INLINE hexLower #-}
-    {-# INLINE hexLowerList #-}
-    hexLower     = fromWrite     W.utf8HexLower
-    hexLowerList = fromWriteList W.utf8HexLower
-    
-
-instance Hex S.ByteString where
-    hexLower = mapWriteByteString W.utf8HexLower
-
-instance Hex L.ByteString where
-    hexLower = mapWriteLazyByteString W.utf8HexLower
+utf8HexUpperNoLead :: W.AsciiHexWritable a => a -> Builder
+utf8HexUpperNoLead = asciiHexUpperNoLead

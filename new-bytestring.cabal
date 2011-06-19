@@ -46,6 +46,7 @@ library
                      Data.ByteString.Builder.Word
                      Data.ByteString.Builder.Int
                      Data.ByteString.Builder.Char.Utf8
+                     Data.ByteString.Builder.Char.Ascii
                      Data.ByteString.Builder.ByteString
                      Data.ByteString.Builder.Internal
                      Data.ByteString.Builder.Internal.Buffer

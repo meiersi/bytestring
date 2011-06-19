@@ -8,13 +8,18 @@
 -- Stability   : experimental
 -- Portability : tested on GHC only
 --
--- This module is intended to be imported qualifed.
+-- TODO: Intro and example
 -----------------------------------------------------------------------------
 
 module Data.ByteString.Builder
     ( 
       -- * The Builder type
       Builder
+      -- | Converting a list to a 'Builder' often works by converting each
+      -- element and concatenating the resulting 'Builder's. The higher-order
+      -- function abstracting this pattern is 'foldMap' from the
+      -- "Data.Foldable" module. We reexport it here for convenience.
+    , foldMap
 
       -- * Creating Builders
     , flush
@@ -28,8 +33,8 @@ module Data.ByteString.Builder
       -- * Executing Builders
     , toLazyByteString
 
-      -- ** Controlling buffer allocation
-    , AllocationStrategy(..)
+    -- ** Controlling chunk allocation
+    , AllocationStrategy
     , toLazyByteStringWith
     , safeStrategy
     , untrimmedStrategy
@@ -40,66 +45,101 @@ import Data.ByteString.Builder.Internal
 import Data.ByteString.Builder.ByteString
 import Data.ByteString.Builder.Word
 import Data.ByteString.Builder.Int
-import Data.ByteString.Builder.Write ()
 
 import qualified Data.ByteString               as S
 import qualified Data.ByteString.Internal      as S
 import qualified Data.ByteString.Lazy.Internal as L
 
+import Data.Foldable (foldMap)
+
 import Foreign
+
 
 ------------------------------------------------------------------------------
 -- Builder execution
 ------------------------------------------------------------------------------
 
--- allocation strategies
 
+-- | A buffer allocation strategy for executing builders. 
+
+-- The strategy
+--
+-- > 'AllocationStrategy' firstBufSize bufSize trim
+--
+-- states that the first buffer is of size @firstBufSize@, all following buffers
+-- are of size @bufSize@, and a buffer of size @n@ filled with @k@ bytes should
+-- be trimmed iff @trim k n@ is 'True'.
 data AllocationStrategy = AllocationStrategy 
          {-# UNPACK #-} !Int  -- size of first buffer
          {-# UNPACK #-} !Int  -- size of successive buffers
          (Int -> Int -> Bool) -- trim
 
+-- | Use this strategy for generating lazy 'L.ByteString's whose chunks are
+-- discarded right after they are generated. For example, if you just generate
+-- them to write them to a network socket.
 untrimmedStrategy :: Int -- ^ Size of the first buffer
                   -> Int -- ^ Size of successive buffers
-                  -> AllocationStrategy
+                  -> AllocationStrategy 
+                  -- ^ An allocation strategy that does not trim any of the
+                  -- filled buffers before converting it to a chunk.
 untrimmedStrategy firstSize bufSize = 
     AllocationStrategy firstSize bufSize (\_ _ -> False)
 
 
+-- | Use this strategy for generating lazy 'L.ByteString's whose chunks are
+-- likely to survive one garbage collection.
+--
+-- > toLazyByteString = 
+-- >   toLazyByteStringWith (safeStrategy smallChunkSize defaultChunkSize) empty
+--
+-- where @empty@ is the zero-length lazy 'L.ByteString' and @smallChunkSize@
+-- and @defaultChunkSize@ are internal constants that are usually set to a bit
+-- less than 4kb, respectively 32kb.
 safeStrategy :: Int  -- ^ Size of first buffer
              -> Int  -- ^ Size of successive buffers
              -> AllocationStrategy
+             -- ^ An allocation strategy that guarantees that at least half
+             -- of the allocated memory is used for live data
 safeStrategy firstSize bufSize = 
     AllocationStrategy firstSize bufSize (\used size -> 2*used < size)
 
 
--- | Extract the lazy 'L.ByteString' from the builder by running it with default
--- buffer sizes. Use this function, if you do not have any special
--- considerations with respect to buffer sizes.
+-- | Execute a 'Builder' and record the generated chunks as a lazy
+-- 'L.ByteString'. 
 --
--- @ 'toLazyByteString' b = 'toLazyByteStringWith' 'defaultBufferSize' 'defaultMinimalBufferSize' 'defaultFirstBufferSize' b L.empty@
+-- Execution works such that a buffer is allocated and the 'Builder' is told to
+-- fill it. Once the 'Builder' returns, the buffer is converted to a chunk of
+-- the lazy bytestring as follows. If less than half of the buffer is filled,
+-- then the filled part is copied to a new chunk of the right size. Otherwise,
+-- the buffer is converted directly to a chunk. This scheme guarantees that
+-- at least half of the reserved memory is used for live data. 
 --
--- Note that @'toLazyByteString'@ is a 'Monoid' homomorphism.
---
--- > toLazyByteString mempty          == mempty
--- > toLazyByteString (x `mappend` y) == toLazyByteString x `mappend` toLazyByteString y
---
--- However, in the second equation, the left-hand-side is generally faster to
--- execute.
---
+-- The first allocated buffer is of size ~4kb too keep the allocation overhead
+-- small for short output. The following buffers are of size ~32kb to ensure
+-- that the average chunk size is large. These numbers have worked well in
+-- practice. See 'toLazyByteStringWith', if you need more precise control over
+-- buffer allocation.
 toLazyByteString :: Builder -> L.ByteString
 toLazyByteString = toLazyByteStringWith
     (safeStrategy L.smallChunkSize L.defaultChunkSize) L.Empty
 
+-- | Execute a 'Builder' with the 'untrimmedStrategy' and the same buffer
+-- sizes as 'toLazyByteString'.
 toLazyByteStringUntrimmed :: Builder -> L.ByteString
 toLazyByteStringUntrimmed = toLazyByteStringWith
     (untrimmedStrategy L.smallChunkSize L.defaultChunkSize) L.Empty
 
 {-# INLINE toLazyByteStringWith #-}
-toLazyByteStringWith :: AllocationStrategy
-                      -> L.ByteString 
-                      -> Builder 
-                      -> L.ByteString
+toLazyByteStringWith 
+    :: AllocationStrategy
+       -- ^ Buffer allocation strategy to use
+    -> L.ByteString  
+       -- ^ Lazy 'L.ByteString' to use as the tail of the generated lazy
+       -- 'L.ByteString'
+    -> Builder 
+       -- ^ Builder to execute
+    -> L.ByteString
+       -- ^ Resulting lazy 'L.ByteString'
 toLazyByteStringWith (AllocationStrategy firstSize bufSize trim) k b = 
     S.inlinePerformIO $ fillNew (runBuilder b) firstSize 
   where

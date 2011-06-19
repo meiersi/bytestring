@@ -26,6 +26,9 @@ module Data.ByteString.Builder
     , byteString
     , lazyByteString
 
+      -- ** Encoding characters
+    , module Data.ByteString.Builder.Char.Utf8
+
       -- ** Encoding integers
     , module Data.ByteString.Builder.Word
     , module Data.ByteString.Builder.Int
@@ -45,6 +48,7 @@ import Data.ByteString.Builder.Internal
 import Data.ByteString.Builder.ByteString
 import Data.ByteString.Builder.Word
 import Data.ByteString.Builder.Int
+import Data.ByteString.Builder.Char.Utf8
 
 import qualified Data.ByteString               as S
 import qualified Data.ByteString.Internal      as S

@@ -19,7 +19,7 @@
 --
 -- We achieve (1) by completely handing over control over writing to the buffer
 -- to the 'BuildStep' implementing the 'Builder'. This 'BuildStep' is just told
--- the start and the end of the buffer (represented as a 'BufferRange').  Then,
+-- the start and the end of the buffer (represented as a 'BufferRange'). Then,
 -- the 'BuildStep' can write to as big a prefix of this 'BufferRange' in any
 -- way it desires. If the 'BuildStep' is done, the 'BufferRange' is full, or a
 -- long sequence of bytes should be inserted directly, then the 'BuildStep'
@@ -340,20 +340,20 @@ instance Applicative Put where
   {-# INLINE pure #-}
   pure x = Put $ \k -> k x
   {-# INLINE (<*>) #-}
-  f <*> a = Put $ \k -> unPut f (\f' -> unPut a (\a' -> k (f' a')))
+  Put f <*> Put a = Put $ \k -> f (\f' -> a (\a' -> k (f' a')))
   {-# INLINE (<*) #-}
-  a <* b = Put $ \k -> unPut a (\a' -> unPut b (\_ -> k a'))
+  Put a <* Put b = Put $ \k -> a (\a' -> b (\_ -> k a'))
   {-# INLINE (*>) #-}
-  a *> b = Put $ \k -> unPut a (\_ -> unPut b k)
+  Put a *> Put b = Put $ \k -> a (\_ -> b k)
 -- #endif
 
 instance Monad Put where
   {-# INLINE return #-}
   return x = Put $ \k -> k x
   {-# INLINE (>>=) #-}
-  m >>= f  = Put $ \k -> unPut m (\m' -> unPut (f m') k)
+  Put m >>= f = Put $ \k -> m (\m' -> unPut (f m') k)
   {-# INLINE (>>) #-}
-  m >>  n  = Put $ \k -> unPut m (\_ -> unPut n k)
+  Put m >> Put n = Put $ \k -> m (\_ -> n k)
 
 
 -- Conversion between Put and Builder
@@ -367,7 +367,7 @@ putBuilder (Builder b) = Put $ \k -> b (k ())
 -- | Convert a @Put ()@ action to a 'Builder'.
 {-# INLINE fromPut #-}
 fromPut :: Put () -> Builder
-fromPut p = Builder $ \k -> unPut p (\_ -> k)
+fromPut (Put p) = Builder $ \k -> p (\_ -> k)
 
 
 -- Lifting IO actions

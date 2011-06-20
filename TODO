@@ -19,6 +19,8 @@ Todo items
       the required minimum size.)
     - check if a 'freezeAndTrimByteArray' primitive could be supported
       efficiently by GHC
+    - ensure that GHC Base inlines default methods on Foldable. Perhaps, 
+      default methods should always be inlined?
 
 * check that api again.
     - in particular, unsafeHead/Tail for Char8?

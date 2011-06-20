@@ -39,9 +39,11 @@ module Data.ByteString.Builder
     -- ** Controlling chunk allocation
     , AllocationStrategy
     , toLazyByteStringWith
+    , toLazyByteStringUntrimmed
+    , L.smallChunkSize
+    , L.defaultChunkSize
     , safeStrategy
     , untrimmedStrategy
-    , toLazyByteStringUntrimmed
     ) where
 
 import Data.ByteString.Builder.Internal
@@ -64,7 +66,7 @@ import Foreign
 ------------------------------------------------------------------------------
 
 
--- | A buffer allocation strategy for executing builders. 
+-- | A buffer allocation strategy for executing 'Builder's. 
 
 -- The strategy
 --
@@ -91,14 +93,12 @@ untrimmedStrategy firstSize bufSize =
 
 
 -- | Use this strategy for generating lazy 'L.ByteString's whose chunks are
--- likely to survive one garbage collection.
+-- likely to survive one garbage collection. Note that
 --
 -- > toLazyByteString = 
 -- >   toLazyByteStringWith (safeStrategy smallChunkSize defaultChunkSize) empty
 --
--- where @empty@ is the zero-length lazy 'L.ByteString' and @smallChunkSize@
--- and @defaultChunkSize@ are internal constants that are usually set to a bit
--- less than 4kb, respectively 32kb.
+-- where @empty@ is the zero-length lazy 'L.ByteString'.
 safeStrategy :: Int  -- ^ Size of first buffer
              -> Int  -- ^ Size of successive buffers
              -> AllocationStrategy
@@ -113,26 +113,43 @@ safeStrategy firstSize bufSize =
 --
 -- Execution works such that a buffer is allocated and the 'Builder' is told to
 -- fill it. Once the 'Builder' returns, the buffer is converted to a chunk of
--- the lazy bytestring as follows. If less than half of the buffer is filled,
+-- the lazy 'L.ByteString' as follows. If less than half of the buffer is filled,
 -- then the filled part is copied to a new chunk of the right size. Otherwise,
 -- the buffer is converted directly to a chunk. This scheme guarantees that
 -- at least half of the reserved memory is used for live data. 
 --
--- The first allocated buffer is of size ~4kb too keep the allocation overhead
--- small for short output. The following buffers are of size ~32kb to ensure
--- that the average chunk size is large. These numbers have worked well in
--- practice. See 'toLazyByteStringWith', if you need more precise control over
--- buffer allocation.
+-- The first allocated buffer is of size 'L.smallChunkSize' too keep the
+-- allocation overhead small for short output. The following buffers are of
+-- size 'L.defaultChunkSize' to ensure that the average chunk size is large.
+-- These numbers have worked well in practice. See 'toLazyByteStringWith', if
+-- you need more control over buffer allocation.
 toLazyByteString :: Builder -> L.ByteString
 toLazyByteString = toLazyByteStringWith
     (safeStrategy L.smallChunkSize L.defaultChunkSize) L.Empty
 
 -- | Execute a 'Builder' with the 'untrimmedStrategy' and the same buffer
--- sizes as 'toLazyByteString'.
+-- sizes as 'toLazyByteString'. 
+--
+-- Use this function for generating lazy 'L.ByteString's whose chunks are
+-- discarded right after they are generated. For example, if you just generate
+-- and write them them to a network socket.
 toLazyByteStringUntrimmed :: Builder -> L.ByteString
 toLazyByteStringUntrimmed = toLazyByteStringWith
     (untrimmedStrategy L.smallChunkSize L.defaultChunkSize) L.Empty
 
+-- | Execute a 'Builder' with custom execution parameters.
+--
+-- In most cases, the parameters used by 'toLazyByteString' give good
+-- performance. A slightly sub-performing case is generating lots of short
+-- (<128 bytes) 'L.ByteString's using 'Builder's. In this case, you might gain
+-- additional performance by executing the 'Builder's using
+--
+-- > toLazyByteStringWith (safeStrategy 128 smallChunkSize) empty
+--
+-- This reduces the allocation and trimming overhead, as all generated
+-- 'L.ByteString's fit into ther first allocated buffer and chances are better
+-- that the buffer doesn't have to be trimmed.
+--
 {-# INLINE toLazyByteStringWith #-}
 toLazyByteStringWith 
     :: AllocationStrategy

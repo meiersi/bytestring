@@ -424,8 +424,7 @@ append xs ys = foldrChunks Chunk ys xs
 -- element of @xs@.
 {-# INLINE map #-}
 map :: (Word8 -> Word8) -> ByteString -> ByteString
-map f = B.toLazyByteString . 
-        B.mapWriteLazyByteString (W.comapWrite f W.word8)
+map f = B.toLazyByteString . B.mapWriteLazyByteString (W.word8 W.#. f)
 
 -- | /O(n)/ 'reverse' @xs@ returns the elements of @xs@ in reverse order.
 reverse :: ByteString -> ByteString

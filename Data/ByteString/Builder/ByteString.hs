@@ -102,8 +102,8 @@ copyByteStringStep (S.PS ifp ioff isize) !k =
         inpRemaining = ipe `minusPtr` ip
 
 -- | The created 'Builder' always inserts the 'S.ByteString' directly as a chunk. 
--- Note that this implies flushing the output buffer; even if it contains just
--- a single byte. Hence, you should use 'insertByteString' only for large (@>
+-- This implies flushing the output buffer; even if it contains just
+-- a single byte! Hence, you should use 'insertByteString' only for large (@>
 -- 8kb@) 'S.ByteString's. Otherwise, the generated chunks are too fragmented to
 -- be processed efficiently.
 --
@@ -127,9 +127,7 @@ lazyByteString = lazyByteStringWith defaultMaximalCopySize
 -- | Chunk-wise application of 'byteStringWith' to a lazy 'L.ByteString'.
 --
 {-# INLINE lazyByteStringWith #-}
-lazyByteStringWith :: Int          -- ^ Maximal number of bytes to copy.
-                   -> L.ByteString -- ^ Lazy 'L.ByteString' to serialize.
-                   -> Builder      -- ^ Resulting 'Builder'.
+lazyByteStringWith :: Int -> L.ByteString -> Builder
 lazyByteStringWith maxCopySize = 
   L.foldrChunks (\bs b -> byteStringWith maxCopySize bs `mappend` b) mempty
 

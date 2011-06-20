@@ -9,16 +9,52 @@
 -- Stability   : experimental
 -- Portability : tested on GHC only
 --
--- FIXME: Improve documentation.
+-- 'Write's abstract encodings of Haskell values that can be implemented by
+-- writing a bounded-length sequence of bytes directly to memory. They are
+-- lifted to conversions from Haskell values to 'Builder's by wrapping them
+-- with a bound-check. The compiler can implement this bound-check very
+-- efficiently (i.e, a single comparison of the difference of two pointers to a
+-- constant), because the bound of a 'Write' is always independent of the
+-- value being encoded and, in most cases, a literal constant.
+--
+-- 'Write's are the primary means for defining conversion functions from
+-- primitive Haskell values to 'Builder's. Most 'Builder' constructors
+-- provided by this library are implemented that way. 
+-- 'Write's are also used to construct conversions that exploit the internal
+-- representation of data-structures. 
+--
+-- For example, 'mapWriteByteString' works directly on the underlying byte
+-- array and uses some tricks to reduce the number of variables in its inner
+-- loop. Its efficiency is exploited for implementing the @filter@ and @map@
+-- functions in "Data.ByteString.Lazy" as
+--
+-- > import qualified System.IO.Write as W
+-- >
+-- > filter :: (Word8 -> Bool) -> ByteString -> ByteString
+-- > filter p = toLazyByteString . mapWriteLazyByteString write
+-- >   where
+-- >     write = W.writeIf p W.word8 W.writeNothing
+-- >
+-- > map :: (Word8 -> Word8) -> ByteString -> ByteString
+-- > map f = toLazyByteString . mapWriteLazyByteString (W.word8 W.#. f)
+--
+-- Compared to earlier versions of @filter@ and @map@ on lazy 'L.ByteString's,
+-- these versions use a more efficient inner loop and have the additional
+-- advantage that they always result in well-chunked 'L.ByteString's; i.e, they
+-- also perform automatic defragmentation.
+--
+-- Note that, in most cases, you do not need to use 'Write's and the functions
+-- in this module explicitely. There are rewriting rules in place that perform
+-- the relevant optimizations.
 --
 module Data.ByteString.Builder.Write (
 
-  -- * Constructing @Builder@s from @Write@s
+  -- * Constructing Builders from Writes
     fromWrite
   , fromWriteList
   , unfoldrWrite
-
-  -- ** Traversing @ByteString@s
+  
+  -- ** Transcoding ByteStrings
   , mapWriteByteString
   , mapWriteLazyByteString
 
@@ -33,6 +69,32 @@ import Foreign
 
 import System.IO.Write.Internal hiding (append)
 
+-- IMPLEMENTATION NOTE: Sadly, 'fromWriteList' cannot be used for foldr/build
+-- fusion. Its performance relies on hoisting several variables out of the
+-- inner loop.  That's not possible when writing 'fromWriteList' as a 'foldr'.
+-- If we had stream fusion for lists, then we could fuse 'fromWriteList', as
+-- 'fromWriteStream' can keep control over the execution.
+
+
+-- | Lift a 'Write' to a conversion function from a single value to a
+-- 'Builder'.
+--
+-- We rewrite consecutive uses of 'fromWrite' such that the bound-checks are
+-- fused. For example,
+--
+-- > fromWrite (utf8 c1) `mappend` fromWrite (utf8 c2)
+--
+-- is rewritten such that the resulting 'Builder' checks only once, if ther are
+-- at least 8 free bytes, instead of checking twice, if there are at least 4
+-- free bytes. This optimization is not observationally equivalent in a strict
+-- sense, as it influences the boundaries of the generated chunks. However, for
+-- a user of this library it is observationally equivalent, as chunk boundaries
+-- of a lazy 'L.ByteString' can only be observed through the internal
+-- interface. Morevoer, we expect that all 'Write's write much fewer than 4kb
+-- (the default short buffer size). Hence, it is safe to ignore the additional
+-- memory spilled due to the more agressive buffer wrapping introduced by this
+-- optimization.
+--
 {-# INLINE[1] fromWrite #-}
 fromWrite :: Write a -> (a -> Builder)
 fromWrite w = 
@@ -54,16 +116,16 @@ fromWrite w =
      = fromWrite (write2 w1 w2) (x1, x2) 
   #-}
 
--- | Construct a 'Builder' writing a list of data one element at a time.
+-- TODO: The same rules for 'putBuilder (..) >> putBuilder (..)'
+
+-- | Lift a 'Write' to a conversion function from a list of values to a
+-- 'Builder'. This function is more efficient than the canonical
 --
--- The expression 'fromWriteList' @w@ is currently (GHC 7.0.2, 32-bit) up to 5x
--- faster than the equivalent @mconcat . map (fromWrite w)@. Sadly, 'fromWriteList'
--- cannot be used for foldr/build fusion. Its performance relies on hoisting several
--- variables out of the inner loop. That's not possible when writing
--- 'fromWriteList' as a 'foldr'. If we had stream fusion for lists, then we
--- could fuse 'fromWriteList', as 'fromWriteStream' can keep control over the
--- execution.
+-- > mconcat . map (fromWrite w)
 --
+-- because it moves several variables out of the inner loop. There is
+-- a rewriting rule ensuring that the above expression and its variants like
+-- 'foldMap' get optimized to @'fromWriteList' w@.
 {-# INLINE fromWriteList #-}
 fromWriteList :: Write a -> [a] -> Builder
 fromWriteList w = 
@@ -82,8 +144,10 @@ fromWriteList w =
               | op `plusPtr` bound <= ope0 = do
                   !op' <- runWrite w x' op
                   go xs' op'
-              | otherwise = return $ bufferFull bound op (step xs k)
+             | otherwise = return $ bufferFull bound op (step xs k)
 
+-- TODO: Add 'foldMap/fromWrite' its variants
+-- TODO: Ensure that 'fromWrite w . f = fromWrite (w #. f)'
 
 -- | A 'Builder' that unfolds a sequence of elements from a seed value and
 -- writes each of them to the buffer.
@@ -111,8 +175,7 @@ unfoldrWrite w =
                           !pfNew' <- runWrite w y pfNew
                           fill x' (BufferRange pfNew' peNew)
 
--- | @mapWriteByteString write bs@ consecutively executes the @write b@ action
--- for every byte @b@ of the strict bytestring @bs@.
+-- | Consecutively execute a 'Write' on every byte of a strict 'S.ByteString'.
 {-# INLINE mapWriteByteString #-}
 mapWriteByteString :: Write Word8 -> S.ByteString -> Builder
 mapWriteByteString w =
@@ -146,8 +209,7 @@ mapWriteByteString w =
                   | otherwise =
                       goBS ip (BufferRange op ope)
 
--- | @mapWriteLazyByteString write lbs@ consecutively executes the @write b@ action
--- for every byte @b@ of the lazy bytestring @lbs@.
+-- | Chunk-wise application of 'mapWriteByteString'.
 {-# INLINE mapWriteLazyByteString #-}
 mapWriteLazyByteString :: Write Word8 -> L.ByteString -> Builder
 mapWriteLazyByteString w = 

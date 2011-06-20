@@ -116,12 +116,14 @@ foldlChunks f z = go z
 -- The following value assumes people have something greater than 128k,
 -- and need to share the cache with other programs.
 
--- | Currently set to 32k, less the memory management overhead
+-- | The default size of a chunk. Currently set to 32kb, less the memory
+-- management overhead.
 defaultChunkSize :: Int
 defaultChunkSize = 32 * k - chunkOverhead
    where k = 1024
 
--- | Currently set to 4k, less the memory management overhead
+-- | The minimally desired size of a chunk. Currently set to 4kb, less the
+-- memory management overhead.
 smallChunkSize :: Int
 smallChunkSize = 4 * k - chunkOverhead
    where k = 1024

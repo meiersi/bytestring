@@ -20,6 +20,10 @@ module Test_RewriteFoldr where
 
 import Data.Monoid
 import Data.List
+import qualified Data.Foldable as F
+
+import GHC.Base
+
 
 newtype Builder = Builder String
   deriving( Show )
@@ -44,6 +48,9 @@ instance Monoid Builder where
 
 -- | Writes are primitive serialization functions.
 data Write a = Write (a -> String)
+
+(#.) :: Write a -> (b -> a) -> Write b
+(Write w) #. f = Write (w . f)
 
 -- | An dummy implementation of a write for strings.
 writeString :: Write String
@@ -70,8 +77,20 @@ fromWriteList (Write f) xs =
 -- 'fromWriteList' version.
 {-# RULES
 "foldr/fromWrite" forall w.
-    foldr (\x b -> append (fromWrite w x) b) empty = fromWriteList w
+    foldr (\x -> append (fromWrite w x)) empty = fromWriteList w 
+
+"foldr/fromWrite/#." forall w f b.
+    foldr (\x -> append (fromWrite w (f x))) b
+  = foldr (\x -> append (fromWrite (w #. f) x)) b
+
+"foldr/fromWrite/mapFB" forall w.
+    foldr (mapFB append (fromWrite w)) empty = fromWriteList w 
+
+"foldr/fromWrite/mapFB/#." forall w f b.
+    foldr (mapFB append (\x -> fromWrite w (f x))) b
+  = foldr (mapFB append (fromWrite (w #. f))) b
  #-}
+
 
 -- All of the following expressions should yield the same result when compiling
 -- with -O2. However, only the first two do, while the 'fails' expression gets
@@ -80,17 +99,38 @@ fromWriteList (Write f) xs =
 goal :: [String] -> Builder
 goal = fromWriteList writeString
 
--- works :: [String] -> Builder
--- works = foldr (\x b -> append (fromWrite writeString x) b) empty
+works :: [String] -> Builder
+works = foldr (\x b -> append (fromWrite writeString x) b) empty
 
-fails :: [String] -> Builder
-fails = mconcat . map (fromWrite writeString)
+works2 :: [String] -> Builder
+works2 =  mconcat . map (fromWrite writeString)
+
+works3 :: [String] -> Builder
+works3 =  mconcat . map (fromWrite writeString) . map reverse
+
+-- Late "application" of missing INLINE pragma on default implementation of
+-- 'foldMap' from 'Foldable'.
+{-# RULES "Specialize foldMap_Builder" F.foldMap = foldMap_Builder #-}
+{-# INLINE foldMap_Builder #-}
+foldMap_Builder :: F.Foldable f => (a -> Builder) -> f a -> Builder
+foldMap_Builder f = F.foldr (mappend . f) mempty
+
+
+works4 :: [String] -> Builder
+works4 = foldMap_Builder $ fromWrite writeString
+
+works5 :: [String] -> Builder
+works5 = F.foldMap $ fromWrite writeString
+
+-- foldr (mappend . fromWrite writeString) mempty = 
+-- foldr (append . fromWrite writeString) empty = 
+-- foldr (\x -> append (fromWrite writeString x)) empty = 
 
 
 main :: IO ()
 main = do
     putStrLn "The following three results should all use 'fromWriteList':"
-    mapM_ (print . ($ input)) [goal, {- works, -} fails]
+    mapM_ (print . ($ input)) [goal, works, works2, works3, works4, works5]
   where
     input :: [String]
     input = ["hello", "world", "!"]

@@ -60,6 +60,37 @@ import Data.Foldable (foldMap)
 
 import Foreign
 
+------------------------------------------------------------------------------
+-- Default conversion of strict and lazy ByteStrings to Builders
+------------------------------------------------------------------------------
+
+-- | Create a 'Builder' denoting the same sequence of bytes as a strict
+-- 'S.ByteString'.
+--
+-- The 'Builder' copies short 'S.ByteString's and inserts long 
+-- (>= 2 * 'L.smallChunkSize')
+-- 'S.ByteString's directly. This way the 'Builder' ensures that on average
+-- chunks are large enough (>= 'L.smallChunkSize'), which is important for the
+-- efficiency of consumers of the generated chunks. If you have a special
+-- application that requires more control over chunk handling, then see the
+-- module "Data.ByteString.Builder.ByteString".
+--
+{-# INLINE byteString #-}
+byteString :: S.ByteString -> Builder
+byteString = byteStringWith defaultMaximalCopySize
+
+-- | Chunk-wise application of 'byteString' to a lazy 'L.ByteString'.
+--
+{-# INLINE lazyByteString #-}
+lazyByteString :: L.ByteString -> Builder
+lazyByteString = lazyByteStringWith defaultMaximalCopySize
+
+-- | The maxiamal size of a bytestring that is copied. 
+-- @2 * 'L.smallChunkSize'@ to guarantee that on average a chunk is of
+-- 'L.smallChunkSize'.
+defaultMaximalCopySize :: Int
+defaultMaximalCopySize = 2 * L.smallChunkSize
+
 
 ------------------------------------------------------------------------------
 -- Builder execution

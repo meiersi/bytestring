@@ -7,22 +7,18 @@
 -- Stability   : experimental
 -- Portability : tested on GHC only
 --
--- Converting strict and lazy ByteStrings to 'Builder's.
+-- Controlling chunk allocation and copying when converting strict and lazy
+-- bytestrings to 'Builder's.
 --
 module Data.ByteString.Builder.ByteString
     ( 
-      byteString
-    , lazyByteString
-
-    -- * Controlling copying and chunk insertion
-    , byteStringWith
+      byteStringWith
     , copyByteString
     , insertByteString
 
     , lazyByteStringWith
     , copyLazyByteString
     , insertLazyByteString
-
     ) where
 
 import Data.ByteString.Builder.Internal 
@@ -39,20 +35,6 @@ import qualified Data.ByteString.Lazy.Internal as L
 ------------------------------------------------------------------------------
 -- Strict ByteStrings
 ------------------------------------------------------------------------------
-
--- | Create a 'Builder' denoting the same sequence of bytes as a strict
--- 'S.ByteString'.
---
--- The 'Builder' copies short 'S.ByteString's and inserts long (>= 8kb)
--- 'S.ByteString's directly. This way the 'Builder' will always generate large
--- enough (> 4kb) chunks on average, which is important for the efficiency of
--- consumers of the generated chunks. If you have a special application that
--- requires more precise control over chunk handling, then see the module
--- "Data.ByteString.Builder.ByteString".
---
-{-# INLINE byteString #-}
-byteString :: S.ByteString -> Builder
-byteString = byteStringWith defaultMaximalCopySize
 
 
 -- | Create a 'Builder' denoting the same sequence of bytes as a strict
@@ -118,12 +100,6 @@ insertByteString =
 -- Lazy bytestrings
 ------------------------------------------------------------------------------
 
--- | Chunk-wise application of 'byteString' to a lazy 'L.ByteString'.
---
-{-# INLINE lazyByteString #-}
-lazyByteString :: L.ByteString -> Builder
-lazyByteString = lazyByteStringWith defaultMaximalCopySize
-
 -- | Chunk-wise application of 'byteStringWith' to a lazy 'L.ByteString'.
 --
 {-# INLINE lazyByteStringWith #-}
@@ -149,9 +125,3 @@ copyLazyByteString =
 insertLazyByteString :: L.ByteString -> Builder
 insertLazyByteString =
   L.foldrChunks (\bs b -> insertByteString bs `mappend` b) mempty
-
--- | The maxiamal size of a bytestring that is copied. 
--- @2 * 'L.smallChunkSize'@ to guarantee that on average a chunk is of
--- 'L.smallChunkSize'.
-defaultMaximalCopySize :: Int
-defaultMaximalCopySize = 2 * L.smallChunkSize

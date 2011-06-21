@@ -127,7 +127,7 @@ testResults :: [String]
         , impl oldBS (OldL.unfoldr countToZero) intInput
         ]
      , comparison "base16 encoding of a LBS" $
-        [ impl newBS (NewL.toLazyByteString . NewL.hexLower . snd) lbsInput
+        [ impl newBS (NewL.toLazyByteString . NewL.utf8HexLower . snd) lbsInput
         , impl base16BS (OldBase16.encode . fst) lbsInput
         ]
     , comparison "filter ((0 ==) . (`mod` 2)) on a LBS"

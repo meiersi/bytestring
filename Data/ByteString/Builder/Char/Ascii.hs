@@ -27,6 +27,9 @@ import Numeric       (showHex)
 import Data.Char     (toUpper)
 import Data.Foldable (foldMap)
 
+import qualified Data.ByteString.Internal      as S
+import qualified Data.ByteString.Lazy.Internal as L
+
 import Data.ByteString.Builder.Internal
 import Data.ByteString.Builder.Write
 
@@ -178,6 +181,13 @@ instance AsciiHex Int64 where
     {-# INLINE asciiHexUpper #-}
     asciiHexUpper = fromWrite W.asciiHexUpper
 
+instance AsciiHex S.ByteString where
+    asciiHexLower = mapWriteByteString W.asciiHexLower
+    asciiHexUpper = mapWriteByteString W.asciiHexUpper
+
+instance AsciiHex L.ByteString where
+    asciiHexLower = mapWriteLazyByteString W.asciiHexLower
+    asciiHexUpper = mapWriteLazyByteString W.asciiHexUpper
 
 -- AsciiHexNoLead instances
 

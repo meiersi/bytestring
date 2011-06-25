@@ -35,3 +35,11 @@ test_RewriteFoldr:
 
 core-test_RewriteFoldr:
 	$(GHC)-core -- --make -O2 -fforce-recomp -main-is Test_RewriteFoldr Test_RewriteFoldr.hs
+
+# running example: CSV file generation
+csv:
+	$(GHC) --make -O2 $(DEBUG) -fforce-recomp -main-is CSV CSV.hs
+	./CSV --resamples 10000
+
+core-csv:
+	$(GHC)-core -- --make -O2 -fforce-recomp -main-is CSV CSV.hs

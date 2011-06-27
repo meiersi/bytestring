@@ -17,7 +17,9 @@
 -- use, both in terms of large data quantities, or high speed
 -- requirements. Byte vectors are encoded as lazy lists of strict 'Word8'
 -- arrays of bytes. They provide a means to manipulate large byte vectors
--- without requiring the entire vector be resident in memory.
+-- without requiring the entire vector be resident in memory. The
+-- recomended way to assemble such lazy byte vectors from smaller parts
+-- is to use the functions in "Data.ByteString.Builder".
 --
 -- Some operations, such as concat, append, reverse and cons, have
 -- better complexity than their "Data.ByteString" equivalents, due to
@@ -25,7 +27,7 @@
 -- operations lazy ByteStrings are usually within a few percent of
 -- strict ones, but with better heap usage. For data larger than the
 -- available memory, or if you have tight memory constraints, this
--- module will be the only option. The default chunk size is 64k, which
+-- module will be the only option. The default chunk size is 32kb, which
 -- should be good in most circumstances. For people with large L2
 -- caches, you may want to increase this to fit your cache.
 --

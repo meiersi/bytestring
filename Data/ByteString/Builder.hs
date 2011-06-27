@@ -8,8 +8,9 @@
 -- Stability   : experimental
 -- Portability : tested on GHC only
 --
--- The 'Builder' type provides an efficient representation of a stream of bytes
--- (i.e, a possibly infinite sequence of bytes). It is efficient in the following sense:
+-- The 'Builder' type provides a representation of a stream of bytes
+-- (i.e, a possibly infinite sequence of bytes) which is efficient in
+-- the following sense:
 --
 --   1. The stream of bytes represented by a 'Builder' can be accessed as a
 --      lazy 'L.ByteString' whose chunks are large on average.
@@ -28,10 +29,10 @@
 -- call is distributed over enough bytes being written. Property (2)
 -- guarantees that 'Builder's can be assembled efficiently from smaller
 -- 'Builder's. This makes 'Builder's well-suited for declaratively describing a
--- stream of bytes. It is also is a significant difference to strict and lazy
--- bytestrings, whose concatenation is in /O(n)/. Property (3) guarantees that
--- creating the primitive 'Builder's, from which we assemble our 'Builder's of
--- interest, is efficent in terms of wall time.
+-- stream of bytes. Property (2) is also is a significant difference to strict
+-- and lazy bytestrings, whose concatenation is in /O(n)/. Property (3)
+-- guarantees that creating the primitive 'Builder's, from which we assemble
+-- our 'Builder's of interest, is efficent in terms of wall time.
 --
 -- Typically, 'Builder's are used to encode application internal data as a
 -- sequence of bytes in an external format like JSON, HTML, or a HTTP response.

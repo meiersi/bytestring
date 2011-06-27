@@ -26,8 +26,8 @@ module Data.ByteString.Put
       -- > runPut = toLazyByteString . fromPut
       --
       -- Support for running general @'Put' a@ computations and outputting its
-      -- side-effect to a file or a network socket is planned. The enumerator
-      -- <http://hackage.haskell.org/package/enumerator> and iteratee
+      -- side-effect to a file or a network socket is planned. The @enumerator@
+      -- <http://hackage.haskell.org/package/enumerator> and @iteratee@
       -- <http://hackage.haskell.org/package/iteratee> libraries are likely to
       -- include support for running @'Put' a@ computations.
 

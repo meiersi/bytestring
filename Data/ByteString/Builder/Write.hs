@@ -43,9 +43,39 @@
 -- advantage that they always result in well-chunked 'L.ByteString's; i.e, they
 -- also perform automatic defragmentation.
 --
--- Note that, in most cases, you do not need to use 'Write's and the functions
--- in this module explicitely. There are rewriting rules in place that perform
--- the relevant optimizations.
+-- We can also use 'Write's to improve the efficiency of the following
+-- 'renderString' function from our UTF-8 CSV table encoding example in
+-- "Data.ByteString.Builder".
+-- 
+-- > renderString :: String -> B.Builder
+-- > renderString cs = B.utf8 '"' <> B.foldMap escape cs <> B.utf8 '"'
+-- >   where
+-- >     escape '\\' = B.utf8 '\\' <> B.utf8 '\\'
+-- >     escape '\"' = B.utf8 '\\' <> B.utf8 '\"'
+-- >     escape c    = B.utf8 c
+--
+-- The idea is to save on 'mappend's by implementing a 'Write' that escapes
+-- characters and using 'fromWriteList', which implements writing a list of
+-- values with a tighter inner loop and no 'mappend'.
+--
+-- > import qualified Data.ByteString.Builder.Write       -- assume these two 
+-- > import           System.IO.Write               as W  -- imports are present
+-- >                  ( Write, writeIf, write2, (#.), utf8 )
+-- > 
+-- > renderString :: String -> B.Builder
+-- > renderString cs = 
+-- >     B.utf8 '"' <> B.fromWriteList writeEscaped cs <> B.utf8 '"'
+-- >   where
+-- >     writeEscaped :: Write Char
+-- >     writeEscaped = 
+-- >       writeIf (== '\\') (write2 W.utf8 W.utf8 #. const ('\\', '\\')) $
+-- >       writeIf (== '\"') (write2 W.utf8 W.utf8 #. const ('\\', '\"')) $
+-- >       W.utf8
+--
+-- This 'Builder' considers a buffer with less than 8 free bytes as full. As
+-- all functions are inlined, the compiler is able to optimize the constant
+-- 'Write's as two sequential 'poke's. Compared to the first implementation of
+-- 'renderString' this implementation is 1.7x faster.
 --
 module Data.ByteString.Builder.Write (
 
@@ -123,9 +153,11 @@ fromWrite w =
 --
 -- > mconcat . map (fromWrite w)
 --
--- because it moves several variables out of the inner loop. There is
--- a rewriting rule ensuring that the above expression and its variants like
--- 'foldMap' get optimized to @'fromWriteList' w@.
+-- or
+--
+-- > foldMap (fromWrite w)
+--
+-- because it moves several variables out of the inner loop. 
 {-# INLINE fromWriteList #-}
 fromWriteList :: Write a -> [a] -> Builder
 fromWriteList w = 

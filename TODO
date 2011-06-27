@@ -13,7 +13,8 @@ Todo items
 
 * builder integration
     - rules to eliminate intermediate builders 
-      (e.g. 'lazyByteString (toLazyByteString b) = b')
+      (e.g. 'lazyByteString (toLazyByteString b) = b') and use more efficient
+      inner loops like 'fromWriteList'.
     - add asserts where possible (e.g., in 'bufferFull minSize nextStep' make
       'nextStep' check in debug mode that the next buffer-range is larger than
       the required minimum size.)

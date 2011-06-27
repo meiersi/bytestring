@@ -74,6 +74,10 @@ n = 1000
 maxiTable :: Table
 maxiTable = take n $ cycle table
 
+maxiStrings :: [String]
+maxiStrings = take n $ cycle strings
+
+
 ------------------------------------------------------------------------------
 -- Difference List based
 ------------------------------------------------------------------------------
@@ -85,7 +89,7 @@ renderStringD :: String -> DString
 renderStringD cs = return '"' <> mconcat (map escape cs) <> return '"'
   where
     escape '\\' = D.DL $ \k -> '\\':'\\':k
-    escape '\"' = D.DL $ \k ->  '\\':'"':k
+    escape '\"' = D.DL $ \k -> '\\':'"' :k
     escape c    = return c
 
 -- carry over definitions
@@ -261,7 +265,11 @@ main = do
   print $ L.length $ encodeUtf8CSV maxiTable
   print ""
   defaultMain
-    [ bench "encodeCSV maxiTable (DList)" $ 
+    [ bench "renderString maxiStrings (original)" $ 
+        whnf (L.length . B.toLazyByteString . B.foldMap renderString1) maxiStrings
+    , bench "renderString maxiStrings (Write)" $ 
+        whnf (L.length . B.toLazyByteString . B.foldMap renderString3) maxiStrings
+    , bench "encodeCSV maxiTable (DList)" $ 
         whnf (length . encodeCSV) maxiTable
     , bench "encodeCSV maxiTable (DList + Utf8 encode)" $ 
         whnf (L.length . encodeUtf8CSV_Dlist) maxiTable

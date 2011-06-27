@@ -49,8 +49,9 @@ library
                      Data.ByteString.Builder.Char.Ascii
                      Data.ByteString.Builder.ByteString
                      Data.ByteString.Builder.Internal
-                     Data.ByteString.Builder.Internal.Buffer
                      Data.ByteString.Put
+  other-modules:
+                     Data.ByteString.Builder.Internal.Buffer
 
   extensions:        CPP, ForeignFunctionInterface
 

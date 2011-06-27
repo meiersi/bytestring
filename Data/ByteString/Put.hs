@@ -8,20 +8,28 @@
 -- Portability : tested on GHC only
 --
 -----------------------------------------------------------------------------
---
--- TODO: Fix implementation and interface
---
 module Data.ByteString.Put
     ( 
-      -- * The @Put@ type
+      -- * The Put type
       Put
 
-      -- * Conversion between @Put@s and @Builder@s
+      -- * Conversion between Puts and Builders
     , fromPut
     , putBuilder
 
       -- * Executing @Put@s
-    -- , unPut
+      --
+      -- | @Put ()@ computations can be executed by converting it to a
+      -- 'Builder' and using 'toLazyByteString'.
+      --
+      -- > runPut :: Put () -> L.ByteString
+      -- > runPut = toLazyByteString . fromPut
+      --
+      -- Support for running general @'Put' a@ computations and outputting its
+      -- side-effect to a file or a network socket is planned. The enumerator
+      -- <http://hackage.haskell.org/package/enumerator> and iteratee
+      -- <http://hackage.haskell.org/package/iteratee> libraries are likely to
+      -- include support for running @'Put' a@ computations.
 
     ) where
 

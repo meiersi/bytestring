@@ -13,10 +13,19 @@
 -----------------------------------------------------------------------------
 module Data.ByteString.Lazy.Builder.Extras
     ( 
+    -- * Execution
+      AllocationStrategy
+    , toLazyByteStringWith
+    , toLazyByteStringUntrimmed
+    , L.smallChunkSize
+    , L.defaultChunkSize
+    , safeStrategy
+    , untrimmedStrategy
+
     -- * Creating Builders
     
     -- ** Inserting and copying bytestrings
-      module Data.ByteString.Lazy.Builder.ByteString
+    , module Data.ByteString.Lazy.Builder.ByteString
 
     -- ** Host-specific encodings of integers
     , intHost  
@@ -39,15 +48,79 @@ module Data.ByteString.Lazy.Builder.Extras
     -- other cases, a lossless Unicode encoding like UTF-8 is a better choice.
     , charASCII
     , stringASCII
+
+    -- ** Using Writes
+    
+    -- | 'W.Write's abstract encodings of Haskell values that can be implemented by
+    -- writing a bounded-length sequence of bytes directly to memory. They are
+    -- lifted to conversions from Haskell values to 'Builder's by wrapping them
+    -- with a bound-check. The compiler can implement this bound-check very
+    -- efficiently (i.e, a single comparison of the difference of two pointers to a
+    -- constant), because the bound of a 'W.Write' is always independent of the
+    -- value being encoded and, in most cases, a literal constant.
+    --
+    -- 'W.Write's are the primary means for defining conversion functions from
+    -- primitive Haskell values to 'Builder's. Most 'Builder' constructors
+    -- provided by this library are implemented that way. 
+    -- 'W.Write's are also used to construct conversions that exploit the internal
+    -- representation of data-structures. 
+    --
+    -- For example, 'mapWriteByteString' works directly on the underlying byte
+    -- array and uses some tricks to reduce the number of variables in its inner
+    -- loop. Its efficiency is exploited for implementing the @filter@ and @map@
+    -- functions in "Data.ByteString.Lazy" as
+    --
+    -- > import qualified System.IO.Write as W
+    -- >
+    -- > filter :: (Word8 -> Bool) -> ByteString -> ByteString
+    -- > filter p = toLazyByteString . mapWriteLazyByteString write
+    -- >   where
+    -- >     write = W.writeIf p W.word8 W.writeNothing
+    -- >
+    -- > map :: (Word8 -> Word8) -> ByteString -> ByteString
+    -- > map f = toLazyByteString . mapWriteLazyByteString (W.word8 W.#. f)
+    --
+    -- Compared to earlier versions of @filter@ and @map@ on lazy 'L.ByteString's,
+    -- these versions use a more efficient inner loop and have the additional
+    -- advantage that they always result in well-chunked 'L.ByteString's; i.e, they
+    -- also perform automatic defragmentation.
+    --
+    -- We can also use 'W.Write's to improve the efficiency of the following
+    -- 'renderString' function from our UTF-8 CSV table encoding example in
+    -- "Data.ByteString.Lazy.Builder".
+    -- 
+    -- > renderString :: String -> B.Builder
+    -- > renderString cs = B.utf8 '"' <> B.foldMap escape cs <> B.utf8 '"'
+    -- >   where
+    -- >     escape '\\' = B.utf8 '\\' <> B.utf8 '\\'
+    -- >     escape '\"' = B.utf8 '\\' <> B.utf8 '\"'
+    -- >     escape c    = B.utf8 c
+    --
+    -- The idea is to save on 'mappend's by implementing a 'W.Write' that escapes
+    -- characters and using 'fromWriteList', which implements writing a list of
+    -- values with a tighter inner loop and no 'mappend'.
+    --
+    -- > import qualified Data.ByteString.Lazy.Builder.Write       -- assume these two 
+    -- > import           System.IO.Write                    as W  -- imports are present
+    -- >                  ( Write, writeIf, write2, (#.), utf8 )
+    -- > 
+    -- > renderString :: String -> B.Builder
+    -- > renderString cs = 
+    -- >     B.utf8 '"' <> B.fromWriteList writeEscaped cs <> B.utf8 '"'
+    -- >   where
+    -- >     writeEscaped :: Write Char
+    -- >     writeEscaped = 
+    -- >       writeIf (== '\\') (write2 W.utf8 W.utf8 #. const ('\\', '\\')) $
+    -- >       writeIf (== '\"') (write2 W.utf8 W.utf8 #. const ('\\', '\"')) $
+    -- >       W.utf8
+    --
+    -- This 'Builder' considers a buffer with less than 8 free bytes as full. As
+    -- all functions are inlined, the compiler is able to optimize the constant
+    -- 'W.Write's as two sequential 'poke's. Compared to the first implementation of
+    -- 'renderString' this implementation is 1.7x faster.
+    --
+    , module Data.ByteString.Lazy.Builder.Write
    
-    -- * Controlling chunk allocation during execution
-    , AllocationStrategy
-    , toLazyByteStringWith
-    , toLazyByteStringUntrimmed
-    , L.smallChunkSize
-    , L.defaultChunkSize
-    , safeStrategy
-    , untrimmedStrategy
     ) where
 
 import Data.ByteString.Lazy.Builder.Internal
@@ -63,6 +136,7 @@ import qualified Data.ByteString.Lazy.Internal as L
 import qualified System.IO.Write               as W
 
 import Foreign
+
 
 ------------------------------------------------------------------------------
 -- ASCII Encoding of Char's and String's
@@ -220,3 +294,4 @@ toLazyByteStringWith (AllocationStrategy firstSize bufSize trim) k b =
 nonEmptyChunk :: S.ByteString -> L.ByteString -> L.ByteString
 nonEmptyChunk bs lbs | S.null bs = lbs 
                      | otherwise = L.Chunk bs lbs
+

@@ -9,95 +9,29 @@
 -- Stability   : experimental
 -- Portability : tested on GHC only
 --
--- 'Write's abstract encodings of Haskell values that can be implemented by
--- writing a bounded-length sequence of bytes directly to memory. They are
--- lifted to conversions from Haskell values to 'Builder's by wrapping them
--- with a bound-check. The compiler can implement this bound-check very
--- efficiently (i.e, a single comparison of the difference of two pointers to a
--- constant), because the bound of a 'Write' is always independent of the
--- value being encoded and, in most cases, a literal constant.
---
--- 'Write's are the primary means for defining conversion functions from
--- primitive Haskell values to 'Builder's. Most 'Builder' constructors
--- provided by this library are implemented that way. 
--- 'Write's are also used to construct conversions that exploit the internal
--- representation of data-structures. 
---
--- For example, 'mapWriteByteString' works directly on the underlying byte
--- array and uses some tricks to reduce the number of variables in its inner
--- loop. Its efficiency is exploited for implementing the @filter@ and @map@
--- functions in "Data.ByteString.Lazy" as
---
--- > import qualified System.IO.Write as W
--- >
--- > filter :: (Word8 -> Bool) -> ByteString -> ByteString
--- > filter p = toLazyByteString . mapWriteLazyByteString write
--- >   where
--- >     write = W.writeIf p W.word8 W.writeNothing
--- >
--- > map :: (Word8 -> Word8) -> ByteString -> ByteString
--- > map f = toLazyByteString . mapWriteLazyByteString (W.word8 W.#. f)
---
--- Compared to earlier versions of @filter@ and @map@ on lazy 'L.ByteString's,
--- these versions use a more efficient inner loop and have the additional
--- advantage that they always result in well-chunked 'L.ByteString's; i.e, they
--- also perform automatic defragmentation.
---
--- We can also use 'Write's to improve the efficiency of the following
--- 'renderString' function from our UTF-8 CSV table encoding example in
--- "Data.ByteString.Lazy.Builder".
--- 
--- > renderString :: String -> B.Builder
--- > renderString cs = B.utf8 '"' <> B.foldMap escape cs <> B.utf8 '"'
--- >   where
--- >     escape '\\' = B.utf8 '\\' <> B.utf8 '\\'
--- >     escape '\"' = B.utf8 '\\' <> B.utf8 '\"'
--- >     escape c    = B.utf8 c
---
--- The idea is to save on 'mappend's by implementing a 'Write' that escapes
--- characters and using 'fromWriteList', which implements writing a list of
--- values with a tighter inner loop and no 'mappend'.
---
--- > import qualified Data.ByteString.Lazy.Builder.Write       -- assume these two 
--- > import           System.IO.Write               as W  -- imports are present
--- >                  ( Write, writeIf, write2, (#.), utf8 )
--- > 
--- > renderString :: String -> B.Builder
--- > renderString cs = 
--- >     B.utf8 '"' <> B.fromWriteList writeEscaped cs <> B.utf8 '"'
--- >   where
--- >     writeEscaped :: Write Char
--- >     writeEscaped = 
--- >       writeIf (== '\\') (write2 W.utf8 W.utf8 #. const ('\\', '\\')) $
--- >       writeIf (== '\"') (write2 W.utf8 W.utf8 #. const ('\\', '\"')) $
--- >       W.utf8
---
--- This 'Builder' considers a buffer with less than 8 free bytes as full. As
--- all functions are inlined, the compiler is able to optimize the constant
--- 'Write's as two sequential 'poke's. Compared to the first implementation of
--- 'renderString' this implementation is 1.7x faster.
---
 module Data.ByteString.Lazy.Builder.Write (
 
-  -- * Constructing Builders from Writes
     fromWrite
   , fromWriteList
   , unfoldrWrite
   
-  -- ** Transcoding ByteStrings
   , mapWriteByteString
   , mapWriteLazyByteString
 
   ) where
 
+import Data.ByteString.Lazy.Builder.Internal
+
+import qualified Data.ByteString               as S
+import qualified Data.ByteString.Internal      as S
+import qualified Data.ByteString.Lazy.Internal as L
+
 import Data.Monoid
-import           Data.ByteString.Lazy.Builder.Internal
-import qualified Data.ByteString.Internal         as S
-import qualified Data.ByteString.Lazy.Internal    as L
+
+import System.IO.Write.Internal hiding (append)
 
 import Foreign
 
-import System.IO.Write.Internal hiding (append)
 
 -- IMPLEMENTATION NOTE: Sadly, 'fromWriteList' cannot be used for foldr/build
 -- fusion. Its performance relies on hoisting several variables out of the

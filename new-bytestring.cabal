@@ -43,10 +43,10 @@ library
                      Data.ByteString.Fusion
                      Data.ByteString.Lazy.Builder
                      Data.ByteString.Lazy.Builder.Extras
-                     Data.ByteString.Lazy.Builder.Write
                      Data.ByteString.Lazy.Builder.Internal
                      Data.ByteString.Lazy.Put
   other-modules:
+                     Data.ByteString.Lazy.Builder.Write
                      Data.ByteString.Lazy.Builder.Word
                      Data.ByteString.Lazy.Builder.Int
                      Data.ByteString.Lazy.Builder.Internal.Buffer

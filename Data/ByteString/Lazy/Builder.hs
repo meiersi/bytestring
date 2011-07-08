@@ -238,7 +238,6 @@ import Data.ByteString.Lazy.Builder.Internal
 import Data.ByteString.Lazy.Builder.Extras
 import Data.ByteString.Lazy.Builder.Word
 import Data.ByteString.Lazy.Builder.Int
-import Data.ByteString.Lazy.Builder.Write 
 
 import qualified System.IO.Write as W
 

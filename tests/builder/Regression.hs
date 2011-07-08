@@ -14,9 +14,9 @@ module Regression where
 import qualified "blaze-builder" Blaze.ByteString.Builder as Blaze
 
 import qualified "new-bytestring" Data.ByteString.Lazy              as NewL
-import qualified "new-bytestring" Data.ByteString.Builder           as NewL
-import qualified "new-bytestring" Data.ByteString.Builder.Write     as NewL
-import qualified "new-bytestring" Data.ByteString.Builder.Char.Utf8 as NewL
+import qualified "new-bytestring" Data.ByteString.Lazy.Builder           as NewL
+import qualified "new-bytestring" Data.ByteString.Lazy.Builder.Write     as NewL
+import qualified "new-bytestring" Data.ByteString.Lazy.Builder.Char.Utf8 as NewL
 
 import qualified "bytestring" Data.ByteString.Lazy as OldL
 import qualified Data.ByteString.Base16.Lazy       as OldBase16

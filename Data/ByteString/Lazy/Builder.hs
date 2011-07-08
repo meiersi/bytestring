@@ -50,7 +50,7 @@
 -- We use the following imports and abbreviate 'mappend' to simplify reading.
 --
 -- > import qualified Data.ByteString.Lazy      as L
--- > import qualified Data.ByteString.Builder   as B
+-- > import qualified Data.ByteString.Lazy.Builder   as B
 -- > import           Data.Monoid
 -- > import           Data.List                 (intersperse)
 -- > 
@@ -182,14 +182,14 @@
 -- and less allocation. It is also a planned extension of this library.
 --
 -- The first two cost reductions are supported for user code through functions
--- in "Data.ByteString.Builder.Write". There, we continue the above example
+-- in "Data.ByteString.Lazy.Builder.Write". There, we continue the above example
 -- and drop the generation time to 0.9ms by implementing 'renderString' more
 -- cleverly. The third reduction requires meddling with the internals of
 -- 'Builder's and is not recomended in code outside of this library. However,
 -- patches to this library are very welcome. 
 --
 -----------------------------------------------------------------------------
-module Data.ByteString.Builder
+module Data.ByteString.Lazy.Builder
     ( 
       -- * The Builder type
       Builder
@@ -205,11 +205,11 @@ module Data.ByteString.Builder
     , lazyByteString
 
       -- ** Encoding characters
-    , module Data.ByteString.Builder.Char.Utf8
+    , module Data.ByteString.Lazy.Builder.Char.Utf8
 
       -- ** Encoding integers
-    , module Data.ByteString.Builder.Word
-    , module Data.ByteString.Builder.Int
+    , module Data.ByteString.Lazy.Builder.Word
+    , module Data.ByteString.Lazy.Builder.Int
       
       -- * Executing Builders
     , toLazyByteString
@@ -224,11 +224,11 @@ module Data.ByteString.Builder
     , untrimmedStrategy
     ) where
 
-import Data.ByteString.Builder.Internal
-import Data.ByteString.Builder.ByteString
-import Data.ByteString.Builder.Word
-import Data.ByteString.Builder.Int
-import Data.ByteString.Builder.Char.Utf8
+import Data.ByteString.Lazy.Builder.Internal
+import Data.ByteString.Lazy.Builder.ByteString
+import Data.ByteString.Lazy.Builder.Word
+import Data.ByteString.Lazy.Builder.Int
+import Data.ByteString.Lazy.Builder.Char.Utf8
 
 import qualified Data.ByteString               as S
 import qualified Data.ByteString.Internal      as S
@@ -251,7 +251,7 @@ import Foreign
 -- chunks are large enough (>= 'L.smallChunkSize'), which is important for the
 -- efficiency of consumers of the generated chunks. If you have a special
 -- application that requires more control over chunk handling, then see the
--- module "Data.ByteString.Builder.ByteString".
+-- module "Data.ByteString.Lazy.Builder.ByteString".
 --
 {-# INLINE byteString #-}
 byteString :: S.ByteString -> Builder

@@ -11,9 +11,9 @@
 -- They are intended for constructing output in formats that explicitly
 -- restrict the character encoding to 7-bit ASCII encoded characters. In all
 -- other cases, a lossless Unicode encoding (e.g.,
--- "Data.ByteString.Builder.Char.Utf8") is a better choice.
+-- "Data.ByteString.Lazy.Builder.Char.Utf8") is a better choice.
 --
-module Data.ByteString.Builder.Char.Ascii
+module Data.ByteString.Lazy.Builder.Char.Ascii
     ( 
       -- * ASCII encoding of characters
       Ascii(..)
@@ -30,8 +30,8 @@ import Data.Foldable (foldMap)
 import qualified Data.ByteString.Internal      as S
 import qualified Data.ByteString.Lazy.Internal as L
 
-import Data.ByteString.Builder.Internal
-import Data.ByteString.Builder.Write
+import Data.ByteString.Lazy.Builder.Internal
+import Data.ByteString.Lazy.Builder.Write
 
 import qualified System.IO.Write.Char.Ascii as W
 

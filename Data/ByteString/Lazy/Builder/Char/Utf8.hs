@@ -8,7 +8,7 @@
 --
 -- Functions for creating 'Builder's by UTF-8 encoding characters.
 --
-module Data.ByteString.Builder.Char.Utf8
+module Data.ByteString.Lazy.Builder.Char.Utf8
     ( 
       -- * UTF-8 encoding characters
       Utf8(..)
@@ -22,9 +22,9 @@ module Data.ByteString.Builder.Char.Utf8
 
 import Data.Foldable (foldMap)
 
-import Data.ByteString.Builder.Internal
-import Data.ByteString.Builder.Write
-import Data.ByteString.Builder.Char.Ascii
+import Data.ByteString.Lazy.Builder.Internal
+import Data.ByteString.Lazy.Builder.Write
+import Data.ByteString.Lazy.Builder.Char.Ascii
 
 import qualified System.IO.Write.Char.Utf8  as W
 

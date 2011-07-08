@@ -19,7 +19,7 @@
 -- arrays of bytes. They provide a means to manipulate large byte vectors
 -- without requiring the entire vector be resident in memory. The
 -- recomended way to assemble such lazy byte vectors from smaller parts
--- is to use the functions in "Data.ByteString.Builder".
+-- is to use the functions in "Data.ByteString.Lazy.Builder".
 --
 -- Some operations, such as concat, append, reverse and cons, have
 -- better complexity than their "Data.ByteString" equivalents, due to
@@ -209,9 +209,9 @@ import qualified Data.ByteString        as S  -- S for strict (hmm...)
 import qualified Data.ByteString.Internal as S
 import qualified Data.ByteString.Unsafe as S
 import Data.ByteString.Lazy.Internal
-import qualified Data.ByteString.Builder            as B
-import qualified Data.ByteString.Builder.ByteString as B
-import qualified Data.ByteString.Builder.Write      as B
+import qualified Data.ByteString.Lazy.Builder            as B
+import qualified Data.ByteString.Lazy.Builder.ByteString as B
+import qualified Data.ByteString.Lazy.Builder.Write      as B
 
 import Data.Monoid              (Monoid(..))
 

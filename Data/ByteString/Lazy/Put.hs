@@ -8,7 +8,7 @@
 -- Portability : tested on GHC only
 --
 -----------------------------------------------------------------------------
-module Data.ByteString.Put
+module Data.ByteString.Lazy.Put
     ( 
       -- * The Put type
       Put
@@ -33,7 +33,7 @@ module Data.ByteString.Put
 
     ) where
 
-import Data.ByteString.Builder.Internal
+import Data.ByteString.Lazy.Builder.Internal
 
 {-
 

@@ -6,14 +6,14 @@
 -- Stability   : experimental
 -- Portability : tested on GHC only
 --
--- Running example for documentation of Data.ByteString.Builder
+-- Running example for documentation of Data.ByteString.Lazy.Builder
 --
 module CSV where
 
 import qualified Data.ByteString               as S
 import qualified Data.ByteString.Lazy          as L
-import qualified Data.ByteString.Builder       as B
-import qualified Data.ByteString.Builder.Write as B
+import qualified Data.ByteString.Lazy.Builder       as B
+import qualified Data.ByteString.Lazy.Builder.Write as B
 import qualified Data.DList                    as D
 
 

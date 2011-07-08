@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP, BangPatterns, OverloadedStrings, MonoPatBinds #-}
--- | Module    : Data.ByteString.Builder.ByteString
+-- | Module    : Data.ByteString.Lazy.Builder.ByteString
 -- Copyright   : (c) 2010      Jasper Van der Jeugt 
 --               (c) 2010-2011 Simon Meier
 -- License     : BSD3-style (see LICENSE)
@@ -10,7 +10,7 @@
 -- Controlling chunk allocation and copying when converting strict and lazy
 -- bytestrings to 'Builder's.
 --
-module Data.ByteString.Builder.ByteString
+module Data.ByteString.Lazy.Builder.ByteString
     ( 
       byteStringWith
     , copyByteString
@@ -21,7 +21,7 @@ module Data.ByteString.Builder.ByteString
     , insertLazyByteString
     ) where
 
-import Data.ByteString.Builder.Internal 
+import Data.ByteString.Lazy.Builder.Internal 
 
 import Foreign
 import Data.Monoid

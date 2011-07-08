@@ -41,7 +41,7 @@
 -- using an 'IO' action: you are writing code that might enable the next
 -- buffer-overlow attack on a Haskell server!
 --
-module Data.ByteString.Builder.Internal (
+module Data.ByteString.Lazy.Builder.Internal (
 
   -- * Build signals and steps
     BufferRange(..)

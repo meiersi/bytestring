@@ -9,7 +9,7 @@
 -- Constructing 'Builder's by encoding unsigned integers using big-endian,
 -- little-endian, and host-endian encodings.
 --
-module Data.ByteString.Builder.Word
+module Data.ByteString.Lazy.Builder.Word
     ( 
       word8
 
@@ -31,8 +31,8 @@ module Data.ByteString.Builder.Word
 
     ) where
 
-import Data.ByteString.Builder.Internal
-import Data.ByteString.Builder.Write
+import Data.ByteString.Lazy.Builder.Internal
+import Data.ByteString.Lazy.Builder.Write
 import qualified System.IO.Write as W
 import Foreign
 

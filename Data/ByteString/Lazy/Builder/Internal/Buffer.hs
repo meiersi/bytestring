@@ -11,7 +11,7 @@
 -- Execution of the 'Put' monad and hence also 'Builder's with respect to
 -- buffers.
 --
-module Data.ByteString.Builder.Internal.Buffer (
+module Data.ByteString.Lazy.Builder.Internal.Buffer (
   -- * Buffers
     Buffer(..)
 

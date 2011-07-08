@@ -14,9 +14,9 @@ module WriteListFusion where
 
 import qualified "new-bytestring" Data.ByteString.Lazy as L
 
-import Data.ByteString.Builder
-import Data.ByteString.Builder.Internal
-import Data.ByteString.Builder.Write     
+import Data.ByteString.Lazy.Builder
+import Data.ByteString.Lazy.Builder.Internal
+import Data.ByteString.Lazy.Builder.Write     
 
 import qualified System.IO.Write as W
 

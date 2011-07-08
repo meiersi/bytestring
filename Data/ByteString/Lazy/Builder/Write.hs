@@ -1,6 +1,6 @@
 {-# LANGUAGE CPP, BangPatterns, MonoPatBinds #-}
 -- |
--- Module      : Data.ByteString.Builder.Write
+-- Module      : Data.ByteString.Lazy.Builder.Write
 -- Copyright   : (c) 2010-2011 Simon Meier
 --             . (c) 2010      Jasper van der Jeugt
 -- License     : BSD3-style (see LICENSE)
@@ -45,7 +45,7 @@
 --
 -- We can also use 'Write's to improve the efficiency of the following
 -- 'renderString' function from our UTF-8 CSV table encoding example in
--- "Data.ByteString.Builder".
+-- "Data.ByteString.Lazy.Builder".
 -- 
 -- > renderString :: String -> B.Builder
 -- > renderString cs = B.utf8 '"' <> B.foldMap escape cs <> B.utf8 '"'
@@ -58,7 +58,7 @@
 -- characters and using 'fromWriteList', which implements writing a list of
 -- values with a tighter inner loop and no 'mappend'.
 --
--- > import qualified Data.ByteString.Builder.Write       -- assume these two 
+-- > import qualified Data.ByteString.Lazy.Builder.Write       -- assume these two 
 -- > import           System.IO.Write               as W  -- imports are present
 -- >                  ( Write, writeIf, write2, (#.), utf8 )
 -- > 
@@ -77,7 +77,7 @@
 -- 'Write's as two sequential 'poke's. Compared to the first implementation of
 -- 'renderString' this implementation is 1.7x faster.
 --
-module Data.ByteString.Builder.Write (
+module Data.ByteString.Lazy.Builder.Write (
 
   -- * Constructing Builders from Writes
     fromWrite
@@ -91,7 +91,7 @@ module Data.ByteString.Builder.Write (
   ) where
 
 import Data.Monoid
-import           Data.ByteString.Builder.Internal
+import           Data.ByteString.Lazy.Builder.Internal
 import qualified Data.ByteString.Internal         as S
 import qualified Data.ByteString.Lazy.Internal    as L
 

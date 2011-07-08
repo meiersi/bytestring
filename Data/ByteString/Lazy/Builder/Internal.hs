@@ -264,8 +264,6 @@ instance Monoid Builder where
 
 -- | Flush the current buffer and start a new chunk. 
 --
--- The effect of this function depends on how the 'Builder' is executed.
---
 {-# INLINE flush #-}
 flush :: Builder
 flush = builder step

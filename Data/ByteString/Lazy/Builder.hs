@@ -206,9 +206,6 @@ module Data.ByteString.Lazy.Builder
     , byteString
     , lazyByteString
 
-      -- ** Encoding characters
-    , module Data.ByteString.Lazy.Builder.Char.Utf8
-
       -- ** Encoding signed integers
     , int8
 
@@ -230,6 +227,10 @@ module Data.ByteString.Lazy.Builder
     , word16LE
     , word32LE
     , word64LE
+
+      -- ** UTF-8 encoding characters
+    , charUtf8
+    , stringUtf8
       
     ) where
 
@@ -237,10 +238,27 @@ import Data.ByteString.Lazy.Builder.Internal
 import Data.ByteString.Lazy.Builder.Extras
 import Data.ByteString.Lazy.Builder.Word
 import Data.ByteString.Lazy.Builder.Int
-import Data.ByteString.Lazy.Builder.Char.Utf8
+import Data.ByteString.Lazy.Builder.Write 
+
+import qualified System.IO.Write as W
 
 import qualified Data.ByteString               as S
 import qualified Data.ByteString.Lazy.Internal as L
+
+
+------------------------------------------------------------------------------
+-- UTF-8 Encoding of Char's and String's
+------------------------------------------------------------------------------
+
+-- | Encode a 'Char' using UTF-8.
+{-# INLINE charUtf8 #-}
+charUtf8 :: Char -> Builder
+charUtf8 = fromWrite W.utf8
+
+-- | Encode a 'String' using UTF-8.
+{-# INLINE stringUtf8 #-}
+stringUtf8 :: String -> Builder
+stringUtf8 = fromWriteList W.utf8
 
 
 ------------------------------------------------------------------------------

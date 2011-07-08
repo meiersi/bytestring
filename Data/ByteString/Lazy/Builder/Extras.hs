@@ -28,6 +28,17 @@ module Data.ByteString.Lazy.Builder.Extras
     , word16Host
     , word32Host
     , word64Host
+
+    -- ** ASCII encoding characters
+    -- |
+    -- Functions for creating 'Builder's by ASCII encoding characters
+    -- (cf. <http://tools.ietf.org/html/rfc20>).
+    --
+    -- They are intended for constructing output in formats that explicitly
+    -- restrict the character encoding to 7-bit ASCII encoded characters. In all
+    -- other cases, a lossless Unicode encoding like UTF-8 is a better choice.
+    , charASCII
+    , stringASCII
    
     -- * Controlling chunk allocation during execution
     , AllocationStrategy
@@ -43,12 +54,35 @@ import Data.ByteString.Lazy.Builder.Internal
 import Data.ByteString.Lazy.Builder.ByteString
 import Data.ByteString.Lazy.Builder.Word
 import Data.ByteString.Lazy.Builder.Int
+import Data.ByteString.Lazy.Builder.Write
 
 import qualified Data.ByteString               as S
 import qualified Data.ByteString.Internal      as S
 import qualified Data.ByteString.Lazy.Internal as L
 
+import qualified System.IO.Write               as W
+
 import Foreign
+
+------------------------------------------------------------------------------
+-- ASCII Encoding of Char's and String's
+------------------------------------------------------------------------------
+
+-- | ASCII encode a 'Char' with a Unicode codepoint below 128. For characters
+-- with a codepoint equal or greater than 128, an error is thrown.
+--
+{-# INLINE charASCII #-}
+charASCII :: Char -> Builder
+charASCII = fromWrite W.ascii
+
+-- | ASCII encode a 'String' consisting of characters with a Unicode codepoint
+-- below 128. For characters with a codepoint equal or greater than 128, an
+-- error is thrown.
+--
+{-# INLINE stringASCII #-}
+stringASCII :: String -> Builder
+stringASCII = fromWriteList W.ascii
+
 
 ------------------------------------------------------------------------------
 -- Builder execution

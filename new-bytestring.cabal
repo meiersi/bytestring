@@ -44,8 +44,6 @@ library
                      Data.ByteString.Lazy.Builder
                      Data.ByteString.Lazy.Builder.Extras
                      Data.ByteString.Lazy.Builder.Write
-                     Data.ByteString.Lazy.Builder.Char.Utf8
-                     Data.ByteString.Lazy.Builder.Char.Ascii
                      Data.ByteString.Lazy.Builder.Internal
                      Data.ByteString.Lazy.Put
   other-modules:

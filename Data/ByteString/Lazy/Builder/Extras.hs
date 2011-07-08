@@ -89,24 +89,24 @@ module Data.ByteString.Lazy.Builder.Extras
     -- 'renderString' function from our UTF-8 CSV table encoding example in
     -- "Data.ByteString.Lazy.Builder".
     -- 
-    -- > renderString :: String -> B.Builder
-    -- > renderString cs = B.utf8 '"' <> B.foldMap escape cs <> B.utf8 '"'
+    -- > renderString :: String -> Builder
+    -- > renderString cs = charUtf8 '"' <> foldMap escape cs <> charUtf8 '"'
     -- >   where
-    -- >     escape '\\' = B.utf8 '\\' <> B.utf8 '\\'
-    -- >     escape '\"' = B.utf8 '\\' <> B.utf8 '\"'
-    -- >     escape c    = B.utf8 c
+    -- >     escape '\\' = charUtf8 '\\' <> charUtf8 '\\'
+    -- >     escape '\"' = charUtf8 '\\' <> charUtf8 '\"'
+    -- >     escape c    = charUtf8 c
     --
     -- The idea is to save on 'mappend's by implementing a 'W.Write' that escapes
     -- characters and using 'fromWriteList', which implements writing a list of
     -- values with a tighter inner loop and no 'mappend'.
     --
-    -- > import qualified Data.ByteString.Lazy.Builder.Write       -- assume these two 
-    -- > import           System.IO.Write                    as W  -- imports are present
-    -- >                  ( Write, writeIf, write2, (#.), utf8 )
+    -- > import Data.ByteString.Lazy.Builder.Extras       -- assume these two 
+    -- > import System.IO.Write                     as W  -- imports are present
+    -- >          ( Write, writeIf, write2, (#.), utf8 )
     -- > 
-    -- > renderString :: String -> B.Builder
+    -- > renderString :: String -> Builder
     -- > renderString cs = 
-    -- >     B.utf8 '"' <> B.fromWriteList writeEscaped cs <> B.utf8 '"'
+    -- >     charUtf8 '"' <> fromWriteList writeEscaped cs <> charUtf8 '"'
     -- >   where
     -- >     writeEscaped :: Write Char
     -- >     writeEscaped = 

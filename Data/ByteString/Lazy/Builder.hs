@@ -50,9 +50,10 @@
 -- We use the following imports and abbreviate 'mappend' to simplify reading.
 --
 -- > import qualified Data.ByteString.Lazy         as L
--- > import qualified Data.ByteString.Lazy.Builder as B
+-- > import           Data.ByteString.Lazy.Builder
 -- > import           Data.Monoid
--- > import           Data.List                 (intersperse)
+-- > import           Data.Foldable                (foldMap)
+-- > import           Data.List                    (intersperse)
 -- > 
 -- > infixr 4 <>
 -- > (<>) :: Monoid m => m -> m -> m
@@ -68,26 +69,26 @@
 -- 'L.ByteString's.
 --
 -- > encodeUtf8CSV :: Table -> L.ByteString
--- > encodeUtf8CSV = B.toLazyByteString . renderTable
+-- > encodeUtf8CSV = toLazyByteString . renderTable
 -- > 
--- > renderTable :: Table -> B.Builder
--- > renderTable rs = mconcat [renderRow r <> B.utf8 '\n' | r <- rs]
+-- > renderTable :: Table -> Builder
+-- > renderTable rs = mconcat [renderRow r <> charUtf8 '\n' | r <- rs]
 -- >            
--- > renderRow :: Row -> B.Builder
+-- > renderRow :: Row -> Builder
 -- > renderRow []     = mempty
 -- > renderRow (c:cs) = 
--- >     renderCell c <> mconcat [ B.utf8 ',' <> renderCell c' | c' <- cs ]
+-- >     renderCell c <> mconcat [ charUtf8 ',' <> renderCell c' | c' <- cs ]
 -- > 
--- > renderCell :: Cell -> B.Builder
+-- > renderCell :: Cell -> Builder
 -- > renderCell (StringC cs) = renderString cs
--- > renderCell (IntC i)     = B.utf8 $ show i
+-- > renderCell (IntC i)     = stringUtf8 $ show i
 -- > 
--- > renderString :: String -> B.Builder
--- > renderString cs = B.utf8 '"' <> B.foldMap escape cs <> B.utf8 '"'
+-- > renderString :: String -> Builder
+-- > renderString cs = charUtf8 '"' <> foldMap escape cs <> charUtf8 '"'
 -- >   where
--- >     escape '\\' = B.utf8 '\\' <> B.utf8 '\\'
--- >     escape '\"' = B.utf8 '\\' <> B.utf8 '\"'
--- >     escape c    = B.utf8 c
+-- >     escape '\\' = charUtf8 '\\' <> charUtf8 '\\'
+-- >     escape '\"' = charUtf8 '\\' <> charUtf8 '\"'
+-- >     escape c    = charUtf8 c
 --
 -- We use our UTF-8 CSV encoding function on the following table. /Note that/
 -- /Haddock currently doesn't handle the Unicode lambda-character and the/
@@ -124,33 +125,25 @@
 -- >       whnf (L.length . encodeUtf8CSV) maxiTable
 -- >   ]
 --
--- On a Core2 Duo 2.20GHz on a 32-bit Linux, the above code takes 1.1ms to
+-- On a Core2 Duo 2.20GHz on a 32-bit Linux, the above code takes 1ms to
 -- generate the 22'500 bytes long lazy 'L.ByteString'. Looking again at
 -- the definitions above, we see that we took care to avoid intermediate
 -- data structures, as otherwise we would sacrifice performance.
 -- For example, the following (arguably simpler) definition of 'renderRow' is
 -- about 20% slower.
 --
--- > renderRow :: Row -> B.Builder
--- > renderRow  = mconcat . intersperse (B.utf8 ',') . map renderCell
+-- > renderRow :: Row -> Builder
+-- > renderRow  = mconcat . intersperse (charUtf8 ',') . map renderCell
 --
 -- Similarly, using /O(n)/ concatentations like '(++)' should be avoided. The
 -- following definition of 'renderString' is also about 20% slower.
 --
--- > renderString :: String -> B.Builder
--- > renderString cs = B.utf8 $ "\"" ++ concatMap escape cs ++ "\"" 
+-- > renderString :: String -> Builder
+-- > renderString cs = charUtf8 $ "\"" ++ concatMap escape cs ++ "\"" 
 -- >   where
 -- >     escape '\\' = "\\"
 -- >     escape '\"' = "\\\""
 -- >     escape c    = return c
---
--- Note that on the above example 'Builder's are not much faster than using
--- difference-lists to achieve efficient 'String' concatenation. Rendering the
--- table first as a 'String' using a difference-list and UTF-8 encoding it
--- afterwards takes 1.3ms. However, this performance difference becomes more
--- pronounced once longer snippets of static-data are involved. 'Builder's can
--- exploit low-level memory copy and write operations, while 'String's always
--- have to follow one pointer per 'Char' and process this 'Char' individually.
 --
 -- Apart from removing intermediate data-structures, 'Builder's can be
 -- optimized further by exploiting knowledge about their implementation.
@@ -182,8 +175,8 @@
 -- and less allocation. It is also a planned extension of this library.
 --
 -- The first two cost reductions are supported for user code through functions
--- in "Data.ByteString.Lazy.Builder.Write". There, we continue the above example
--- and drop the generation time to 0.9ms by implementing 'renderString' more
+-- in "Data.ByteString.Lazy.Builder.Extras". There, we continue the above example
+-- and drop the generation time to 0.8ms by implementing 'renderString' more
 -- cleverly. The third reduction requires meddling with the internals of
 -- 'Builder's and is not recomended in code outside of this library. However,
 -- patches to this library are very welcome. 

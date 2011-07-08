@@ -10,18 +10,18 @@
 --
 module CSV where
 
-import qualified Data.ByteString               as S
-import qualified Data.ByteString.Lazy          as L
-import qualified Data.ByteString.Lazy.Builder       as B
-import qualified Data.ByteString.Lazy.Builder.Write as B
-import qualified Data.DList                    as D
+import qualified Data.ByteString                     as S
+import qualified Data.ByteString.Lazy                as L
+import qualified Data.DList                          as D
 
+import Data.ByteString.Lazy.Builder        
+import Data.ByteString.Lazy.Builder.Extras 
 
-import           System.IO.Write       (Write, writeIf, write2, (#.))
-import qualified System.IO.Write as W  (utf8)
+import System.IO.Write (Write, writeIf, write2, (#.), utf8)
 
 import Criterion.Main
 import Data.Monoid
+import Data.Foldable (foldMap)
 import Data.List (intersperse)
 
 import Data.Int
@@ -42,25 +42,25 @@ type Row   = [Cell]
 type Table = [Row]
 
 
-renderString :: String -> B.Builder
-renderString cs = B.utf8 $ "\"" ++ concatMap escape cs ++ "\"" 
+renderString :: String -> Builder
+renderString cs = stringUtf8 $ "\"" ++ concatMap escape cs ++ "\"" 
   where
     escape '\\' = "\\"
     escape '\"' = "\\\""
     escape c    = return c
 
-renderCell :: Cell -> B.Builder
+renderCell :: Cell -> Builder
 renderCell (StringC cs) = renderString cs
-renderCell (IntC i)     = B.utf8 $ show i
+renderCell (IntC i)     = stringUtf8 $ show i
            
-renderRow :: Row -> B.Builder
-renderRow  = mconcat . intersperse (B.utf8 ',') . map renderCell
+renderRow :: Row -> Builder
+renderRow  = mconcat . intersperse (charUtf8 ',') . map renderCell
 
-renderTable :: Table -> B.Builder
-renderTable rs = mconcat [renderRow r <> B.utf8 '\n' | r <- rs]
+renderTable :: Table -> Builder
+renderTable rs = mconcat [renderRow r <> charUtf8 '\n' | r <- rs]
 
 encodeUtf8CSV :: Table -> L.ByteString
-encodeUtf8CSV = B.toLazyByteString . renderTable
+encodeUtf8CSV = toLazyByteString . renderTable
 
 strings :: [String]
 strings =  ["hello", "\"1\"", "λ-wörld"]
@@ -109,33 +109,33 @@ encodeCSV :: Table -> String
 encodeCSV = D.toList . renderTableD
 
 encodeUtf8CSV_Dlist :: Table -> L.ByteString
-encodeUtf8CSV_Dlist = B.toLazyByteString . B.fromWriteList W.utf8 . encodeCSV
+encodeUtf8CSV_Dlist = toLazyByteString . fromWriteList utf8 . encodeCSV
       
 ------------------------------------------------------------------------------
 -- Version 1
 ------------------------------------------------------------------------------
 
 -- improved
-renderString1 :: String -> B.Builder
-renderString1 cs = B.utf8 '"' <> B.foldMap escape cs <> B.utf8 '"'
+renderString1 :: String -> Builder
+renderString1 cs = charUtf8 '"' <> foldMap escape cs <> charUtf8 '"'
   where
-    escape '\\' = B.utf8 '\\' <> B.utf8 '\\'
-    escape '\"' = B.utf8 '\\' <> B.utf8 '\"'
-    escape c    = B.utf8 c
+    escape '\\' = charUtf8 '\\' <> charUtf8 '\\'
+    escape '\"' = charUtf8 '\\' <> charUtf8 '\"'
+    escape c    = charUtf8 c
 
 -- carry over definitions
-renderCell1 :: Cell -> B.Builder
+renderCell1 :: Cell -> Builder
 renderCell1 (StringC cs) = renderString1 cs
-renderCell1 (IntC i)     = B.utf8 $ show i
+renderCell1 (IntC i)     = stringUtf8 $ show i
            
-renderRow1 :: Row -> B.Builder
-renderRow1  = mconcat . intersperse (B.utf8 ',') . map renderCell1
+renderRow1 :: Row -> Builder
+renderRow1  = mconcat . intersperse (charUtf8 ',') . map renderCell1
 
-renderTable1 :: Table -> B.Builder
-renderTable1 rs = mconcat [renderRow1 r <> B.utf8 '\n' | r <- rs]
+renderTable1 :: Table -> Builder
+renderTable1 rs = mconcat [renderRow1 r <> charUtf8 '\n' | r <- rs]
 
 encodeUtf8CSV1 :: Table -> L.ByteString
-encodeUtf8CSV1 = B.toLazyByteString . renderTable1
+encodeUtf8CSV1 = toLazyByteString . renderTable1
 
 
 ------------------------------------------------------------------------------
@@ -143,16 +143,16 @@ encodeUtf8CSV1 = B.toLazyByteString . renderTable1
 ------------------------------------------------------------------------------
 
 
-renderRow2 :: Row -> B.Builder
+renderRow2 :: Row -> Builder
 renderRow2 []     = mempty
 renderRow2 (c:cs) = 
-    renderCell1 c <> mconcat [ B.utf8 ',' <> renderCell1 c' | c' <- cs ]
+    renderCell1 c <> mconcat [ charUtf8 ',' <> renderCell1 c' | c' <- cs ]
 
-renderTable2 :: Table -> B.Builder
-renderTable2 rs = mconcat [renderRow2 r <> B.utf8 '\n' | r <- rs]
+renderTable2 :: Table -> Builder
+renderTable2 rs = mconcat [renderRow2 r <> charUtf8 '\n' | r <- rs]
 
 encodeUtf8CSV2 :: Table -> L.ByteString
-encodeUtf8CSV2 = B.toLazyByteString . renderTable2
+encodeUtf8CSV2 = toLazyByteString . renderTable2
 
 
 ------------------------------------------------------------------------------
@@ -160,30 +160,31 @@ encodeUtf8CSV2 = B.toLazyByteString . renderTable2
 ------------------------------------------------------------------------------
 
 -- improved
-renderString3 :: String -> B.Builder
-renderString3 cs = B.utf8 '"' <> B.fromWriteList writeEscaped cs <> B.utf8 '"'
+renderString3 :: String -> Builder
+renderString3 cs = 
+    charUtf8 '"' <> fromWriteList writeEscaped cs <> charUtf8 '"'
   where
     writeEscaped :: Write Char
     writeEscaped = 
-      writeIf (== '\\') (write2 W.utf8 W.utf8 #. const ('\\', '\\')) $
-      writeIf (== '\"') (write2 W.utf8 W.utf8 #. const ('\\', '\"')) $
-      W.utf8
+      writeIf (== '\\') (write2 utf8 utf8 #. const ('\\', '\\')) $
+      writeIf (== '\"') (write2 utf8 utf8 #. const ('\\', '\"')) $
+      utf8
 
 -- carry over definitions
-renderCell3 :: Cell -> B.Builder
+renderCell3 :: Cell -> Builder
 renderCell3 (StringC cs) = renderString3 cs
-renderCell3 (IntC i)     = B.utf8 $ show i
+renderCell3 (IntC i)     = stringUtf8 $ show i
            
-renderRow3 :: Row -> B.Builder
+renderRow3 :: Row -> Builder
 renderRow3 []     = mempty
 renderRow3 (c:cs) = 
-    renderCell3 c <> mconcat [ B.utf8 ',' <> renderCell3 c' | c' <- cs ]
+    renderCell3 c <> mconcat [ charUtf8 ',' <> renderCell3 c' | c' <- cs ]
 
-renderTable3 :: Table -> B.Builder
-renderTable3 rs = mconcat [renderRow3 r <> B.utf8 '\n' | r <- rs]
+renderTable3 :: Table -> Builder
+renderTable3 rs = mconcat [renderRow3 r <> charUtf8 '\n' | r <- rs]
 
 encodeUtf8CSV3 :: Table -> L.ByteString
-encodeUtf8CSV3 = B.toLazyByteString . renderTable3
+encodeUtf8CSV3 = toLazyByteString . renderTable3
 
 ------------------------------------------------------------------------------
 -- Benchmark Data
@@ -205,11 +206,11 @@ stringInput = [ (show n, take n $ cycle strings) ]
 ------------------------------------------------------------------------------
 
 original, version1, version2, version3 
-  :: ([Char], B.Builder -> Int64, B.Builder -> L.ByteString)
+  :: ([Char], Builder -> Int64, Builder -> L.ByteString)
 (original, version1, version2, version3) =
     (f "original", f "version1", f "version2", f "version3")
   where
-    f x = (x, L.length . B.toLazyByteString, B.toLazyByteString)
+    f x = (x, L.length . toLazyByteString, toLazyByteString)
 
 benchmarks :: [Benchmark]
 testResults :: [String]
@@ -266,9 +267,9 @@ main = do
   print ""
   defaultMain
     [ bench "renderString maxiStrings (original)" $ 
-        whnf (L.length . B.toLazyByteString . B.foldMap renderString1) maxiStrings
+        whnf (L.length . toLazyByteString . foldMap renderString1) maxiStrings
     , bench "renderString maxiStrings (Write)" $ 
-        whnf (L.length . B.toLazyByteString . B.foldMap renderString3) maxiStrings
+        whnf (L.length . toLazyByteString . foldMap renderString3) maxiStrings
     , bench "encodeCSV maxiTable (DList)" $ 
         whnf (length . encodeCSV) maxiTable
     , bench "encodeCSV maxiTable (DList + Utf8 encode)" $ 

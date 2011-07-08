@@ -16,7 +16,7 @@ import qualified "new-bytestring" Data.ByteString.Lazy as L
 
 import Data.ByteString.Lazy.Builder
 import Data.ByteString.Lazy.Builder.Internal
-import Data.ByteString.Lazy.Builder.Write     
+import Data.ByteString.Lazy.Builder.Extras
 
 import qualified System.IO.Write as W
 

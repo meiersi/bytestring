@@ -13,10 +13,9 @@ module Regression where
 
 import qualified "blaze-builder" Blaze.ByteString.Builder as Blaze
 
-import qualified "new-bytestring" Data.ByteString.Lazy              as NewL
-import qualified "new-bytestring" Data.ByteString.Lazy.Builder           as NewL
-import qualified "new-bytestring" Data.ByteString.Lazy.Builder.Write     as NewL
-import qualified "new-bytestring" Data.ByteString.Lazy.Builder.Char.Utf8 as NewL
+import qualified "new-bytestring" Data.ByteString.Lazy                  as NewL
+import qualified "new-bytestring" Data.ByteString.Lazy.Builder          as NewL
+import qualified "new-bytestring" Data.ByteString.Lazy.Builder.Extras   as NewL
 
 import qualified "bytestring" Data.ByteString.Lazy as OldL
 import qualified Data.ByteString.Base16.Lazy       as OldBase16
@@ -127,7 +126,7 @@ testResults :: [String]
         , impl oldBS (OldL.unfoldr countToZero) intInput
         ]
      , comparison "base16 encoding of a LBS" $
-        [ impl newBS (NewL.toLazyByteString . NewL.utf8HexLower . snd) lbsInput
+        [ impl newBS (NewL.toLazyByteString . NewL.mapWriteLazyByteString W.utf8HexLower . snd) lbsInput
         , impl base16BS (OldBase16.encode . fst) lbsInput
         ]
     , comparison "filter ((0 ==) . (`mod` 2)) on a LBS"

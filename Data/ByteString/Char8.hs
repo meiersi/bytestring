@@ -1029,7 +1029,7 @@ readFile :: FilePath -> IO ByteString
 readFile f = bracket (openFile f ReadMode) hClose
     (\h -> hFileSize h >>= hGet h . fromIntegral)
 
--- | Write a 'ByteString' to a file.
+-- | Encoding a 'ByteString' to a file.
 writeFile :: FilePath -> ByteString -> IO ()
 writeFile f txt = bracket (openFile f WriteMode) hClose
     (\h -> hPut h txt)

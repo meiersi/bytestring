@@ -843,7 +843,7 @@ readInteger (Chunk c0 cs0) =
 readFile :: FilePath -> IO ByteString
 readFile f = openFile f ReadMode >>= hGetContents
 
--- | Write a 'ByteString' to a file.
+-- | Encoding a 'ByteString' to a file.
 writeFile :: FilePath -> ByteString -> IO ()
 writeFile f txt = bracket (openFile f WriteMode) hClose
     (\hdl -> hPut hdl txt)

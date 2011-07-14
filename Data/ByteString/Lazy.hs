@@ -203,15 +203,15 @@ import Prelude hiding
     ,repeat, cycle, interact, iterate,readFile,writeFile,appendFile,replicate
     ,getContents,getLine,putStr,putStrLn ,zip,zipWith,unzip,notElem)
 
-import qualified Data.List              as L  -- L for list/lazy
-import qualified Data.ByteString        as P  (ByteString) -- type name only
-import qualified Data.ByteString        as S  -- S for strict (hmm...)
+import qualified Data.List                as L  -- L for list/lazy
+import qualified Data.ByteString          as P  (ByteString) -- type name only
+import qualified Data.ByteString          as S  -- S for strict (hmm...)
 import qualified Data.ByteString.Internal as S
-import qualified Data.ByteString.Unsafe as S
+import qualified Data.ByteString.Unsafe   as S
 import Data.ByteString.Lazy.Internal
-import qualified Data.ByteString.Lazy.Builder            as B
-import qualified Data.ByteString.Lazy.Builder.ByteString as B
-import qualified Data.ByteString.Lazy.Builder.Write      as B
+import qualified Data.ByteString.Lazy.Builder                 as B
+import qualified Data.ByteString.Lazy.Builder.ByteString      as B
+import qualified Data.ByteString.Lazy.Builder.BoundedEncoding as B
 
 import Data.Monoid              (Monoid(..))
 
@@ -219,10 +219,10 @@ import Data.Word                (Word8)
 import Data.Int                 (Int64)
 import System.IO                (Handle,stdin,stdout,openBinaryFile,IOMode(..)
                                 ,hClose)
-import System.IO.Write          (word8)
+import Codec.Bounded.Encoding          (word8)
 import System.IO.Error          (mkIOError, illegalOperationErrorType)
 import System.IO.Unsafe
-import qualified System.IO.Write as W
+import qualified Codec.Bounded.Encoding as E
 #ifndef __NHC__
 import Control.Exception        (bracket)
 #else
@@ -298,7 +298,7 @@ singleton w = Chunk (S.singleton w) Empty
 
 -- | /O(n)/ Convert a '[Word8]' into a 'ByteString'. 
 pack :: [Word8] -> ByteString
-pack = B.toLazyByteString . B.fromWriteList word8
+pack = B.toLazyByteString . B.encodeListWith word8
 
 -- | /O(n)/ Converts a 'ByteString' to a '[Word8]'.
 unpack :: ByteString -> [Word8]
@@ -426,7 +426,7 @@ append xs ys = foldrChunks Chunk ys xs
 -- element of @xs@.
 {-# INLINE map #-}
 map :: (Word8 -> Word8) -> ByteString -> ByteString
-map f = B.toLazyByteString . B.mapWriteLazyByteString (W.word8 W.#. f)
+map f = B.toLazyByteString . B.encodeLazyByteStringWith (E.word8 E.#. f)
 
 -- | /O(n)/ 'reverse' @xs@ returns the elements of @xs@ in reverse order.
 reverse :: ByteString -> ByteString
@@ -638,7 +638,7 @@ cycle cs    = cs' where cs' = foldrChunks Chunk cs' cs
 -- recursive call.
 {-# INLINE unfoldr #-}
 unfoldr :: (a -> Maybe (Word8, a)) -> a -> ByteString
-unfoldr f s0 = B.toLazyByteString $ B.unfoldrWrite W.word8 f s0
+unfoldr f s0 = B.toLazyByteString $ B.unfoldrEncodeWith E.word8 f s0
  
 -- ---------------------------------------------------------------------
 -- Substrings
@@ -1020,9 +1020,9 @@ notElem w cs = not (elem w cs)
 -- returns a ByteString containing those characters that satisfy the
 -- predicate.
 filter :: (Word8 -> Bool) -> ByteString -> ByteString
-filter p = B.toLazyByteString . B.mapWriteLazyByteString write
+filter p = B.toLazyByteString . B.encodeLazyByteStringWith write
   where
-    write = W.writeIf p W.word8 W.writeNothing
+    write = E.encodeIf p E.word8 E.emptyEncoding
 {-# INLINE filter #-}
 
 {-
@@ -1270,7 +1270,7 @@ hGetNonBlocking = hGet
 readFile :: FilePath -> IO ByteString
 readFile f = openBinaryFile f ReadMode >>= hGetContents
 
--- | Write a 'ByteString' to a file.
+-- | Encoding a 'ByteString' to a file.
 --
 writeFile :: FilePath -> ByteString -> IO ()
 writeFile f txt = bracket (openBinaryFile f WriteMode) hClose
@@ -1297,11 +1297,11 @@ hPut h cs = foldrChunks (\c rest -> S.hPut h c >> rest) (return ()) cs
 hPutStr :: Handle -> ByteString -> IO ()
 hPutStr = hPut
 
--- | Write a ByteString to stdout
+-- | Encoding a ByteString to stdout
 putStr :: ByteString -> IO ()
 putStr = hPut stdout
 
--- | Write a ByteString to stdout, appending a newline byte
+-- | Encoding a ByteString to stdout, appending a newline byte
 --
 putStrLn :: ByteString -> IO ()
 putStrLn ps = hPut stdout ps >> hPut stdout (singleton 0x0a)

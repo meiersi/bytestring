@@ -8,9 +8,9 @@
 -- Portability : tested on GHC only
 --
 -- Test on what rewrite rule is required to enable the user to ignore
--- 'fromWriteList'.
+-- 'encodeListWith'.
 --
-module WriteListFusion where
+module EncodingListFusion where
 
 import qualified "new-bytestring" Data.ByteString.Lazy as L
 
@@ -18,7 +18,7 @@ import Data.ByteString.Lazy.Builder
 import Data.ByteString.Lazy.Builder.Internal
 import Data.ByteString.Lazy.Builder.Extras
 
-import qualified System.IO.Write as W
+import qualified Codec.Bounded.Encoding as E
 
 import Foreign
 import Criterion.Main
@@ -63,21 +63,21 @@ test1 = foldr (\x b -> append (word8 x) b) empty
 
 {-# NOINLINE test2 #-}
 test2 :: [Word8] -> Builder
-test2 = fromWriteList W.word8
+test2 = encodeListWith E.word8
 
 {-# RULES 
-"foldr/fromWrite" forall w.
-    foldr (\x b -> append (fromWrite w x) b) empty = fromWriteList w
+"foldr/encodeWith" forall w.
+    foldr (\x b -> append (encodeWith w x) b) empty = encodeListWith w
 
-"fromWrite/." forall (w::W.Write a) (f::b -> a).
-    fromWrite w . f = fromWrite (w W.#. f)
+"encodeWith/." forall (w::E.Encoding a) (f::b -> a).
+    encodeWith w . f = encodeWith (w E.#. f)
 
  #-}
 
 benchmarks :: [Benchmark]
 testResults :: [String]
 (benchmarks, testResults) = unzip $ 
-    [ comparison "fromWriteList W.word8" $
+    [ comparison "encodeListWith E.word8" $
         [ impl newBuilder test1 word8Input
         , impl newBuilder test2 word8Input
         ]

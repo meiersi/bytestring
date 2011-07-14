@@ -38,54 +38,43 @@ module Data.ByteString.Lazy.Builder.Extras
     , word32Host
     , word64Host
 
-    -- ** ASCII encoding characters
-    -- |
-    -- Functions for creating 'Builder's by ASCII encoding characters
-    -- (cf. <http://tools.ietf.org/html/rfc20>).
-    --
-    -- They are intended for constructing output in formats that explicitly
-    -- restrict the character encoding to 7-bit ASCII encoded characters. In all
-    -- other cases, a lossless Unicode encoding like UTF-8 is a better choice.
-    , charASCII
-    , stringASCII
-
-    -- ** Using Writes
+    -- ** Using bounded encodings
     
-    -- | 'W.Write's abstract encodings of Haskell values that can be implemented by
+    -- | Bounded 'E.Encoding's abstract encodings of Haskell values that can be implemented by
     -- writing a bounded-length sequence of bytes directly to memory. They are
     -- lifted to conversions from Haskell values to 'Builder's by wrapping them
     -- with a bound-check. The compiler can implement this bound-check very
     -- efficiently (i.e, a single comparison of the difference of two pointers to a
-    -- constant), because the bound of a 'W.Write' is always independent of the
+    -- constant), because the bound of a 'E.Encoding' is always independent of the
     -- value being encoded and, in most cases, a literal constant.
     --
-    -- 'W.Write's are the primary means for defining conversion functions from
+    -- 'E.Encoding's are the primary means for defining conversion functions from
     -- primitive Haskell values to 'Builder's. Most 'Builder' constructors
     -- provided by this library are implemented that way. 
-    -- 'W.Write's are also used to construct conversions that exploit the internal
+    -- 'E.Encoding's are also used to construct conversions that exploit the internal
     -- representation of data-structures. 
     --
-    -- For example, 'mapWriteByteString' works directly on the underlying byte
+    -- For example, 'encodeByteStringWith' works directly on the underlying byte
     -- array and uses some tricks to reduce the number of variables in its inner
     -- loop. Its efficiency is exploited for implementing the @filter@ and @map@
     -- functions in "Data.ByteString.Lazy" as
     --
-    -- > import qualified System.IO.Write as W
+    -- > import qualified Codec.Bounded.Encoding as E
     -- >
     -- > filter :: (Word8 -> Bool) -> ByteString -> ByteString
-    -- > filter p = toLazyByteString . mapWriteLazyByteString write
+    -- > filter p = toLazyByteString . encodeLazyByteStringWith write
     -- >   where
-    -- >     write = W.writeIf p W.word8 W.writeNothing
+    -- >     write = E.encodeIf p E.word8 E.emptyEncoding
     -- >
     -- > map :: (Word8 -> Word8) -> ByteString -> ByteString
-    -- > map f = toLazyByteString . mapWriteLazyByteString (W.word8 W.#. f)
+    -- > map f = toLazyByteString . encodeLazyByteStringWith (E.word8 E.#. f)
     --
     -- Compared to earlier versions of @filter@ and @map@ on lazy 'L.ByteString's,
     -- these versions use a more efficient inner loop and have the additional
     -- advantage that they always result in well-chunked 'L.ByteString's; i.e, they
     -- also perform automatic defragmentation.
     --
-    -- We can also use 'W.Write's to improve the efficiency of the following
+    -- We can also use 'E.Encoding's to improve the efficiency of the following
     -- 'renderString' function from our UTF-8 CSV table encoding example in
     -- "Data.ByteString.Lazy.Builder".
     -- 
@@ -96,30 +85,30 @@ module Data.ByteString.Lazy.Builder.Extras
     -- >     escape '\"' = charUtf8 '\\' <> charUtf8 '\"'
     -- >     escape c    = charUtf8 c
     --
-    -- The idea is to save on 'mappend's by implementing a 'W.Write' that escapes
-    -- characters and using 'fromWriteList', which implements writing a list of
+    -- The idea is to save on 'mappend's by implementing a 'E.Encoding' that escapes
+    -- characters and using 'encodeListWith', which implements writing a list of
     -- values with a tighter inner loop and no 'mappend'.
     --
     -- > import Data.ByteString.Lazy.Builder.Extras       -- assume these two 
-    -- > import System.IO.Write                     as W  -- imports are present
-    -- >          ( Write, writeIf, write2, (#.), utf8 )
+    -- > import Codec.Bounded.Encoding                     as E  -- imports are present
+    -- >          ( Encoding, encodeIf, encode2, (#.), utf8 )
     -- > 
     -- > renderString :: String -> Builder
     -- > renderString cs = 
-    -- >     charUtf8 '"' <> fromWriteList writeEscaped cs <> charUtf8 '"'
+    -- >     charUtf8 '"' <> encodeListWith escapedUtf8 cs <> charUtf8 '"'
     -- >   where
-    -- >     writeEscaped :: Write Char
-    -- >     writeEscaped = 
-    -- >       writeIf (== '\\') (write2 W.utf8 W.utf8 #. const ('\\', '\\')) $
-    -- >       writeIf (== '\"') (write2 W.utf8 W.utf8 #. const ('\\', '\"')) $
-    -- >       W.utf8
+    -- >     escapedUtf8 :: Encoding Char
+    -- >     escapedUtf8 = 
+    -- >       encodeIf (== '\\') (encode2 E.utf8 E.utf8 #. const ('\\', '\\')) $
+    -- >       encodeIf (== '\"') (encode2 E.utf8 E.utf8 #. const ('\\', '\"')) $
+    -- >       E.utf8
     --
     -- This 'Builder' considers a buffer with less than 8 free bytes as full. As
     -- all functions are inlined, the compiler is able to optimize the constant
-    -- 'W.Write's as two sequential 'poke's. Compared to the first implementation of
+    -- 'E.Encoding's as two sequential 'poke's. Compared to the first implementation of
     -- 'renderString' this implementation is 1.7x faster.
     --
-    , module Data.ByteString.Lazy.Builder.Write
+    , module Data.ByteString.Lazy.Builder.BoundedEncoding
    
     ) where
 
@@ -127,35 +116,15 @@ import Data.ByteString.Lazy.Builder.Internal
 import Data.ByteString.Lazy.Builder.ByteString
 import Data.ByteString.Lazy.Builder.Word
 import Data.ByteString.Lazy.Builder.Int
-import Data.ByteString.Lazy.Builder.Write
+import Data.ByteString.Lazy.Builder.BoundedEncoding
 
 import qualified Data.ByteString               as S
 import qualified Data.ByteString.Internal      as S
 import qualified Data.ByteString.Lazy.Internal as L
 
-import qualified System.IO.Write               as W
+import qualified Codec.Bounded.Encoding               as E
 
 import Foreign
-
-
-------------------------------------------------------------------------------
--- ASCII Encoding of Char's and String's
-------------------------------------------------------------------------------
-
--- | ASCII encode a 'Char' with a Unicode codepoint below 128. For characters
--- with a codepoint equal or greater than 128, an error is thrown.
---
-{-# INLINE charASCII #-}
-charASCII :: Char -> Builder
-charASCII = fromWrite W.ascii
-
--- | ASCII encode a 'String' consisting of characters with a Unicode codepoint
--- below 128. For characters with a codepoint equal or greater than 128, an
--- error is thrown.
---
-{-# INLINE stringASCII #-}
-stringASCII :: String -> Builder
-stringASCII = fromWriteList W.ascii
 
 
 ------------------------------------------------------------------------------

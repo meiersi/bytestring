@@ -4,18 +4,18 @@ first of all thanks for the feedback and the encouragment. I'm
 looking forward to integrating it, getting more feedback, and
 finally releasing this code.
 
-I grouped the feedback into two sections: one on the 'Write'
+I grouped the feedback into two sections: one on the 'Encoding'
 abstraction and one for the rest.
 
-1. The 'Write' abstraction --------------------------
+1. The 'Encoding' abstraction --------------------------
 
-First, let me clarify the purpose of 'Write's: they abstract
+First, let me clarify the purpose of 'Encoding's: they abstract
 encodings of Haskell values whose maximal number of bytes written
 is /independent/ of the actual value being encoded.
 
 Having access to a value-independent bound on the number of bytes
 written enables optimizations that are impossible otherwise. For
-example, the buffer-size checks of two consecutive 'Write's can
+example, the buffer-size checks of two consecutive 'Encoding's can
 be collated into a single check. This optimization will never be
 performed by a built-in optimization of the compiler, as it is
 not observationally equivalent (the chunk boundaries may change
@@ -23,15 +23,15 @@ due to the different buffer-size checks). Other optimizations
 possible using this bound could in principle be performed by the
 compiler. However, they require proofs that are way outside the
 scope of current and possibly future compilers. See
-'mapWriteByteString' for an example where the live data in the
+'encodeByteStringWith' for an example where the live data in the
 inner loop is reduced by coupling the end-pointers of the input
 and output buffers. 
 
-Hence, I conclude that the 'Write' abstraction won't be made
+Hence, I conclude that the 'Encoding' abstraction won't be made
 superfluous by future compiler optimizations. However, I also
 conclude that its name is chosen rather badly, as it reflects the
 internals of the type instead of its externally visible
-properties. Therefore, I plan to rename the type 'Write a' to
+properties. Therefore, I plan to rename the type 'Encoding a' to
 'BoundedEncoding a' and move it to a module Codec.BoundedEncoding
 or a module Data.Bounded.Encoding. What module name would you
 prefer?
@@ -40,7 +40,7 @@ In this context, I also think that it is OK for 'BoundedEncoding'
 to be a user visible type. It has a clear semantics and its
 public combinators are used to implement efficient encodings that
 perform escaping. See the documentation in
-Data.ByteString.Builder.Write for an example. I agree that it is
+Data.ByteString.Builder.Encoding for an example. I agree that it is
 better to internalize this library into bytestring. This leaves
 us with the flexibility to transparently perform changes to its
 internals. Is a module name like Codec.BoundedEncoding still

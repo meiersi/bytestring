@@ -20,7 +20,7 @@ import qualified "new-bytestring" Data.ByteString.Lazy.Builder.Extras   as NewL
 import qualified "bytestring" Data.ByteString.Lazy as OldL
 import qualified Data.ByteString.Base16.Lazy       as OldBase16
 
-import qualified System.IO.Write as W
+import qualified Codec.Bounded.Encoding as E
 
 import Foreign
 import Criterion.Main
@@ -105,7 +105,7 @@ blaze = ( "blaze"
 benchmarks :: [Benchmark]
 testResults :: [String]
 (benchmarks, testResults) = unzip $ 
-    [ comparison "fromWrite `mappend` fromWrite" $
+    [ comparison "encodeWith `mappend` encodeWith" $
         [ impl newBuilder (mconcat . map (\x -> NewL.word8 x `mappend` NewL.word8 x)) word8Input
         , impl blaze      (mconcat . map (\x -> Blaze.fromWord8 x `mappend` Blaze.fromWord8 x)) word8Input
         ]
@@ -126,7 +126,7 @@ testResults :: [String]
         , impl oldBS (OldL.unfoldr countToZero) intInput
         ]
      , comparison "base16 encoding of a LBS" $
-        [ impl newBS (NewL.toLazyByteString . NewL.mapWriteLazyByteString W.utf8HexLower . snd) lbsInput
+        [ impl newBS (NewL.toLazyByteString . NewL.encodeLazyByteStringWith E.utf8HexLower . snd) lbsInput
         , impl base16BS (OldBase16.encode . fst) lbsInput
         ]
     , comparison "filter ((0 ==) . (`mod` 2)) on a LBS"

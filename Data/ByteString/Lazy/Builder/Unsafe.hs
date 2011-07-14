@@ -266,8 +266,8 @@ concatMap f (Chunk c0 cs0) = to c0 cs0
             | otherwise = go (f (S.unsafeHead c)) (S.unsafeTail c) cs
 -}
 
-fromWriteReplicated :: (a -> Write) -> Int -> a -> Builder
-fromWriteReplicated write = 
+encodeWithReplicated :: (a -> Encoding) -> Int -> a -> Builder
+encodeWithReplicated write = 
     makeBuilder
   where
     makeBuilder !n0 x = fromBuildStepCont $ step 
@@ -282,13 +282,13 @@ fromWriteReplicated write =
                     k br'
                 go n !pf
                   | pf `plusPtr` bound <= pe0 = do
-                      pf' <- runWrite (write x) pf
+                      pf' <- runEncoding (write x) pf
                       go (n-1) pf'
                   | otherwise = return $ bufferFull bound pf $ 
                       \(BufferRange pfNew peNew) -> do 
-                          pfNew' <- runWrite (write x) pfNew
+                          pfNew' <- runEncoding (write x) pfNew
                           fill (n-1) (BufferRange pfNew' peNew)
-{-# INLINE fromWriteReplicated #-}
+{-# INLINE encodeWithReplicated #-}
 
 -- FIXME: Output repeated bytestrings for large replications.
 fromReplicateWord8 :: Int -> Word8 -> Builder
@@ -312,8 +312,8 @@ fromReplicateWord8 !n0 x =
 {-# INLINE fromReplicateWord8 #-}
 
 
-{-# RULES "fromWriteReplicated/writeWord8"
-      fromWriteReplicated writeWord8 = fromReplicateWord8
+{-# RULES "encodeWithReplicated/writeWord8"
+      encodeWithReplicated writeWord8 = fromReplicateWord8
  #-}
 
 
@@ -387,7 +387,7 @@ intersperseBlaze w lbs0 =
 ----------
 
 packBlaze :: [Word8] -> L.ByteString
-packBlaze = toLazyByteString . fromWriteList writeWord8
+packBlaze = toLazyByteString . encodeListWith writeWord8
 
 
 -- Reverse
@@ -476,12 +476,12 @@ encodeLazyBase64 =
     mkBuilder
   where
     mkBuilder bs = fromPut $ do
-        remainder <- putWriteLazyBlocks 3 writeBase64 bs 
+        remainder <- putEncodingLazyBlocks 3 writeBase64 bs 
         putBuilder $ complete remainder
 
     {-# INLINE writeBase64 #-}
     writeBase64 ip = 
-        exactWrite 4 $ \op -> do
+        exactEncoding 4 $ \op -> do
             b0 <- peekByte 0
             b1 <- peekByte 1
             b2 <- peekByte 2
@@ -497,8 +497,8 @@ encodeLazyBase64 =
     {-# INLINE complete #-}
     complete bs
       | S.null bs = mempty
-      | otherwise = fromWrite $
-          exactWrite 4 $ \op -> do
+      | otherwise = encodeWith $
+          exactEncoding 4 $ \op -> do
               let poke6Base64 off sh = pokeByteOff op off
                       (alphabet `S.unsafeIndex` fromIntegral (w `shiftR` sh .&. 63))
                   pad off = pokeByteOff op off (fromIntegral $ ord '=' :: Word8)
@@ -530,19 +530,19 @@ encodeLazyBase64 =
         return fp
 
 
--- | Process a bytestring block-wise using a 'Write' action to produce the
+-- | Process a bytestring block-wise using an 'Encoding' action to produce the
 -- output per block.
 --
 -- TODO: Compare speed with 'mapFilterMapByteString'.
-{-# INLINE putWriteBlocks #-}
-putWriteBlocks :: Int                  -- ^ Block size.
-               -> (Ptr Word8 -> Write) -- ^ 'Write' given a pointer to the
+{-# INLINE putEncodingBlocks #-}
+putEncodingBlocks :: Int                  -- ^ Block size.
+               -> (Ptr Word8 -> Encoding) -- ^ 'Encoding' given a pointer to the
                                        --   beginning of the block.
                -> S.ByteString         -- ^ 'S.ByteString' to consume blockwise.
                -> Put S.ByteString     -- ^ 'Put' returning the remaining
                                        --   bytes, which are guaranteed to be
                                        --   fewer than the block size.
-putWriteBlocks blockSize write =
+putEncodingBlocks blockSize write =
     \bs -> putBuildStepCont $ step bs
   where
     step (S.PS ifp ioff isize) !k = 
@@ -561,7 +561,7 @@ putWriteBlocks blockSize write =
 
           | otherwise  = return $ bufferFull writeBound op0 (goBS ip0) 
           where
-            writeBound   = getBound' "putWriteBlocks" write 
+            writeBound   = getBound' "putEncodingBlocks" write 
             outRemaining = (ope `minusPtr` op0) `div` writeBound
             inpRemaining = (ipe `minusPtr` ip0) `div` blockSize
 
@@ -569,26 +569,26 @@ putWriteBlocks blockSize write =
               where
                 go !ip !op
                   | ip < ipeTmp = do
-                      op' <- runWrite (write ip) op
+                      op' <- runEncoding (write ip) op
                       go (ip `plusPtr` blockSize) op'
                   | otherwise =
                       goBS ip (BufferRange op ope)
 
 
-{-# INLINE putWriteLazyBlocks #-}
-putWriteLazyBlocks :: Int                  -- ^ Block size.
-                   -> (Ptr Word8 -> Write) -- ^ 'Write' given a pointer to the
+{-# INLINE putEncodingLazyBlocks #-}
+putEncodingLazyBlocks :: Int                  -- ^ Block size.
+                   -> (Ptr Word8 -> Encoding) -- ^ 'Encoding' given a pointer to the
                                            --   beginning of the block.
                    -> L.ByteString         -- ^ 'L.ByteString' to consume blockwise.
                    -> Put S.ByteString     -- ^ 'Put' returning the remaining
                                            --   bytes, which are guaranteed to be
                                            --   fewer than the block size.
-putWriteLazyBlocks blockSize write =
+putEncodingLazyBlocks blockSize write =
     go
   where
     go L.Empty          = return S.empty
     go (L.Chunk bs lbs) = do
-      bsRem <- putWriteBlocks blockSize write bs
+      bsRem <- putEncodingBlocks blockSize write bs
       case S.length bsRem of
         lRem 
           | lRem <= 0 -> go lbs
@@ -599,7 +599,7 @@ putWriteLazyBlocks blockSize write =
                 block@(S.PS bfp boff bsize)
                   | bsize < blockSize -> return block
                   | otherwise         -> do
-                      putBuilder $ fromWrite $ 
+                      putBuilder $ encodeWith $ 
                         write (unsafeForeignPtrToPtr bfp `plusPtr` boff)
                       putLiftIO $ touchForeignPtr bfp
                       go lbsSuf 
@@ -618,14 +618,14 @@ chunks3 (b0 : b1 : b2 : bs) =
     ) : chunks3 bs
 chunks3 _                   = []
 
-cmpWriteToLib :: [Word8] -> (L.ByteString, L.ByteString)
-cmpWriteToLib bs = 
-    -- ( toLazyByteString $ fromWriteList write24bitsBase64 $ chunks3 bs
+cmpEncodingToLib :: [Word8] -> (L.ByteString, L.ByteString)
+cmpEncodingToLib bs = 
+    -- ( toLazyByteString $ encodeListWith encode24bitsBase64 $ chunks3 bs
     ( toLazyByteString $ encodeBase64 $ S.pack bs
     , (`L.Chunk` L.empty) $ encode $ S.pack bs )
 
 test3 :: Bool
-test3 = uncurry (==) $ cmpWriteToLib $ [0..]
+test3 = uncurry (==) $ cmpEncodingToLib $ [0..]
 
 test2 :: L.ByteString 
 test2 = toLazyByteString $ encodeBase64 $ S.pack [0..]
@@ -641,8 +641,8 @@ poke8 = flip poke
 -- as defined in <http://www.apps.ietf.org/rfc/rfc4648.html>.
 --
 {-# INLINE write6bitsBase64 #-}
-write6bitsBase64 :: Word32 -> Write
-write6bitsBase64 = exactWrite 1  . poke6bitsBase64
+write6bitsBase64 :: Word32 -> Encoding
+write6bitsBase64 = exactEncoding 1  . poke6bitsBase64
 
 {-# INLINE poke6bitsBase64 #-}
 poke6bitsBase64 :: Word32 -> Ptr Word8 -> IO ()
@@ -664,27 +664,27 @@ poke6bitsBase64 w = poke8 (alphabet `S.unsafeIndex` fromIntegral (w .&. 63))
 {-# INLINE writePaddedBitsBase64 #-}
 writePaddedBitsBase64 :: Bool             -- ^ Only 8 bits have to be output.
                       -> Word32           -- ^ Input whose lower 8 or 16 bits need to be output.
-                      -> Write
+                      -> Encoding
 writePaddedBitsBase64 only8 w =
     write6bitsBase64 (w `shiftr_w32` 18)                         `mappend`
     write6bitsBase64 (w `shiftr_w32` 12)                         `mappend`
-    writeIf (const only8) (const $ C8.writeChar '=')
+    encodeIf (const only8) (const $ C8.writeChar '=')
                           (write6bitsBase64 . (`shiftr_w32`  6)) 
                           w                                      `mappend`
     C8.writeChar '='
 
-{-# INLINE write24bitsBase64 #-}
-write24bitsBase64 :: Word32 -> Write
-write24bitsBase64 w = write6bitsBase64 (w `shiftr_w32` 18) `mappend`
+{-# INLINE encode24bitsBase64 #-}
+encode24bitsBase64 :: Word32 -> Encoding
+encode24bitsBase64 w = write6bitsBase64 (w `shiftr_w32` 18) `mappend`
                       write6bitsBase64 (w `shiftr_w32` 12) `mappend`
                       write6bitsBase64 (w `shiftr_w32`  6) `mappend`
                       write6bitsBase64 (w                )
 
 -- ASSUMES bits 25 - 31 are zero.
-{-# INLINE write24bitsBase64' #-}
-write24bitsBase64' :: Word32 -> Write
-write24bitsBase64' w = 
-    exactWrite 4 $ \p -> do
+{-# INLINE encode24bitsBase64' #-}
+encode24bitsBase64' :: Word32 -> Encoding
+encode24bitsBase64' w = 
+    exactEncoding 4 $ \p -> do
       poke (castPtr p              ) =<< enc (w `shiftR` 12)
       poke (castPtr $ p `plusPtr` 2) =<< enc (w .&.   0xfff)
   where

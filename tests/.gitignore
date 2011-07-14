@@ -1,6 +1,6 @@
 /builder/CSV
 /builder/Regression
-/builder/WriteListFusion
+/builder/EncodingListFusion
 /builder/Test_RewriteFoldr
 *.hi
 *.o

@@ -9,7 +9,7 @@ A package 'system-io-write':
 
   * compile-time abstraction of writing a bounded number of bytes to memory.
 
-  System.IO.Write
+  Codec.Bounded.Encoding
     - provides both exact and bounded write abstractions
 
 
@@ -32,7 +32,7 @@ Extension to the 'bytestring' package:
     - provides the types up to Builder and Put
     - provides execution functions (toByteString, toLazyByteString)
 
-  Data.ByteString.Builder.Write
+  Data.ByteString.Builder.Encoding
     - conversion from writes to builders
     - higher-order functions for constructing bytestrings using writes
       (e.g., faster filter, map, unfoldr, .. for strict and lazy bytestrings)
@@ -49,17 +49,17 @@ A package 'encoding-writes'
   * allow sharing of implementation of binary encodings of Haskell values that 
     write only a statically bounded number of bytes.
 
-  System.IO.Write.Char
+  Codec.Bounded.Encoding.Char
     - utf8, utf16, utf32 with both-endiannesses
-  System.IO.Write.Char8
+  Codec.Bounded.Encoding.Char8
     - write of the least-significant-byte (often used in low-level network
       protocol implementations)
 
-  System.IO.Write.Int
+  Codec.Bounded.Encoding.Int
     - binary writes of all sizes and byte orderings
-  System.IO.Write.Word
+  Codec.Bounded.Encoding.Word
     - binary writes of all sizes and byte orderings
-  System.IO.Write.Float
+  Codec.Bounded.Encoding.Float
     - binary writes of all sizes and byte orderings
 
 
@@ -98,7 +98,7 @@ The splitting is designed such that dependencies of different packages is
 (almost) as small as possible.
 
   text: could reuse the UTF encoding writes together with a function
-        'writeStream :: (Char -> Write) -> Text -> Builder'
+        'writeStream :: (Char -> Encoding) -> Text -> Builder'
         to define builders for serializing text values.
 
         deps: bytestring, encoding-writes, system-io-write

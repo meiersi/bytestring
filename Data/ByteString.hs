@@ -1905,17 +1905,17 @@ hPut h (PS ps s l) = withForeignPtr ps $ \p-> hPutBuf h (p `plusPtr` s) l
 hPutStr :: Handle -> ByteString -> IO ()
 hPutStr = hPut
 
--- | Write a ByteString to a handle, appending a newline byte
+-- | Encoding a ByteString to a handle, appending a newline byte
 hPutStrLn :: Handle -> ByteString -> IO ()
 hPutStrLn h ps
     | length ps < 1024 = hPut h (ps `snoc` 0x0a)
     | otherwise        = hPut h ps >> hPut h (singleton (0x0a)) -- don't copy
 
--- | Write a ByteString to stdout
+-- | Encoding a ByteString to stdout
 putStr :: ByteString -> IO ()
 putStr = hPut stdout
 
--- | Write a ByteString to stdout, appending a newline byte
+-- | Encoding a ByteString to stdout, appending a newline byte
 putStrLn :: ByteString -> IO ()
 putStrLn = hPutStrLn stdout
 
@@ -2047,7 +2047,7 @@ readFile :: FilePath -> IO ByteString
 readFile f = bracket (openBinaryFile f ReadMode) hClose
     (\h -> hFileSize h >>= hGet h . fromIntegral)
 
--- | Write a 'ByteString' to a file.
+-- | Encoding a 'ByteString' to a file.
 writeFile :: FilePath -> ByteString -> IO ()
 writeFile f txt = bracket (openBinaryFile f WriteMode) hClose
     (\h -> hPut h txt)

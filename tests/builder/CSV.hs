@@ -1,3 +1,4 @@
+{-# LANGUAGE PackageImports #-}
 -- |
 -- Copyright   : (c) 2010-2011 Simon Meier
 -- License     : BSD3-style (see LICENSE)
@@ -10,14 +11,15 @@
 --
 module CSV where
 
-import qualified Data.ByteString                     as S
-import qualified Data.ByteString.Lazy                as L
-import qualified Data.DList                          as D
+import qualified "new-bytestring" Data.ByteString                     as S
+import qualified "new-bytestring" Data.ByteString.Lazy                as L
+import           "new-bytestring" Data.ByteString.Lazy.Builder        
+import           "new-bytestring" Data.ByteString.Lazy.Builder.Extras 
 
-import Data.ByteString.Lazy.Builder        
-import Data.ByteString.Lazy.Builder.Extras 
+import qualified Data.DList                                           as D
 
-import System.IO.Write (Write, writeIf, write2, (#.), utf8)
+
+import Codec.Bounded.Encoding (Encoding, encodeIf, encode2, (#.), utf8)
 
 import Criterion.Main
 import Data.Monoid
@@ -109,7 +111,7 @@ encodeCSV :: Table -> String
 encodeCSV = D.toList . renderTableD
 
 encodeUtf8CSV_Dlist :: Table -> L.ByteString
-encodeUtf8CSV_Dlist = toLazyByteString . fromWriteList utf8 . encodeCSV
+encodeUtf8CSV_Dlist = toLazyByteString . encodeListWith utf8 . encodeCSV
       
 ------------------------------------------------------------------------------
 -- Version 1
@@ -162,12 +164,12 @@ encodeUtf8CSV2 = toLazyByteString . renderTable2
 -- improved
 renderString3 :: String -> Builder
 renderString3 cs = 
-    charUtf8 '"' <> fromWriteList writeEscaped cs <> charUtf8 '"'
+    charUtf8 '"' <> encodeListWith escapedUtf8 cs <> charUtf8 '"'
   where
-    writeEscaped :: Write Char
-    writeEscaped = 
-      writeIf (== '\\') (write2 utf8 utf8 #. const ('\\', '\\')) $
-      writeIf (== '\"') (write2 utf8 utf8 #. const ('\\', '\"')) $
+    escapedUtf8 :: Encoding Char
+    escapedUtf8 = 
+      encodeIf (== '\\') (encode2 utf8 utf8 #. const ('\\', '\\')) $
+      encodeIf (== '\"') (encode2 utf8 utf8 #. const ('\\', '\"')) $
       utf8
 
 -- carry over definitions
@@ -268,7 +270,7 @@ main = do
   defaultMain
     [ bench "renderString maxiStrings (original)" $ 
         whnf (L.length . toLazyByteString . foldMap renderString1) maxiStrings
-    , bench "renderString maxiStrings (Write)" $ 
+    , bench "renderString maxiStrings (Encoding)" $ 
         whnf (L.length . toLazyByteString . foldMap renderString3) maxiStrings
     , bench "encodeCSV maxiTable (DList)" $ 
         whnf (length . encodeCSV) maxiTable

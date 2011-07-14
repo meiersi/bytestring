@@ -232,7 +232,7 @@ import Data.ByteString.Lazy.Builder.Extras
 import Data.ByteString.Lazy.Builder.Word
 import Data.ByteString.Lazy.Builder.Int
 
-import qualified System.IO.Write as W
+import qualified Codec.Bounded.Encoding as E
 
 import qualified Data.ByteString               as S
 import qualified Data.ByteString.Lazy.Internal as L
@@ -245,12 +245,12 @@ import qualified Data.ByteString.Lazy.Internal as L
 -- | Encode a 'Char' using UTF-8.
 {-# INLINE charUtf8 #-}
 charUtf8 :: Char -> Builder
-charUtf8 = fromWrite W.utf8
+charUtf8 = encodeWith E.utf8
 
 -- | Encode a 'String' using UTF-8.
 {-# INLINE stringUtf8 #-}
 stringUtf8 :: String -> Builder
-stringUtf8 = fromWriteList W.utf8
+stringUtf8 = encodeListWith E.utf8
 
 
 ------------------------------------------------------------------------------

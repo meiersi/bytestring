@@ -112,68 +112,68 @@ fromPut (Put _ cs) = Builder cs
  #-}
 
 ------------------------------------------------------------------------------
--- Writes
+-- Encodings
 ------------------------------------------------------------------------------
 
--- | Writes are primitive serialization functions.
-data Write a = Write (a -> String)
+-- | Encodings are primitive serialization functions.
+data Encoding a = Encoding (a -> String)
 
-(#.) :: Write a -> (b -> a) -> Write b
-(Write w) #. f = Write (w . f)
+(#.) :: Encoding a -> (b -> a) -> Encoding b
+(Encoding w) #. f = Encoding (w . f)
 
-write2 :: Write a -> Write b -> Write (a, b)
-write2 (Write w1) (Write w2) = Write $ \(x,y) -> w1 x ++ " .2. " ++ w2 y
+encode2 :: Encoding a -> Encoding b -> Encoding (a, b)
+encode2 (Encoding w1) (Encoding w2) = Encoding $ \(x,y) -> w1 x ++ " .2. " ++ w2 y
 
 -- | An dummy implementation of a write for strings.
-writeString :: Write String
-writeString = Write id
+writeString :: Encoding String
+writeString = Encoding id
 
 fromString :: String -> Builder
-fromString = fromWrite writeString
+fromString = encodeWith writeString
 
 putString :: String -> Put ()
 putString = putBuilder . fromString
 
 
--- | Writes can be used to construct builders for singleton arguments...
-{-# INLINE [1] fromWrite #-}
-fromWrite :: Write a -> a -> Builder
-fromWrite (Write f) x = Builder ("write: " ++ f x)
+-- | Encodings can be used to construct builders for singleton arguments...
+{-# INLINE [1] encodeWith #-}
+encodeWith :: Encoding a -> a -> Builder
+encodeWith (Encoding f) x = Builder ("write: " ++ f x)
 
-{-# RULES "append/fromWrite" forall w1 w2 x1 x2.
-       append (fromWrite w1 x1) (fromWrite w2 x2) 
-     = fromWrite (write2 w1 w2) (x1, x2)
+{-# RULES "append/encodeWith" forall w1 w2 x1 x2.
+       append (encodeWith w1 x1) (encodeWith w2 x2) 
+     = encodeWith (encode2 w1 w2) (x1, x2)
   #-}
 
--- | ...as well as for lists. Here, we mark what 'fromWriteXXX' function was
+-- | ...as well as for lists. Here, we mark what 'encodeWithXXX' function was
 -- used to detect if a rewriting rule was applied or not.
-{-# INLINE fromWriteList #-}
-fromWriteList :: Write a -> [a] -> Builder
-fromWriteList (Write f) xs = 
+{-# INLINE encodeListWith #-}
+encodeListWith :: Encoding a -> [a] -> Builder
+encodeListWith (Encoding f) xs = 
     Builder (concat $ intersperse " | " [ "writeList: " ++ f x | x <- xs])
 
--- In the actual implementation, 'fromWriteList w' is significantly more
--- efficient than 'mconcat . map (fromWrite w)'. It moves several variables out
+-- In the actual implementation, 'encodeListWith w' is significantly more
+-- efficient than 'mconcat . map (encodeWith w)'. It moves several variables out
 -- of the inner loop and probably also helps the compilers strictness analyzer.
 -- 
 -- This rule should convert the intermediate version of 'mconcat . map
--- (fromWrite w)' and as many variants as possible to the efficient
--- 'fromWriteList' version.
+-- (encodeWith w)' and as many variants as possible to the efficient
+-- 'encodeListWith' version.
 {-# RULES
-"foldr/fromWrite" forall w.
-    foldr (\x -> append (fromWrite w x)) empty 
-  = fromWriteList w 
+"foldr/encodeWith" forall w.
+    foldr (\x -> append (encodeWith w x)) empty 
+  = encodeListWith w 
 
-"foldr/fromWrite/#." forall w f b.
-    foldr (\x -> append (fromWrite w (f x))) b
-  = foldr (\x -> append (fromWrite (w #. f) x)) b
+"foldr/encodeWith/#." forall w f b.
+    foldr (\x -> append (encodeWith w (f x))) b
+  = foldr (\x -> append (encodeWith (w #. f) x)) b
 
-"foldr/fromWrite/mapFB" forall w.
-    foldr (mapFB append (fromWrite w)) empty = fromWriteList w 
+"foldr/encodeWith/mapFB" forall w.
+    foldr (mapFB append (encodeWith w)) empty = encodeListWith w 
 
-"foldr/fromWrite/mapFB/#." forall w f b.
-    foldr (mapFB append (\x -> fromWrite w (f x))) b
-  = foldr (mapFB append (fromWrite (w #. f))) b
+"foldr/encodeWith/mapFB/#." forall w f b.
+    foldr (mapFB append (\x -> encodeWith w (f x))) b
+  = foldr (mapFB append (encodeWith (w #. f))) b
  #-}
 
 
@@ -182,27 +182,27 @@ fromWriteList (Write f) xs =
 ------------------------------------------------------------------------------
 
 goal :: [String] -> Builder
-goal = fromWriteList writeString
+goal = encodeListWith writeString
 
 works :: [String] -> Builder
-works = foldr (\x b -> append (fromWrite writeString x) b) empty
+works = foldr (\x b -> append (encodeWith writeString x) b) empty
 
 works2 :: [String] -> Builder
-works2 =  mconcat . map (fromWrite writeString)
+works2 =  mconcat . map (encodeWith writeString)
 
 works3 :: [String] -> Builder
-works3 =  mconcat . map (fromWrite writeString) . map reverse
+works3 =  mconcat . map (encodeWith writeString) . map reverse
 
 works4 :: [String] -> Builder
-works4 = foldMap_Builder $ fromWrite writeString
+works4 = foldMap_Builder $ encodeWith writeString
 
 works5 :: [String] -> Builder
-works5 = F.foldMap $ fromWrite writeString
+works5 = F.foldMap $ encodeWith writeString
 
 -- Is not optimized as well as the other cases: interchangeability of mapM_ and
 -- putBuilder is to hard for the compiler.
 test6 :: [String] -> Builder
-test6 = fromPut . mapM_ (putBuilder . fromWrite writeString)
+test6 = fromPut . mapM_ (putBuilder . encodeWith writeString)
 
 test7 :: [String] -> Builder
 test7 = F.foldMap (\x -> fromString x `mappend` fromString (tail x))
@@ -213,7 +213,7 @@ test8 :: [String] -> Builder
 test8 (x:y:z:_) = fromPut $ do {putString x; putString y; putString z}
 
 test9 :: [String] -> Builder
-test9 (x:y:_) = fromWrite (write2 writeString writeString) (x, y)
+test9 (x:y:_) = encodeWith (encode2 writeString writeString) (x, y)
 
 
 main :: IO ()

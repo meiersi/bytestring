@@ -122,8 +122,6 @@ import qualified Data.ByteString               as S
 import qualified Data.ByteString.Internal      as S
 import qualified Data.ByteString.Lazy.Internal as L
 
-import qualified Codec.Bounded.Encoding               as E
-
 import Foreign
 
 

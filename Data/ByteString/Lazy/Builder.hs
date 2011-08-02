@@ -221,6 +221,13 @@ module Data.ByteString.Lazy.Builder
     , word32LE
     , word64LE
 
+      -- ** Encoding floating point numbers
+    , floatBE 
+    , doubleBE 
+
+    , floatLE
+    , doubleLE
+
       -- ** UTF-8 encoding characters
     , charUtf8
     , stringUtf8
@@ -231,6 +238,7 @@ import Data.ByteString.Lazy.Builder.Internal
 import Data.ByteString.Lazy.Builder.Extras
 import Data.ByteString.Lazy.Builder.Word
 import Data.ByteString.Lazy.Builder.Int
+import Data.ByteString.Lazy.Builder.Floating
 
 import qualified Codec.Bounded.Encoding as E
 

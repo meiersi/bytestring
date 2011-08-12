@@ -40,22 +40,21 @@ import Foreign
 -- 'encodeWithStream' can keep control over the execution.
 
 
--- | Lift an 'Encoding' to a conversion function from a single value to a
--- 'Builder'.
+-- | Create a 'Builder' that encodes values with the given 'Encoding'.
 --
 -- We rewrite consecutive uses of 'encodeWith' such that the bound-checks are
 -- fused. For example,
 --
--- > encodeWith (utf8 c1) `mappend` encodeWith (utf8 c2)
+-- > encodeWith (word32 c1) `mappend` encodeWith (word32 c2)
 --
 -- is rewritten such that the resulting 'Builder' checks only once, if ther are
--- at least 8 free bytes, instead of checking twice, if there are at least 4
--- free bytes. This optimization is not observationally equivalent in a strict
--- sense, as it influences the boundaries of the generated chunks. However, for
--- a user of this library it is observationally equivalent, as chunk boundaries
--- of a lazy 'L.ByteString' can only be observed through the internal
--- interface. Morevoer, we expect that all 'Encoding's write much fewer than 4kb
--- (the default short buffer size). Hence, it is safe to ignore the additional
+-- at 8 free bytes, instead of checking twice, if there are 4 free bytes. This
+-- optimization is not observationally equivalent in a strict sense, as it
+-- influences the boundaries of the generated chunks. However, for a user of
+-- this library it is observationally equivalent, as chunk boundaries of a lazy
+-- 'L.ByteString' can only be observed through the internal interface.
+-- Morevoer, we expect that all 'Encoding's write much fewer than 4kb (the
+-- default short buffer size). Hence, it is safe to ignore the additional
 -- memory spilled due to the more agressive buffer wrapping introduced by this
 -- optimization.
 --
@@ -82,8 +81,8 @@ encodeWith w =
 
 -- TODO: The same rules for 'putBuilder (..) >> putBuilder (..)'
 
--- | Lift an 'Encoding' to a conversion function from a list of values to a
--- 'Builder'. This function is more efficient than the canonical
+-- | Create a 'Builder' that encodes a list of values consecutively using an
+-- 'Encoding'. This function is more efficient than the canonical
 --
 -- > mconcat . map (encodeWith w)
 --
@@ -115,8 +114,8 @@ encodeListWith w =
 -- TODO: Add 'foldMap/encodeWith' its variants
 -- TODO: Ensure that 'encodeWith w . f = encodeWith (w #. f)'
 
--- | A 'Builder' that unfolds a sequence of elements from a seed value and
--- writes each of them to the buffer.
+-- | Create a 'Builder' that encodes a sequence generated from a seed value
+-- using an 'Encoding'.
 {-# INLINE unfoldrEncodeWith #-}
 unfoldrEncodeWith :: Encoding b -> (a -> Maybe (b, a)) -> a -> Builder
 unfoldrEncodeWith w = 
@@ -141,7 +140,14 @@ unfoldrEncodeWith w =
                           !pfNew' <- runEncoding w y pfNew
                           fill x' (BufferRange pfNew' peNew)
 
--- | Consecutively execute an 'Encoding' on every byte of a strict 'S.ByteString'.
+-- | Create a 'Builder' that encodes each 'Word8' of a strict 'S.ByteString'
+-- using an 'Encoding'. For example, we can write a 'Builder' that filters
+-- a strict 'S.ByteString' as follows.
+--
+-- > import Codec.Bounded.Encoding as E (encodeIf, word8, encodeNothing)
+--
+-- > filterBS p = E.encodeIf p E.word8 E.encodeNothing
+--
 {-# INLINE encodeByteStringWith #-}
 encodeByteStringWith :: Encoding Word8 -> S.ByteString -> Builder
 encodeByteStringWith w =

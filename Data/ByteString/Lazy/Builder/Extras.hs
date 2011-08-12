@@ -28,10 +28,10 @@ module Data.ByteString.Lazy.Builder.Extras
     , module Data.ByteString.Lazy.Builder.ByteString
 
     -- ** Host-specific encodings of integers
-    , intHost  
-    , int16Host
-    , int32Host
-    , int64Host
+    -- , intHost  
+    -- , int16Host
+    -- , int32Host
+    -- , int64Host
 
     , wordHost  
     , word16Host
@@ -89,9 +89,10 @@ module Data.ByteString.Lazy.Builder.Extras
     -- characters and using 'encodeListWith', which implements writing a list of
     -- values with a tighter inner loop and no 'mappend'.
     --
-    -- > import Data.ByteString.Lazy.Builder.Extras       -- assume these two 
-    -- > import Codec.Bounded.Encoding                     as E  -- imports are present
-    -- >          ( Encoding, encodeIf, encode2, (#.), utf8 )
+    -- > import Data.ByteString.Lazy.Builder.Extras     -- assume these three
+    -- > import Codec.Bounded.Encoding                  -- imports are present
+    -- >        ( Encoding, encodeIf, (<#>), (#.) )
+    -- > import Codec.Bounded.Encoding.Utf8 (char)  
     -- > 
     -- > renderString :: String -> Builder
     -- > renderString cs = 
@@ -99,9 +100,9 @@ module Data.ByteString.Lazy.Builder.Extras
     -- >   where
     -- >     escapedUtf8 :: Encoding Char
     -- >     escapedUtf8 = 
-    -- >       encodeIf (== '\\') (encode2 E.utf8 E.utf8 #. const ('\\', '\\')) $
-    -- >       encodeIf (== '\"') (encode2 E.utf8 E.utf8 #. const ('\\', '\"')) $
-    -- >       E.utf8
+    -- >       encodeIf (== '\\') (char <#> char #. const ('\\', '\\')) $
+    -- >       encodeIf (== '\"') (char <#> char #. const ('\\', '\"')) $
+    -- >       char
     --
     -- This 'Builder' considers a buffer with less than 8 free bytes as full. As
     -- all functions are inlined, the compiler is able to optimize the constant
@@ -115,7 +116,7 @@ module Data.ByteString.Lazy.Builder.Extras
 import Data.ByteString.Lazy.Builder.Internal
 import Data.ByteString.Lazy.Builder.ByteString
 import Data.ByteString.Lazy.Builder.Word
-import Data.ByteString.Lazy.Builder.Int
+-- import Data.ByteString.Lazy.Builder.Int
 import Data.ByteString.Lazy.Builder.BoundedEncoding
 
 import qualified Data.ByteString               as S

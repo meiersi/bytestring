@@ -199,36 +199,28 @@ module Data.ByteString.Lazy.Builder
     , byteString
     , lazyByteString
 
-      -- ** Encoding signed integers
-    , int8
-
-    , int16BE 
-    , int32BE 
-    , int64BE 
-
-    , int16LE
-    , int32LE
-    , int64LE
-      
-      -- ** Encoding unsigned integers
+      -- ** Binary encodings
+      -- -- ** Encoding unsigned integers
     , word8
 
+      -- *** Big-endian
     , word16BE 
     , word32BE 
     , word64BE 
 
+      -- *** Little-endian
     , word16LE
     , word32LE
     , word64LE
 
-      -- ** Encoding floating point numbers
-    , floatBE 
-    , doubleBE 
+      -- -- ** Encoding floating point numbers
+    -- , floatBE 
+    -- , doubleBE 
 
-    , floatLE
-    , doubleLE
+    -- , floatLE
+    -- , doubleLE
 
-      -- ** UTF-8 encoding characters
+    -- ** UTF-8 encoding
     , charUtf8
     , stringUtf8
       
@@ -237,10 +229,11 @@ module Data.ByteString.Lazy.Builder
 import Data.ByteString.Lazy.Builder.Internal
 import Data.ByteString.Lazy.Builder.Extras
 import Data.ByteString.Lazy.Builder.Word
-import Data.ByteString.Lazy.Builder.Int
-import Data.ByteString.Lazy.Builder.Floating
+-- import Data.ByteString.Lazy.Builder.Int
+-- import Data.ByteString.Lazy.Builder.Floating
 
-import qualified Codec.Bounded.Encoding as E
+import qualified Codec.Bounded.Encoding      as E
+import qualified Codec.Bounded.Encoding.Utf8 as Utf8
 
 import qualified Data.ByteString               as S
 import qualified Data.ByteString.Lazy.Internal as L
@@ -253,12 +246,12 @@ import qualified Data.ByteString.Lazy.Internal as L
 -- | Encode a 'Char' using UTF-8.
 {-# INLINE charUtf8 #-}
 charUtf8 :: Char -> Builder
-charUtf8 = encodeWith E.utf8
+charUtf8 = encodeWith Utf8.char
 
 -- | Encode a 'String' using UTF-8.
 {-# INLINE stringUtf8 #-}
 stringUtf8 :: String -> Builder
-stringUtf8 = encodeListWith E.utf8
+stringUtf8 = encodeListWith Utf8.char
 
 
 ------------------------------------------------------------------------------

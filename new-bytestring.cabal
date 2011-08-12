@@ -48,8 +48,8 @@ library
   other-modules:
                      Data.ByteString.Lazy.Builder.BoundedEncoding
                      Data.ByteString.Lazy.Builder.Word
-                     Data.ByteString.Lazy.Builder.Int
-                     Data.ByteString.Lazy.Builder.Floating
+                     -- Data.ByteString.Lazy.Builder.Int
+                     -- Data.ByteString.Lazy.Builder.Floating
                      Data.ByteString.Lazy.Builder.Internal.Buffer
                      Data.ByteString.Lazy.Builder.ByteString
 

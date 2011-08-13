@@ -8,6 +8,8 @@
 -- Stability   : experimental
 -- Portability : tested on GHC only
 --
+-- TODO: Define the notion of a /chunk/.
+--
 -- The 'Builder' type provides a representation of a stream of bytes
 -- (i.e, a possibly infinite sequence of bytes) which is efficient in
 -- the following sense:
@@ -196,62 +198,50 @@ module Data.ByteString.Lazy.Builder
 
       -- * Creating Builders
     , flush
-    , byteString
-    , lazyByteString
 
       -- ** Binary encodings
-      -- -- ** Encoding unsigned integers
+    , byteString
+    , lazyByteString
+    , int8
     , word8
 
       -- *** Big-endian
+    , int16BE 
+    , int32BE 
+    , int64BE 
+
     , word16BE 
     , word32BE 
     , word64BE 
 
+    , floatBE 
+    , doubleBE 
+
       -- *** Little-endian
+    , int16LE
+    , int32LE
+    , int64LE
+
     , word16LE
     , word32LE
     , word64LE
 
-      -- -- ** Encoding floating point numbers
-    -- , floatBE 
-    -- , doubleBE 
-
-    -- , floatLE
-    -- , doubleLE
+    , floatLE
+    , doubleLE
 
     -- ** UTF-8 encoding
-    , charUtf8
-    , stringUtf8
+    -- | Use the "Data.ByteString.Lazy.Builder.Utf8" module.
       
     ) where
 
 import Data.ByteString.Lazy.Builder.Internal
 import Data.ByteString.Lazy.Builder.Extras
 import Data.ByteString.Lazy.Builder.Word
--- import Data.ByteString.Lazy.Builder.Int
--- import Data.ByteString.Lazy.Builder.Floating
-
-import qualified Codec.Bounded.Encoding      as E
-import qualified Codec.Bounded.Encoding.Utf8 as Utf8
+import Data.ByteString.Lazy.Builder.Int
+import Data.ByteString.Lazy.Builder.Floating
 
 import qualified Data.ByteString               as S
 import qualified Data.ByteString.Lazy.Internal as L
-
-
-------------------------------------------------------------------------------
--- UTF-8 Encoding of Char's and String's
-------------------------------------------------------------------------------
-
--- | Encode a 'Char' using UTF-8.
-{-# INLINE charUtf8 #-}
-charUtf8 :: Char -> Builder
-charUtf8 = encodeWith Utf8.char
-
--- | Encode a 'String' using UTF-8.
-{-# INLINE stringUtf8 #-}
-stringUtf8 :: String -> Builder
-stringUtf8 = encodeListWith Utf8.char
 
 
 ------------------------------------------------------------------------------
@@ -271,13 +261,13 @@ stringUtf8 = encodeListWith Utf8.char
 --
 {-# INLINE byteString #-}
 byteString :: S.ByteString -> Builder
-byteString = byteStringWith defaultMaximalCopySize
+byteString = byteStringThreshold defaultMaximalCopySize
 
 -- | Chunk-wise application of 'byteString' to a lazy 'L.ByteString'.
 --
 {-# INLINE lazyByteString #-}
 lazyByteString :: L.ByteString -> Builder
-lazyByteString = lazyByteStringWith defaultMaximalCopySize
+lazyByteString = lazyByteStringThreshold defaultMaximalCopySize
 
 -- | The maxiamal size of a bytestring that is copied. 
 -- @2 * 'L.smallChunkSize'@ to guarantee that on average a chunk is of

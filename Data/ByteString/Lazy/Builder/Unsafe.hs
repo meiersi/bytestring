@@ -417,7 +417,7 @@ packBlaze = toLazyByteString . encodeListWith writeWord8
 -------
 
 copyBlaze :: L.ByteString -> L.ByteString
-copyBlaze = toLazyByteString . copyLazyByteString
+copyBlaze = toLazyByteString . lazyByteStringCopy
 
 
 -- ?? packCString, packCStringLen

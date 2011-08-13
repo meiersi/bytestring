@@ -12,13 +12,13 @@
 --
 module Data.ByteString.Lazy.Builder.ByteString
     ( 
-      byteStringWith
-    , copyByteString
-    , insertByteString
+      byteStringCopy
+    , byteStringInsert
+    , byteStringThreshold
 
-    , lazyByteStringWith
-    , copyLazyByteString
-    , insertLazyByteString
+    , lazyByteStringCopy
+    , lazyByteStringInsert
+    , lazyByteStringThreshold
     ) where
 
 import Data.ByteString.Lazy.Builder.Internal 
@@ -40,32 +40,32 @@ import qualified Data.ByteString.Lazy.Internal as L
 -- | Create a 'Builder' denoting the same sequence of bytes as a strict
 -- 'S.ByteString'.
 --
--- A 'Builder' defined as @'byteStringWith' maxCopySize bs@ copies @bs@, if
+-- A 'Builder' defined as @'byteStringThreshold' maxCopySize bs@ copies @bs@, if
 -- it is shorter than @maxCopySize@, and inserts it directly, otherwise.
 --
-{-# INLINE byteStringWith #-}
-byteStringWith :: Int -> S.ByteString -> Builder     
-byteStringWith maxCopySize = 
+{-# INLINE byteStringThreshold #-}
+byteStringThreshold :: Int -> S.ByteString -> Builder     
+byteStringThreshold maxCopySize = 
     \bs -> builder $ step bs
   where
     step !bs !k br@(BufferRange !op _)
       | maxCopySize < S.length bs = return $ insertChunk op bs k
-      | otherwise                 = copyByteStringStep bs k br
+      | otherwise                 = byteStringCopyStep bs k br
 
 -- | The created 'Builder' always copies the 'S.ByteString'. Use this function
 -- to create 'Builder's from smallish (@<= 4kb@) 'S.ByteString's or if you need
 -- to guarantee that the 'S.ByteString' is not shared with the chunks generated
 -- by the 'Builder'.
 --
-{-# INLINE copyByteString #-}
-copyByteString :: S.ByteString -> Builder
-copyByteString = \bs -> builder $ copyByteStringStep bs
+{-# INLINE byteStringCopy #-}
+byteStringCopy :: S.ByteString -> Builder
+byteStringCopy = \bs -> builder $ byteStringCopyStep bs
 
-{-# INLINE copyByteStringStep #-}
-copyByteStringStep :: S.ByteString 
+{-# INLINE byteStringCopyStep #-}
+byteStringCopyStep :: S.ByteString 
                    -> (BufferRange -> IO (BuildSignal a))
                    -> (BufferRange -> IO (BuildSignal a))
-copyByteStringStep (S.PS ifp ioff isize) !k = 
+byteStringCopyStep (S.PS ifp ioff isize) !k = 
     goBS (unsafeForeignPtrToPtr ifp `plusPtr` ioff)
   where
     !ipe = unsafeForeignPtrToPtr ifp `plusPtr` (ioff + isize)
@@ -85,13 +85,13 @@ copyByteStringStep (S.PS ifp ioff isize) !k =
 
 -- | The created 'Builder' always inserts the 'S.ByteString' directly as a chunk. 
 -- This implies flushing the output buffer; even if it contains just
--- a single byte! Hence, you should use 'insertByteString' only for large (@>
+-- a single byte! Hence, you should use 'byteStringInsert' only for large (@>
 -- 8kb@) 'S.ByteString's. Otherwise, the generated chunks are too fragmented to
 -- be processed efficiently.
 --
-{-# INLINE insertByteString #-}
-insertByteString :: S.ByteString -> Builder
-insertByteString = 
+{-# INLINE byteStringInsert #-}
+byteStringInsert :: S.ByteString -> Builder
+byteStringInsert = 
     \bs -> builder $ step bs
   where
     step !bs !k !(BufferRange op _) = return $ insertChunk op bs k
@@ -100,28 +100,28 @@ insertByteString =
 -- Lazy bytestrings
 ------------------------------------------------------------------------------
 
--- | Chunk-wise application of 'byteStringWith' to a lazy 'L.ByteString'.
+-- | Chunk-wise application of 'byteStringThreshold' to a lazy 'L.ByteString'.
 --
-{-# INLINE lazyByteStringWith #-}
-lazyByteStringWith :: Int -> L.ByteString -> Builder
-lazyByteStringWith maxCopySize = 
-  L.foldrChunks (\bs b -> byteStringWith maxCopySize bs `mappend` b) mempty
+{-# INLINE lazyByteStringThreshold #-}
+lazyByteStringThreshold :: Int -> L.ByteString -> Builder
+lazyByteStringThreshold maxCopySize = 
+  L.foldrChunks (\bs b -> byteStringThreshold maxCopySize bs `mappend` b) mempty
 
--- | Chunk-wise application of 'copyByteString' to a lazy 'L.ByteString'.
+-- | Chunk-wise application of 'byteStringCopy' to a lazy 'L.ByteString'.
 --
-{-# INLINE copyLazyByteString #-}
-copyLazyByteString :: L.ByteString -> Builder
-copyLazyByteString = 
-  L.foldrChunks (\bs b -> copyByteString bs `mappend` b) mempty
+{-# INLINE lazyByteStringCopy #-}
+lazyByteStringCopy :: L.ByteString -> Builder
+lazyByteStringCopy = 
+  L.foldrChunks (\bs b -> byteStringCopy bs `mappend` b) mempty
 
 -- This function costs /O(n)/ where /n/ is the number of chunks of the lazy
 -- 'L.ByteString'. The design of the 'Builder' could be changed to support an
 -- /O(1)/ insertion of a difference-list style lazy bytestring. Please contact
 -- me, if you have a use case for that.
 
--- | Chunk-wise application of 'insertByteString' to a lazy 'L.ByteString'.
+-- | Chunk-wise application of 'byteStringInsert' to a lazy 'L.ByteString'.
 --
-{-# INLINE insertLazyByteString #-}
-insertLazyByteString :: L.ByteString -> Builder
-insertLazyByteString =
-  L.foldrChunks (\bs b -> insertByteString bs `mappend` b) mempty
+{-# INLINE lazyByteStringInsert #-}
+lazyByteStringInsert :: L.ByteString -> Builder
+lazyByteStringInsert =
+  L.foldrChunks (\bs b -> byteStringInsert bs `mappend` b) mempty

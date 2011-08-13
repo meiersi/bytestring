@@ -211,7 +211,7 @@ import qualified Data.ByteString.Unsafe   as S
 import Data.ByteString.Lazy.Internal
 import qualified Data.ByteString.Lazy.Builder                 as B
 import qualified Data.ByteString.Lazy.Builder.ByteString      as B
-import qualified Data.ByteString.Lazy.Builder.BoundedEncoding as B
+import qualified Data.ByteString.Lazy.Builder.BoundedEncoding as E
 
 import Data.Monoid              (Monoid(..))
 
@@ -219,10 +219,8 @@ import Data.Word                (Word8)
 import Data.Int                 (Int64)
 import System.IO                (Handle,stdin,stdout,openBinaryFile,IOMode(..)
                                 ,hClose)
-import Codec.Bounded.Encoding          (word8)
 import System.IO.Error          (mkIOError, illegalOperationErrorType)
 import System.IO.Unsafe
-import qualified Codec.Bounded.Encoding as E
 #ifndef __NHC__
 import Control.Exception        (bracket)
 #else
@@ -298,7 +296,7 @@ singleton w = Chunk (S.singleton w) Empty
 
 -- | /O(n)/ Convert a '[Word8]' into a 'ByteString'. 
 pack :: [Word8] -> ByteString
-pack = B.toLazyByteString . B.encodeListWith word8
+pack = B.toLazyByteString . E.encodeListWith E.word8
 
 -- | /O(n)/ Converts a 'ByteString' to a '[Word8]'.
 unpack :: ByteString -> [Word8]
@@ -426,7 +424,7 @@ append xs ys = foldrChunks Chunk ys xs
 -- element of @xs@.
 {-# INLINE map #-}
 map :: (Word8 -> Word8) -> ByteString -> ByteString
-map f = B.toLazyByteString . B.encodeLazyByteStringWith (E.word8 E.#. f)
+map f = B.toLazyByteString . E.encodeLazyByteStringWith (E.word8 E.#. f)
 
 -- | /O(n)/ 'reverse' @xs@ returns the elements of @xs@ in reverse order.
 reverse :: ByteString -> ByteString
@@ -638,7 +636,7 @@ cycle cs    = cs' where cs' = foldrChunks Chunk cs' cs
 -- recursive call.
 {-# INLINE unfoldr #-}
 unfoldr :: (a -> Maybe (Word8, a)) -> a -> ByteString
-unfoldr f s0 = B.toLazyByteString $ B.unfoldrEncodeWith E.word8 f s0
+unfoldr f s0 = B.toLazyByteString $ E.encodeUnfoldrWith E.word8 f s0
  
 -- ---------------------------------------------------------------------
 -- Substrings
@@ -1020,7 +1018,7 @@ notElem w cs = not (elem w cs)
 -- returns a ByteString containing those characters that satisfy the
 -- predicate.
 filter :: (Word8 -> Bool) -> ByteString -> ByteString
-filter p = B.toLazyByteString . B.encodeLazyByteStringWith write
+filter p = B.toLazyByteString . E.encodeLazyByteStringWith write
   where
     write = E.encodeIf p E.word8 E.emptyEncoding
 {-# INLINE filter #-}
@@ -1159,7 +1157,7 @@ tails cs@(Chunk c cs')
 -- bytestring (e.g., by forcing its length) in order to drop all references to
 -- old chunks.
 copy :: ByteString -> ByteString
-copy = B.toLazyByteString . B.copyLazyByteString
+copy = B.toLazyByteString . B.lazyByteStringCopy
 
 -- ---------------------------------------------------------------------
 -- Lazy ByteString IO

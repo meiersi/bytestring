@@ -13,111 +13,38 @@
 -----------------------------------------------------------------------------
 module Data.ByteString.Lazy.Builder.Extras
     ( 
-    -- * Execution
+    -- * Execution strategies
       AllocationStrategy
     , toLazyByteStringWith
-    , toLazyByteStringUntrimmed
-    , L.smallChunkSize
-    , L.defaultChunkSize
     , safeStrategy
     , untrimmedStrategy
+    , L.smallChunkSize
+    , L.defaultChunkSize
 
-    -- * Creating Builders
-    
-    -- ** Inserting and copying bytestrings
+    -- * Controlled insertion of bytestrings
     , module Data.ByteString.Lazy.Builder.ByteString
 
-    -- ** Host-specific encodings of integers
-    -- , intHost  
-    -- , int16Host
-    -- , int32Host
-    -- , int64Host
+    -- * Host-specific binary encodings
+    , intHost  
+    , int16Host
+    , int32Host
+    , int64Host
 
     , wordHost  
     , word16Host
     , word32Host
     , word64Host
 
-    -- ** Using bounded encodings
-    
-    -- | Bounded 'E.Encoding's abstract encodings of Haskell values that can be implemented by
-    -- writing a bounded-length sequence of bytes directly to memory. They are
-    -- lifted to conversions from Haskell values to 'Builder's by wrapping them
-    -- with a bound-check. The compiler can implement this bound-check very
-    -- efficiently (i.e, a single comparison of the difference of two pointers to a
-    -- constant), because the bound of a 'E.Encoding' is always independent of the
-    -- value being encoded and, in most cases, a literal constant.
-    --
-    -- 'E.Encoding's are the primary means for defining conversion functions from
-    -- primitive Haskell values to 'Builder's. Most 'Builder' constructors
-    -- provided by this library are implemented that way. 
-    -- 'E.Encoding's are also used to construct conversions that exploit the internal
-    -- representation of data-structures. 
-    --
-    -- For example, 'encodeByteStringWith' works directly on the underlying byte
-    -- array and uses some tricks to reduce the number of variables in its inner
-    -- loop. Its efficiency is exploited for implementing the @filter@ and @map@
-    -- functions in "Data.ByteString.Lazy" as
-    --
-    -- > import qualified Codec.Bounded.Encoding as E
-    -- >
-    -- > filter :: (Word8 -> Bool) -> ByteString -> ByteString
-    -- > filter p = toLazyByteString . encodeLazyByteStringWith write
-    -- >   where
-    -- >     write = E.encodeIf p E.word8 E.emptyEncoding
-    -- >
-    -- > map :: (Word8 -> Word8) -> ByteString -> ByteString
-    -- > map f = toLazyByteString . encodeLazyByteStringWith (E.word8 E.#. f)
-    --
-    -- Compared to earlier versions of @filter@ and @map@ on lazy 'L.ByteString's,
-    -- these versions use a more efficient inner loop and have the additional
-    -- advantage that they always result in well-chunked 'L.ByteString's; i.e, they
-    -- also perform automatic defragmentation.
-    --
-    -- We can also use 'E.Encoding's to improve the efficiency of the following
-    -- 'renderString' function from our UTF-8 CSV table encoding example in
-    -- "Data.ByteString.Lazy.Builder".
-    -- 
-    -- > renderString :: String -> Builder
-    -- > renderString cs = charUtf8 '"' <> foldMap escape cs <> charUtf8 '"'
-    -- >   where
-    -- >     escape '\\' = charUtf8 '\\' <> charUtf8 '\\'
-    -- >     escape '\"' = charUtf8 '\\' <> charUtf8 '\"'
-    -- >     escape c    = charUtf8 c
-    --
-    -- The idea is to save on 'mappend's by implementing a 'E.Encoding' that escapes
-    -- characters and using 'encodeListWith', which implements writing a list of
-    -- values with a tighter inner loop and no 'mappend'.
-    --
-    -- > import Data.ByteString.Lazy.Builder.Extras     -- assume these three
-    -- > import Codec.Bounded.Encoding                  -- imports are present
-    -- >        ( Encoding, encodeIf, (<#>), (#.) )
-    -- > import Codec.Bounded.Encoding.Utf8 (char)  
-    -- > 
-    -- > renderString :: String -> Builder
-    -- > renderString cs = 
-    -- >     charUtf8 '"' <> encodeListWith escapedUtf8 cs <> charUtf8 '"'
-    -- >   where
-    -- >     escapedUtf8 :: Encoding Char
-    -- >     escapedUtf8 = 
-    -- >       encodeIf (== '\\') (char <#> char #. const ('\\', '\\')) $
-    -- >       encodeIf (== '\"') (char <#> char #. const ('\\', '\"')) $
-    -- >       char
-    --
-    -- This 'Builder' considers a buffer with less than 8 free bytes as full. As
-    -- all functions are inlined, the compiler is able to optimize the constant
-    -- 'E.Encoding's as two sequential 'poke's. Compared to the first implementation of
-    -- 'renderString' this implementation is 1.7x faster.
-    --
-    , module Data.ByteString.Lazy.Builder.BoundedEncoding
+    , floatHost
+    , doubleHost
    
     ) where
 
 import Data.ByteString.Lazy.Builder.Internal
 import Data.ByteString.Lazy.Builder.ByteString
 import Data.ByteString.Lazy.Builder.Word
--- import Data.ByteString.Lazy.Builder.Int
-import Data.ByteString.Lazy.Builder.BoundedEncoding
+import Data.ByteString.Lazy.Builder.Int
+import Data.ByteString.Lazy.Builder.Floating
 
 import qualified Data.ByteString               as S
 import qualified Data.ByteString.Internal      as S
@@ -170,16 +97,6 @@ safeStrategy :: Int  -- ^ Size of first buffer
              -- of the allocated memory is used for live data
 safeStrategy firstSize bufSize = 
     AllocationStrategy firstSize bufSize (\used size -> 2*used < size)
-
--- | Execute a 'Builder' with the 'untrimmedStrategy' and the same buffer
--- sizes as 'toLazyByteString'. 
---
--- Use this function for generating lazy 'L.ByteString's whose chunks are
--- discarded right after they are generated. For example, if you just generate
--- and write them them to a network socket.
-toLazyByteStringUntrimmed :: Builder -> L.ByteString
-toLazyByteStringUntrimmed = toLazyByteStringWith
-    (untrimmedStrategy L.smallChunkSize L.defaultChunkSize) L.Empty
 
 -- | Execute a 'Builder' with custom execution parameters.
 --

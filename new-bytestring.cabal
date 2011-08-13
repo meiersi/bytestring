@@ -15,9 +15,11 @@ Description:
 License:             BSD3
 License-file:        LICENSE
 Category:            Data
-Copyright:           Copyright (c) Don Stewart   2005-2009,
-                               (c) Duncan Coutts 2006-2009,
-                               (c) David Roundy  2003-2005.
+Copyright:           Copyright (c) Don Stewart          2005-2009,
+                               (c) Duncan Coutts        2006-2009,
+                               (c) David Roundy         2003-2005,
+                               (c) Jasper Van der Jeugt 2010,
+                               (c) Simon Meier          2010-2011.
 Author:              Don Stewart, Duncan Coutts
 Maintainer:          dons@galois.com, duncan@haskell.org
 Homepage:            http://www.cse.unsw.edu.au/~dons/fps.html
@@ -27,8 +29,7 @@ Cabal-Version:       >= 1.2.3
 extra-source-files:  README TODO
 
 library
-  build-depends:     base < 5, 
-                     bounded-encoding >= 0.1 && < 0.2
+  build-depends:     base < 5
 
   if impl(ghc >= 6.10)
     build-depends:   ghc-prim, base >= 4
@@ -42,16 +43,28 @@ library
                      Data.ByteString.Lazy.Internal
                      Data.ByteString.Fusion
                      Data.ByteString.Lazy.Builder
-                     Data.ByteString.Lazy.Builder.Extras
                      Data.ByteString.Lazy.Builder.Internal
-                     Data.ByteString.Lazy.Put
-  other-modules:
+                     Data.ByteString.Lazy.Builder.Extras
+                     Data.ByteString.Lazy.Builder.Utf8
                      Data.ByteString.Lazy.Builder.BoundedEncoding
+                     Data.ByteString.Lazy.Builder.BoundedEncoding.Utf8
+                     Codec.Bounded.Encoding.Internal
+
+  other-modules:     
                      Data.ByteString.Lazy.Builder.Word
-                     -- Data.ByteString.Lazy.Builder.Int
-                     -- Data.ByteString.Lazy.Builder.Floating
+                     Data.ByteString.Lazy.Builder.Int
+                     Data.ByteString.Lazy.Builder.Floating
                      Data.ByteString.Lazy.Builder.Internal.Buffer
                      Data.ByteString.Lazy.Builder.ByteString
+
+                     Codec.Bounded.Encoding.Bench
+                     Codec.Bounded.Encoding.Int
+                     Codec.Bounded.Encoding.Word
+                     Codec.Bounded.Encoding.Floating
+                     Codec.Bounded.Encoding.Internal.UncheckedShifts
+                     Codec.Bounded.Encoding.Internal.Region
+                     Codec.Bounded.Encoding.Internal.Base16
+                     Codec.Bounded.Encoding.Internal.Test
 
   extensions:        CPP, ForeignFunctionInterface
 

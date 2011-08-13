@@ -22,7 +22,6 @@ Todo items
       efficiently by GHC
     - ensure that GHC Base inlines default methods on Foldable. Perhaps, 
       default methods should always be inlined?
-
     - check if reordering the BuildSignal constructors yields a speed
       improvement. According to Milan Straka putting the most used constructor
       first may result in a speed improvement.

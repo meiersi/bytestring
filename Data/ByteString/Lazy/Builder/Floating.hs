@@ -27,28 +27,27 @@ module Data.ByteString.Lazy.Builder.Floating
     ) where
 
 import Data.ByteString.Lazy.Builder.Internal
-import Data.ByteString.Lazy.Builder.BoundedEncoding
-import qualified Codec.Bounded.Encoding as E
+import qualified Data.ByteString.Lazy.Builder.BoundedEncoding as E
 
 -- | Encode a 'Float' in big endian format.
 {-# INLINE floatBE #-}
 floatBE :: Float -> Builder
-floatBE = encodeWith E.floatBE
+floatBE = E.encodeWith E.floatBE
 
 -- | Encode a 'Float' in little endian format.
 {-# INLINE floatLE #-}
 floatLE :: Float -> Builder
-floatLE = encodeWith E.floatLE
+floatLE = E.encodeWith E.floatLE
 
 -- | Encode a 'Double' in big endian format.
 {-# INLINE doubleBE #-}
 doubleBE :: Double -> Builder
-doubleBE = encodeWith E.doubleBE
+doubleBE = E.encodeWith E.doubleBE
 
 -- | Encode a 'Double' in little endian format.
 {-# INLINE doubleLE #-}
 doubleLE :: Double -> Builder
-doubleLE = encodeWith E.doubleLE
+doubleLE = E.encodeWith E.doubleLE
 
 -- | Encode a single native machine 'Int'. The 'Int' is encoded in host order,
 -- host endian form, for the machine you're on. On a 64 bit machine the 'Int'
@@ -61,11 +60,11 @@ doubleLE = encodeWith E.doubleLE
 
 {-# INLINE floatHost #-}
 floatHost :: Float -> Builder
-floatHost = encodeWith E.floatHost
+floatHost = E.encodeWith E.floatHost
 
 -- | Encode a 'Double' in native host order.
 {-# INLINE doubleHost #-}
 doubleHost :: Double -> Builder
-doubleHost = encodeWith E.doubleHost
+doubleHost = E.encodeWith E.doubleHost
 
 

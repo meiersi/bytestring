@@ -32,45 +32,44 @@ module Data.ByteString.Lazy.Builder.Int
     ) where
 
 import Data.ByteString.Lazy.Builder.Internal
-import Data.ByteString.Lazy.Builder.BoundedEncoding
-import qualified Codec.Bounded.Encoding as E
+import qualified Data.ByteString.Lazy.Builder.BoundedEncoding as E
 import Foreign
 
 -- | Encode a single unsigned byte as-is.
 --
 {-# INLINE int8 #-}
 int8 :: Int8 -> Builder
-int8 = encodeWith E.int8
+int8 = E.encodeWith E.int8
 
 -- | Encode a 'Int16' in big endian format.
 {-# INLINE int16BE #-}
 int16BE :: Int16 -> Builder
-int16BE = encodeWith E.int16BE
+int16BE = E.encodeWith E.int16BE
 
 -- | Encode a 'Int16' in little endian format.
 {-# INLINE int16LE #-}
 int16LE :: Int16 -> Builder
-int16LE = encodeWith E.int16LE
+int16LE = E.encodeWith E.int16LE
 
 -- | Encode a 'Int32' in big endian format.
 {-# INLINE int32BE #-}
 int32BE :: Int32 -> Builder
-int32BE = encodeWith E.int32BE
+int32BE = E.encodeWith E.int32BE
 
 -- | Encode a 'Int32' in little endian format.
 {-# INLINE int32LE #-}
 int32LE :: Int32 -> Builder
-int32LE = encodeWith E.int32LE
+int32LE = E.encodeWith E.int32LE
 
 -- | Encode a 'Int64' in big endian format.
 {-# INLINE int64BE #-}
 int64BE :: Int64 -> Builder
-int64BE = encodeWith E.int64BE
+int64BE = E.encodeWith E.int64BE
 
 -- | Encode a 'Int64' in little endian format.
 {-# INLINE int64LE #-}
 int64LE :: Int64 -> Builder
-int64LE = encodeWith E.int64LE
+int64LE = E.encodeWith E.int64LE
 
 -- | Encode a single native machine 'Int'. The 'Int' is encoded in host order,
 -- host endian form, for the machine you're on. On a 64 bit machine the 'Int'
@@ -80,21 +79,21 @@ int64LE = encodeWith E.int64LE
 --
 {-# INLINE intHost #-}
 intHost :: Int -> Builder
-intHost = encodeWith E.intHost
+intHost = E.encodeWith E.intHost
 
 -- | Encode a 'Int16' in native host order and host endianness.
 {-# INLINE int16Host #-}
 int16Host :: Int16 -> Builder
-int16Host = encodeWith E.int16Host
+int16Host = E.encodeWith E.int16Host
 
 -- | Encode a 'Int32' in native host order and host endianness.
 {-# INLINE int32Host #-}
 int32Host :: Int32 -> Builder
-int32Host = encodeWith E.int32Host
+int32Host = E.encodeWith E.int32Host
 
 -- | Encode a 'Int64' in native host order and host endianness.
 {-# INLINE int64Host #-}
 int64Host :: Int64 -> Builder
-int64Host = encodeWith E.int64Host
+int64Host = E.encodeWith E.int64Host
 
 

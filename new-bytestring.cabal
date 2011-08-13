@@ -87,6 +87,7 @@ library
     ghc-options:    -fdicts-cheap
 
   c-sources:         cbits/fpstring.c
+                     cbits/itoa.c
   include-dirs:      include
   includes:          fpstring.h
   install-includes:  fpstring.h

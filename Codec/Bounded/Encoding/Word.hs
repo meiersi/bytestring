@@ -68,36 +68,50 @@ word8 = writeStorable
 -- | Encoding 'Word16's in big endian format.
 {-# INLINE word16BE #-}
 word16BE :: Encoding Word16
+#ifdef WORD_BIGENDIAN
+word16BE = word16Host
+#else
 word16BE = exactEncoding 2 $ \w p -> do
     poke p               (fromIntegral (shiftr_w16 w 8) :: Word8)
     poke (p `plusPtr` 1) (fromIntegral (w)              :: Word8)
+#endif
 
 -- | Encoding 'Word16's in little endian format.
 {-# INLINE word16LE #-}
 word16LE :: Encoding Word16
+#ifdef WORD_BIGENDIAN
 word16LE = exactEncoding 2 $ \w p -> do
     poke p               (fromIntegral (w)              :: Word8)
     poke (p `plusPtr` 1) (fromIntegral (shiftr_w16 w 8) :: Word8)
-
--- word16LE w16 = exactEncoding 2 (\w p -> poke (castPtr p) w16)
+#else
+word16LE = word16Host
+#endif
 
 -- | Encoding 'Word32's in big endian format.
 {-# INLINE word32BE #-}
 word32BE :: Encoding Word32
+#ifdef WORD_BIGENDIAN
+word32BE = word32Host
+#else
 word32BE = exactEncoding 4 $ \w p -> do
     poke p               (fromIntegral (shiftr_w32 w 24) :: Word8)
     poke (p `plusPtr` 1) (fromIntegral (shiftr_w32 w 16) :: Word8)
     poke (p `plusPtr` 2) (fromIntegral (shiftr_w32 w  8) :: Word8)
     poke (p `plusPtr` 3) (fromIntegral (w)               :: Word8)
+#endif
 
 -- | Encoding 'Word32's in little endian format.
 {-# INLINE word32LE #-}
 word32LE :: Encoding Word32
+#ifdef WORD_BIGENDIAN
 word32LE = exactEncoding 4 $ \w p -> do
     poke p               (fromIntegral (w)               :: Word8)
     poke (p `plusPtr` 1) (fromIntegral (shiftr_w32 w  8) :: Word8)
     poke (p `plusPtr` 2) (fromIntegral (shiftr_w32 w 16) :: Word8)
     poke (p `plusPtr` 3) (fromIntegral (shiftr_w32 w 24) :: Word8)
+#else
+word32LE = word32Host
+#endif
 
 -- on a little endian machine:
 -- word32LE w32 = exactEncoding 4 (\w p -> poke (castPtr p) w32)
@@ -105,6 +119,9 @@ word32LE = exactEncoding 4 $ \w p -> do
 -- | Encoding 'Word64's in big endian format.
 {-# INLINE word64BE #-}
 word64BE :: Encoding Word64
+#ifdef WORD_BIGENDIAN
+word64BE = word64Host
+#else
 #if WORD_SIZE_IN_BITS < 64
 --
 -- To avoid expensive 64 bit shifts on 32 bit machines, we cast to
@@ -133,10 +150,12 @@ word64BE = exactEncoding 8 $ \w p -> do
     poke (p `plusPtr` 6) (fromIntegral (shiftr_w64 w  8) :: Word8)
     poke (p `plusPtr` 7) (fromIntegral (w)               :: Word8)
 #endif
+#endif
 
 -- | Encoding 'Word64's in little endian format.
 {-# INLINE word64LE #-}
 word64LE :: Encoding Word64
+#ifdef WORD_BIGENDIAN
 #if WORD_SIZE_IN_BITS < 64
 word64LE =
     exactEncoding 8 $ \w p -> do
@@ -160,6 +179,9 @@ word64LE = exactEncoding 8 $ \w p -> do
     poke (p `plusPtr` 5) (fromIntegral (shiftr_w64 w 40) :: Word8)
     poke (p `plusPtr` 6) (fromIntegral (shiftr_w64 w 48) :: Word8)
     poke (p `plusPtr` 7) (fromIntegral (shiftr_w64 w 56) :: Word8)
+#endif
+#else
+word64LE = word64Host
 #endif
 
 -- on a little endian machine:

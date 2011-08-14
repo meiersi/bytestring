@@ -1,4 +1,4 @@
-{-# LANGUAGE PackageImports #-}
+{-# LANGUAGE OverloadedStrings, PackageImports #-}
 -- |
 -- Copyright   : (c) 2010-2011 Simon Meier
 -- License     : BSD3-style (see LICENSE)
@@ -126,9 +126,18 @@ import qualified Data.ByteString.Lazy.Builder.BoundedEncoding         as E
 import qualified Data.ByteString.Lazy.Builder.BoundedEncoding.Utf8    as E
 
 -- To be used in a later comparison
-import qualified Data.DList                                           as D
+import qualified Data.DList                                      as D
 import qualified Codec.Binary.UTF8.Light                         as Utf8Light
 import qualified Data.String.UTF8                                as Utf8String
+import qualified Data.Text.Lazy                                  as TL
+import qualified Data.Text.Lazy.Encoding                         as TL
+import qualified Data.Text.Lazy.Builder                          as TB
+import qualified Data.Text.Lazy.Builder.Int                      as TB
+
+import qualified "bytestring" Data.ByteString.Lazy               as OldL
+
+import Data.Char (ord)
+import qualified Data.Binary.Builder                             as BinB
 
 
 ------------------------------------------------------------------------------
@@ -184,17 +193,17 @@ renderRow (c:cs) = renderCell c ++ concat [',' : renderCell c' | c' <- cs]
 renderTable :: Table -> String
 renderTable rs = concat [renderRow r ++ "\n" | r <- rs]
 
--- 1.53 ms
+-- 1.36 ms
 benchString :: Benchmark
 benchString = bench "renderTable maxiTable" $ nf renderTable maxiTable
 
--- 1.45 ms
+-- 1.36 ms
 benchStringUtf8 :: Benchmark
 benchStringUtf8 = bench "utf8 + renderTable maxiTable" $ 
   nf (L.length . B.toLazyByteString . B.string . renderTable) maxiTable
 
 
--- using difference lists:  0.92 ms
+-- using difference lists:  0.91 ms
 --
 --  (++) is a performance-grinch!
 
@@ -216,8 +225,8 @@ infixr 4 <>
 renderStringB :: String -> Builder
 renderStringB cs = B.char '"' <> foldMap escape cs <> B.char '"'
   where
-    escape '\\' = B.string "\\\\"
-    escape '\"' = B.string "\\\\"
+    escape '\\' = B.char '\\' <> B.char '\\'
+    escape '\"' = B.char '\\' <> B.char '"'
     escape c    = B.char c
 
 renderCellB :: Cell -> Builder
@@ -237,12 +246,12 @@ benchBuilderUtf8 :: Benchmark
 benchBuilderUtf8 = bench "utf8 + renderTableB maxiTable" $ 
   nf (L.length . B.toLazyByteString . renderTableB) maxiTable
 
--- 1.14x  faster than DList
+-- 1.11x  faster than DList
 
 -- However: touching the whole table 'nf maxiTable' takes  0.27ms
 
--- 1.20x  faster than DList on the code path other than touching all data  
---        (0.92 - 0.27) / (0.81 - 0.27)
+-- 1.16x  faster than DList on the code path other than touching all data  
+--        (0.91 - 0.27) / (0.82 - 0.27)
 
 
 ------------------------------------------------------------------------------
@@ -319,15 +328,15 @@ renderRowBE (c:cs) =
 renderTableBE :: Table -> Builder
 renderTableBE rs = mconcat [renderRowBE r <> B.char '\n' | r <- rs]
 
--- 0.68 ms
+-- 0.65 ms
 benchBuilderEncodingUtf8 :: Benchmark
 benchBuilderEncodingUtf8 = bench "utf8 + renderTableBE maxiTable" $ 
   nf (L.length . B.toLazyByteString . renderTableBE) maxiTable
 
 
--- 1.35x faster than DList based
+-- 1.4x faster than DList based
 
--- 1.58x faster than DList based on code other than touching all data
+-- 1.7x faster than DList based on code other than touching all data
 
 
 ------------------------------------------------------------------------------
@@ -340,7 +349,7 @@ renderStringD :: String -> DString
 renderStringD cs = return '"' <> foldMap escape cs <> return '"'
   where
     escape '\\' = D.fromList "\\\\"
-    escape '\"' = D.fromList "\\\\"
+    escape '\"' = D.fromList "\\\""
     escape c    = return c
 
 renderCellD :: Cell -> DString
@@ -355,6 +364,7 @@ renderRowD (c:cs) =
 renderTableD :: Table -> DString
 renderTableD rs = mconcat [renderRowD r <> return '\n' | r <- rs]
 
+-- 0.91 ms
 benchDListUtf8 :: Benchmark
 benchDListUtf8 = bench "utf8 + renderTableD maxiTable" $ 
   nf (L.length . B.toLazyByteString . B.string . D.toList . renderTableD) maxiTable
@@ -364,7 +374,7 @@ benchDListUtf8 = bench "utf8 + renderTableD maxiTable" $
 -- utf8-string and utf8-light
 ------------------------------------------------------------------------------
 
--- 3.96 ms
+-- 4.12 ms
 benchDListUtf8Light :: Benchmark
 benchDListUtf8Light = bench "utf8-light + renderTable maxiTable" $ 
   whnf (Utf8Light.encode . D.toList . renderTableD) maxiTable
@@ -380,6 +390,71 @@ benchDListUtf8String = bench "utf8-light + renderTable maxiTable" $
     encode = Utf8String.fromString 
 -}
 
+------------------------------------------------------------------------------
+-- Data.Binary.Builder based rendering
+------------------------------------------------------------------------------
+
+{-# INLINE char8BinB #-}
+char8BinB :: Char -> BinB.Builder
+char8BinB = BinB.singleton . fromIntegral . ord
+
+renderStringBinB :: String -> BinB.Builder
+renderStringBinB cs = char8BinB '"' <> foldMap escape cs <> char8BinB '"'
+  where
+    escape '\\' = char8BinB '\\' <> char8BinB '\\'
+    escape '\"' = char8BinB '\\' <> char8BinB '"'
+    escape c    = char8BinB c
+
+renderCellBinB :: Cell -> BinB.Builder
+renderCellBinB (StringC cs) = renderStringBinB cs
+renderCellBinB (IntC i)     = foldMap char8BinB $ show i
+           
+renderRowBinB :: Row -> BinB.Builder
+renderRowBinB []     = mempty
+renderRowBinB (c:cs) = 
+    renderCellBinB c <> mconcat [ char8BinB ',' <> renderCellBinB c' | c' <- cs ]
+
+renderTableBinB :: Table -> BinB.Builder
+renderTableBinB rs = mconcat [renderRowBinB r <> char8BinB '\n' | r <- rs]
+
+-- 1.22 ms
+benchBinaryBuilderChar8 :: Benchmark
+benchBinaryBuilderChar8 = bench "char8 + renderTableBinB maxiTable" $ 
+  nf (OldL.length . BinB.toLazyByteString . renderTableBinB) maxiTable
+
+
+------------------------------------------------------------------------------
+-- Text Builder
+------------------------------------------------------------------------------
+
+renderStringTB :: String -> TB.Builder
+renderStringTB cs = TB.singleton '"' <> foldMap escape cs <> TB.singleton '"'
+  where
+    escape '\\' = "\\\\"
+    escape '\"' = "\\\""
+    escape c    = TB.singleton c
+
+renderCellTB :: Cell -> TB.Builder
+renderCellTB (StringC cs) = renderStringTB cs
+renderCellTB (IntC i)     = TB.decimal i
+           
+renderRowTB :: Row -> TB.Builder
+renderRowTB []     = mempty
+renderRowTB (c:cs) = 
+    renderCellTB c <> mconcat [ TB.singleton ',' <> renderCellTB c' | c' <- cs ]
+
+renderTableTB :: Table -> TB.Builder
+renderTableTB rs = mconcat [renderRowTB r <> TB.singleton '\n' | r <- rs]
+
+-- 0.95 ms
+benchTextBuilder :: Benchmark
+benchTextBuilder = bench "renderTableTB maxiTable" $ 
+  nf (TL.length . TB.toLazyText . renderTableTB) maxiTable
+
+-- 1.10 ms
+benchTextBuilderUtf8 :: Benchmark
+benchTextBuilderUtf8 = bench "utf8 + renderTableTB maxiTable" $ 
+  nf (OldL.length . TL.encodeUtf8 . TB.toLazyText . renderTableTB) maxiTable
 
 ------------------------------------------------------------------------------
 -- Benchmarking
@@ -388,17 +463,20 @@ benchDListUtf8String = bench "utf8-light + renderTable maxiTable" $
 main :: IO ()
 main = do
     putStrLn "Encoding the maxiTable"
-    putStrLn $ "Total length: " ++
+    putStrLn $ "Total length in bytes: " ++
         (show $ L.length $ encodeUtf8CSV maxiTable)
     putStrLn $ "Chunk lengths: " ++ 
         (show $ map S.length $ L.toChunks $ encodeUtf8CSV maxiTable)
-    print ""
+    putStrLn ""
     defaultMain
       [ benchNF
       , benchString
       , benchStringUtf8
       , benchDListUtf8
       , benchDListUtf8Light
+      , benchBinaryBuilderChar8
+      , benchTextBuilder
+      , benchTextBuilderUtf8
       , benchBuilderUtf8
       , benchBuilderEncodingUtf8     
       ]
@@ -409,47 +487,65 @@ main = do
 {- On a Core 2 Duo 2.2 GHz running a 32-bit Linux:
 
 
-touching all data:                 0.27 ms
-string rendering:                  1.52 ms
-string rendering + utf8 encoding:  1.46 ms   (less allocation?)
-DList rendering  + utf8 encoding:  0.94 ms
-builder rendering (incl. utf8):    0.84 ms
-builder + faster escaping:         0.71 ms
+touching all data:                 0.25 ms
+string rendering:                  1.36 ms
+string rendering + utf8 encoding:  1.36 ms
+DList rendering  + utf8 encoding:  0.91 ms
+builder rendering (incl. utf8):    0.82 ms
+builder + faster escaping:         0.65 ms
+
+text builder:                      0.95 ms
+text builder + utf8 encoding:      1.10 ms
+binary builder + char8 (!!):       1.22 ms
+DList render + utf8-light:         4.12 ms
 
 How to improve further? 
-  - Use packed formats for string literals
-    => fast memcpy  (that's what blaze-html does for tags)
+  * Use packed formats for string literals
+    - fast memcpy  (that's what blaze-html does for tags)
+    - using Text literals should also help 
 
 
 results from criterion:
  
-  benchmarking nf maxiTable
-  mean: 271.5343 us, lb 266.8739 us, ub 276.1637 us, ci 0.950
-  std dev: 23.59385 us, lb 22.20160 us, ub 24.89147 us, ci 0.950
+benchmarking nf maxiTable
+mean: 257.2927 us, lb 255.9210 us, ub 259.6692 us, ci 0.950
+std dev: 9.026280 us, lb 5.887942 us, ub 12.76582 us, ci 0.950
 
-  benchmarking renderTable maxiTable
-  mean: 1.522055 ms, lb 1.516985 ms, ub 1.533372 ms, ci 0.950
-  std dev: 36.68640 us, lb 20.47489 us, ub 71.29054 us, ci 0.950
+benchmarking renderTable maxiTable
+mean: 1.358458 ms, lb 1.356732 ms, ub 1.362377 ms, ci 0.950
+std dev: 12.66932 us, lb 7.110377 us, ub 24.97397 us, ci 0.950
 
-  benchmarking utf8 + renderTable maxiTable
-  mean: 1.466305 ms, lb 1.461600 ms, ub 1.474856 ms, ci 0.950
-  std dev: 31.92463 us, lb 20.90142 us, ub 59.03556 us, ci 0.950
+benchmarking utf8 + renderTable maxiTable
+mean: 1.364343 ms, lb 1.362391 ms, ub 1.366973 ms, ci 0.950
+std dev: 11.65388 us, lb 9.094074 us, ub 17.47765 us, ci 0.950
 
-  benchmarking utf8 + renderTableD maxiTable
-  mean: 939.0503 us, lb 936.5558 us, ub 942.5777 us, ci 0.950
-  std dev: 14.94975 us, lb 11.44815 us, ub 23.73155 us, ci 0.950
+benchmarking utf8 + renderTableD maxiTable
+mean: 909.5255 us, lb 908.0049 us, ub 911.7639 us, ci 0.950
+std dev: 9.434182 us, lb 6.906120 us, ub 15.43223 us, ci 0.950
 
-  benchmarking utf8-light + renderTable maxiTable
-  mean: 3.949076 ms, lb 3.935238 ms, ub 3.970824 ms, ci 0.950
-  std dev: 87.53537 us, lb 62.32593 us, ub 134.6882 us, ci 0.950
+benchmarking utf8-light + renderTable maxiTable
+mean: 4.128315 ms, lb 4.121109 ms, ub 4.138436 ms, ci 0.950
+std dev: 42.93755 us, lb 32.58115 us, ub 58.61780 us, ci 0.950
 
-  benchmarking utf8 + renderTableB maxiTable
-  mean: 842.8139 us, lb 840.6189 us, ub 846.0228 us, ci 0.950
-  std dev: 13.53231 us, lb 10.06590 us, ub 18.86145 us, ci 0.950
+benchmarking char8 + renderTableBinB maxiTable
+mean: 1.224156 ms, lb 1.222510 ms, ub 1.226101 ms, ci 0.950
+std dev: 9.046150 us, lb 7.568433 us, ub 11.74996 us, ci 0.950
 
-  benchmarking utf8 + renderTableBE maxiTable
-  mean: 710.0430 us, lb 708.3533 us, ub 713.2298 us, ci 0.950
-  std dev: 11.39598 us, lb 7.380518 us, ub 20.79146 us, ci 0.950
+benchmarking renderTableTB maxiTable
+mean: 954.8066 us, lb 953.6650 us, ub 957.0134 us, ci 0.950
+std dev: 7.763098 us, lb 5.072194 us, ub 14.09216 us, ci 0.950
+
+benchmarking utf8 + renderTableTB maxiTable
+mean: 1.095913 ms, lb 1.094811 ms, ub 1.098280 ms, ci 0.950
+std dev: 7.865781 us, lb 4.189907 us, ub 15.24606 us, ci 0.950
+
+benchmarking utf8 + renderTableB maxiTable
+mean: 818.0223 us, lb 816.5118 us, ub 819.9397 us, ci 0.950
+std dev: 8.603917 us, lb 6.764347 us, ub 12.29236 us, ci 0.950
+
+benchmarking utf8 + renderTableBE maxiTable
+mean: 646.5248 us, lb 645.3735 us, ub 648.2405 us, ci 0.950
+std dev: 7.147889 us, lb 5.222494 us, ub 11.82482 us, ci 0.950
 
 -}
 

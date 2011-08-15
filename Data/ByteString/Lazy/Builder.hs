@@ -197,7 +197,6 @@ module Data.ByteString.Lazy.Builder
     , toLazyByteString
 
       -- * Creating Builders
-    , flush
 
       -- ** Binary encodings
     , byteString

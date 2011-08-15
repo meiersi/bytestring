@@ -210,7 +210,7 @@ import qualified Data.ByteString.Internal as S
 import qualified Data.ByteString.Unsafe   as S
 import Data.ByteString.Lazy.Internal
 import qualified Data.ByteString.Lazy.Builder                 as B
-import qualified Data.ByteString.Lazy.Builder.ByteString      as B
+import qualified Data.ByteString.Lazy.Builder.Extras          as B
 import qualified Data.ByteString.Lazy.Builder.BoundedEncoding as E
 
 import Data.Monoid              (Monoid(..))

@@ -55,7 +55,6 @@ library
                      Data.ByteString.Lazy.Builder.Int
                      Data.ByteString.Lazy.Builder.Floating
                      Data.ByteString.Lazy.Builder.Internal.Buffer
-                     Data.ByteString.Lazy.Builder.ByteString
 
                      Codec.Bounded.Encoding.Bench
                      Codec.Bounded.Encoding.Int

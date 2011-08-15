@@ -193,6 +193,7 @@ module Data.ByteString.Lazy.Builder.BoundedEncoding (
   -- ** Binary encoding
   , int8
   , word8
+  , constByteString
 
   -- *** Big-endian
   , int16BE
@@ -417,3 +418,27 @@ encodeByteStringWith w =
 encodeLazyByteStringWith :: Encoding Word8 -> L.ByteString -> Builder
 encodeLazyByteStringWith w = 
     L.foldrChunks (\x b -> encodeByteStringWith w x `mappend` b) mempty
+
+
+------------------------------------------------------------------------------
+-- Writing constant ByteStrings directly to memory.
+------------------------------------------------------------------------------
+
+
+-- | An encoding that always results in the same sequence of bytes specified by
+-- the 'S.ByteString'. Typically, 'constByteString' is used for specifying the
+-- escaping sequences to be used.
+--
+-- TODO: Give example.
+--
+{-# INLINE constByteString #-}
+constByteString :: S.ByteString -> Encoding ()
+constByteString bs = exactEncoding l io
+  where
+    (fbuf, o, l) = S.toForeignPtr bs
+    io _ pf = withForeignPtr fbuf $ \buf -> copyBytes pf (buf `plusPtr` o) l
+
+
+
+
+

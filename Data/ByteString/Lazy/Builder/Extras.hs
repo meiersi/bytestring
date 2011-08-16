@@ -52,9 +52,8 @@ module Data.ByteString.Lazy.Builder.Extras
 
 
 import Data.ByteString.Lazy.Builder.Internal
-import Data.ByteString.Lazy.Builder.Word
-import Data.ByteString.Lazy.Builder.Int
-import Data.ByteString.Lazy.Builder.Floating
+
+import qualified Data.ByteString.Lazy.Builder.BoundedEncoding as E
 
 import qualified Data.ByteString               as S
 import qualified Data.ByteString.Internal      as S
@@ -289,3 +288,71 @@ lazyByteStringCopy =
 lazyByteStringInsert :: L.ByteString -> Builder
 lazyByteStringInsert =
   L.foldrChunks (\bs b -> byteStringInsert bs `mappend` b) mempty
+
+
+
+------------------------------------------------------------------------------
+-- Host-specific encodings
+------------------------------------------------------------------------------
+
+-- | Encode a single native machine 'Int'. The 'Int' is encoded in host order,
+-- host endian form, for the machine you're on. On a 64 bit machine the 'Int'
+-- is an 8 byte value, on a 32 bit machine, 4 bytes. Values encoded this way
+-- are not portable to different endian or int sized machines, without
+-- conversion.
+--
+{-# INLINE intHost #-}
+intHost :: Int -> Builder
+intHost = E.encodeWith E.intHost
+
+-- | Encode a 'Int16' in native host order and host endianness.
+{-# INLINE int16Host #-}
+int16Host :: Int16 -> Builder
+int16Host = E.encodeWith E.int16Host
+
+-- | Encode a 'Int32' in native host order and host endianness.
+{-# INLINE int32Host #-}
+int32Host :: Int32 -> Builder
+int32Host = E.encodeWith E.int32Host
+
+-- | Encode a 'Int64' in native host order and host endianness.
+{-# INLINE int64Host #-}
+int64Host :: Int64 -> Builder
+int64Host = E.encodeWith E.int64Host
+
+-- | Encode a single native machine 'Word'. The 'Word' is encoded in host order,
+-- host endian form, for the machine you're on. On a 64 bit machine the 'Word'
+-- is an 8 byte value, on a 32 bit machine, 4 bytes. Values encoded this way
+-- are not portable to different endian or word sized machines, without
+-- conversion.
+--
+{-# INLINE wordHost #-}
+wordHost :: Word -> Builder
+wordHost = E.encodeWith E.wordHost
+
+-- | Encode a 'Word16' in native host order and host endianness.
+{-# INLINE word16Host #-}
+word16Host :: Word16 -> Builder
+word16Host = E.encodeWith E.word16Host
+
+-- | Encode a 'Word32' in native host order and host endianness.
+{-# INLINE word32Host #-}
+word32Host :: Word32 -> Builder
+word32Host = E.encodeWith E.word32Host
+
+-- | Encode a 'Word64' in native host order and host endianness.
+{-# INLINE word64Host #-}
+word64Host :: Word64 -> Builder
+word64Host = E.encodeWith E.word64Host
+
+-- | Encode a 'Float' in native host order. Values encoded this way are not
+-- portable to different endian machines, without conversion.
+{-# INLINE floatHost #-}
+floatHost :: Float -> Builder
+floatHost = E.encodeWith E.floatHost
+
+-- | Encode a 'Double' in native host order.
+{-# INLINE doubleHost #-}
+doubleHost :: Double -> Builder
+doubleHost = E.encodeWith E.doubleHost
+

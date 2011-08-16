@@ -235,44 +235,14 @@ module Data.ByteString.Lazy.Builder
 
 import Data.ByteString.Lazy.Builder.Internal
 import Data.ByteString.Lazy.Builder.Extras
-import Data.ByteString.Lazy.Builder.Word
-import Data.ByteString.Lazy.Builder.Int
-import Data.ByteString.Lazy.Builder.Floating
+
+import qualified Data.ByteString.Lazy.Builder.BoundedEncoding as E
 
 import qualified Data.ByteString               as S
 import qualified Data.ByteString.Lazy.Internal as L
 
+import Foreign
 
-------------------------------------------------------------------------------
--- Default conversion of strict and lazy ByteStrings to Builders
-------------------------------------------------------------------------------
-
--- | Create a 'Builder' denoting the same sequence of bytes as a strict
--- 'S.ByteString'.
---
--- The 'Builder' copies short 'S.ByteString's and inserts long 
--- (>= 2 * 'L.smallChunkSize')
--- 'S.ByteString's directly. This way the 'Builder' ensures that on average
--- chunks are large enough (>= 'L.smallChunkSize'), which is important for the
--- efficiency of consumers of the generated chunks. If you have a special
--- application that requires more control over chunk handling, then see the
--- module "Data.ByteString.Lazy.Builder.ByteString".
---
-{-# INLINE byteString #-}
-byteString :: S.ByteString -> Builder
-byteString = byteStringThreshold defaultMaximalCopySize
-
--- | Chunk-wise application of 'byteString' to a lazy 'L.ByteString'.
---
-{-# INLINE lazyByteString #-}
-lazyByteString :: L.ByteString -> Builder
-lazyByteString = lazyByteStringThreshold defaultMaximalCopySize
-
--- | The maxiamal size of a bytestring that is copied. 
--- @2 * 'L.smallChunkSize'@ to guarantee that on average a chunk is of
--- 'L.smallChunkSize'.
-defaultMaximalCopySize :: Int
-defaultMaximalCopySize = 2 * L.smallChunkSize
 
 -- | Execute a 'Builder' and record the generated chunks as a lazy
 -- 'L.ByteString'. 
@@ -293,3 +263,135 @@ toLazyByteString :: Builder -> L.ByteString
 toLazyByteString = toLazyByteStringWith
     (safeStrategy L.smallChunkSize L.defaultChunkSize) L.Empty
 
+
+------------------------------------------------------------------------------
+-- Binary encodings
+------------------------------------------------------------------------------
+
+-- | Encode a single unsigned byte as-is.
+--
+{-# INLINE int8 #-}
+int8 :: Int8 -> Builder
+int8 = E.encodeWith E.int8
+
+-- | Encode a single unsigned byte as-is.
+--
+{-# INLINE word8 #-}
+word8 :: Word8 -> Builder
+word8 = E.encodeWith E.word8
+
+-- | Create a 'Builder' denoting the same sequence of bytes as a strict
+-- 'S.ByteString'.
+--
+-- The 'Builder' copies short 'S.ByteString's and inserts long 'S.ByteString's
+-- directly. This way the 'Builder' ensures that chunks are large on average,
+-- which is important for the efficiency of consumers of the generated chunks.
+-- See the "Data.ByteString.Lazy.Builder.Extras" module, if you need more
+-- control over chunk sizes.
+--
+{-# INLINE byteString #-}
+byteString :: S.ByteString -> Builder
+byteString = byteStringThreshold defaultMaximalCopySize
+
+-- | Chunk-wise application of 'byteString' to a lazy 'L.ByteString'.
+--
+{-# INLINE lazyByteString #-}
+lazyByteString :: L.ByteString -> Builder
+lazyByteString = lazyByteStringThreshold defaultMaximalCopySize
+
+-- | The maxiamal size of a bytestring that is copied. 
+-- @2 * 'L.smallChunkSize'@ to guarantee that on average a chunk is of
+-- 'L.smallChunkSize'.
+defaultMaximalCopySize :: Int
+defaultMaximalCopySize = 2 * L.smallChunkSize
+
+
+
+------------------------------------------------------------------------------
+-- Binary little-endian encodings
+------------------------------------------------------------------------------
+
+-- | Encode a 'Int16' in little endian format.
+{-# INLINE int16LE #-}
+int16LE :: Int16 -> Builder
+int16LE = E.encodeWith E.int16LE
+
+-- | Encode a 'Int32' in little endian format.
+{-# INLINE int32LE #-}
+int32LE :: Int32 -> Builder
+int32LE = E.encodeWith E.int32LE
+
+-- | Encode a 'Int64' in little endian format.
+{-# INLINE int64LE #-}
+int64LE :: Int64 -> Builder
+int64LE = E.encodeWith E.int64LE
+
+-- | Encode a 'Word16' in little endian format.
+{-# INLINE word16LE #-}
+word16LE :: Word16 -> Builder
+word16LE = E.encodeWith E.word16LE
+
+-- | Encode a 'Word32' in little endian format.
+{-# INLINE word32LE #-}
+word32LE :: Word32 -> Builder
+word32LE = E.encodeWith E.word32LE
+
+-- | Encode a 'Word64' in little endian format.
+{-# INLINE word64LE #-}
+word64LE :: Word64 -> Builder
+word64LE = E.encodeWith E.word64LE
+
+-- | Encode a 'Float' in little endian format.
+{-# INLINE floatLE #-}
+floatLE :: Float -> Builder
+floatLE = E.encodeWith E.floatLE
+
+-- | Encode a 'Double' in little endian format.
+{-# INLINE doubleLE #-}
+doubleLE :: Double -> Builder
+doubleLE = E.encodeWith E.doubleLE
+
+
+------------------------------------------------------------------------------
+-- Binary big-endian encodings
+------------------------------------------------------------------------------
+
+-- | Encode a 'Int16' in big endian format.
+{-# INLINE int16BE #-}
+int16BE :: Int16 -> Builder
+int16BE = E.encodeWith E.int16BE
+
+-- | Encode a 'Int32' in big endian format.
+{-# INLINE int32BE #-}
+int32BE :: Int32 -> Builder
+int32BE = E.encodeWith E.int32BE
+
+-- | Encode a 'Int64' in big endian format.
+{-# INLINE int64BE #-}
+int64BE :: Int64 -> Builder
+int64BE = E.encodeWith E.int64BE
+
+-- | Encode a 'Word16' in big endian format.
+{-# INLINE word16BE #-}
+word16BE :: Word16 -> Builder
+word16BE = E.encodeWith E.word16BE
+
+-- | Encode a 'Word32' in big endian format.
+{-# INLINE word32BE #-}
+word32BE :: Word32 -> Builder
+word32BE = E.encodeWith E.word32BE
+
+-- | Encode a 'Word64' in big endian format.
+{-# INLINE word64BE #-}
+word64BE :: Word64 -> Builder
+word64BE = E.encodeWith E.word64BE
+
+-- | Encode a 'Float' in big endian format.
+{-# INLINE floatBE #-}
+floatBE :: Float -> Builder
+floatBE = E.encodeWith E.floatBE
+
+-- | Encode a 'Double' in big endian format.
+{-# INLINE doubleBE #-}
+doubleBE :: Double -> Builder
+doubleBE = E.encodeWith E.doubleBE

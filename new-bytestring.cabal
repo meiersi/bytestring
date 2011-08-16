@@ -51,8 +51,6 @@ library
                      Codec.Bounded.Encoding.Internal
 
   other-modules:     
-                     Data.ByteString.Lazy.Builder.Internal.Buffer
-
                      Codec.Bounded.Encoding.Bench
                      Codec.Bounded.Encoding.Int
                      Codec.Bounded.Encoding.Word

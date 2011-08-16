@@ -228,7 +228,7 @@ word8Hex table =
 {-# INLINE word16Hex #-}
 word16Hex :: EncodingTable -> Encoding Word16
 word16Hex table = 
-    encode2 (word8Hex table) (word8Hex table) #.
+    encodePair (word8Hex table) (word8Hex table) #.
            (\x -> let {-# INLINE byte #-}
                       byte n = fromIntegral $ x `shiftR` (n * 8) in
                   (byte 1, byte 0) 

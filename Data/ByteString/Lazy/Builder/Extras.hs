@@ -15,8 +15,8 @@
 module Data.ByteString.Lazy.Builder.Extras
     ( 
     -- * Execution strategies
-      AllocationStrategy
-    , toLazyByteStringWith
+      toLazyByteStringWith
+    , AllocationStrategy
     , safeStrategy
     , untrimmedStrategy
     , L.smallChunkSize
@@ -33,7 +33,6 @@ module Data.ByteString.Lazy.Builder.Extras
 
     , flush
 
-
     -- * Host-specific binary encodings
     , intHost  
     , int16Host
@@ -47,6 +46,16 @@ module Data.ByteString.Lazy.Builder.Extras
 
     , floatHost
     , doubleHost
+
+    -- * ASCII encoding
+    -- | #ASCII#The /Char8/ encoding encodes each 'Char' as its Unicode codepoint
+    -- modulo 256. For codepoints below 128, the Char8 encoding is equal to the
+    -- ASCII encoding. It is useful for implementing binary protocols that use
+    -- ASCII or Latin1 characters. Use the functions in
+    -- "Data.ByteString.Lazy.Builder.Utf8" for efficiently encoding primitive
+    -- Haskell values.
+    , char8
+    , string8
    
     ) where
 
@@ -289,6 +298,17 @@ lazyByteStringInsert :: L.ByteString -> Builder
 lazyByteStringInsert =
   L.foldrChunks (\bs b -> byteStringInsert bs `mappend` b) mempty
 
+------------------------------------------------------------------------------
+-- Char8 encoding
+------------------------------------------------------------------------------
+
+-- | Encode a 'Char' using the Char8 encoding.
+char8 :: Char -> Builder
+char8 = E.encodeWith E.char8
+
+-- | Encode a 'String' using the Char8 encoding.
+string8 :: String -> Builder
+string8 = E.encodeListWith E.char8
 
 
 ------------------------------------------------------------------------------

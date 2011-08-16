@@ -64,7 +64,7 @@
 -- >     char
 --
 -- The definition of 'escapeUtf8' is more complicated than 'escape', because
--- the combinators ('encodeIf', 'encode2', '#.', and 'char') used in
+-- the combinators ('encodeIf', 'encodePair', '#.', and 'char') used in
 -- 'escapeChar' compute both the bound on the maximal number of bytes written
 -- (8 for 'escapeUtf8') as well as the low-level buffer manipulation required
 -- to implement the encoding. Bounded 'Encoding's should always be inlined.
@@ -92,7 +92,7 @@ module Codec.Bounded.Encoding (
   , encodeMaybe
   , encodeEither
   , (<#>)
-  , encode2
+  , encodePair
   -- , encode3
   -- , encode4
   -- , encode8

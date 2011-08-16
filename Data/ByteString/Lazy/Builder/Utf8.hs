@@ -57,12 +57,10 @@ module Data.ByteString.Lazy.Builder.Utf8
     , int16HexFixed
     , int32HexFixed
     , int64HexFixed
-    , intHexFixed
     , word8HexFixed
     , word16HexFixed
     , word32HexFixed
     , word64HexFixed
-    , wordHexFixed
     , floatHexFixed
     , doubleHexFixed
 
@@ -208,34 +206,6 @@ wordHex = E.encodeWith E.wordHex
 -- fixed width; leading zeroes
 ------------------------------
 
-
--- | Encode a 'Word8' using 2 nibbles (hexadecimal digits).
-{-# INLINE word8HexFixed #-}
-word8HexFixed :: Word8 -> Builder
-word8HexFixed = E.encodeWith E.word8HexFixed
-
--- | Encode a 'Word16' using 4 nibbles.
-{-# INLINE word16HexFixed #-}
-word16HexFixed :: Word16 -> Builder
-word16HexFixed = E.encodeWith E.word16HexFixed
-
--- | Encode a 'Word32' using 8 nibbles.
-{-# INLINE word32HexFixed #-}
-word32HexFixed :: Word32 -> Builder
-word32HexFixed = E.encodeWith E.word32HexFixed
-
--- | Encode a 'Word64' using 16 nibbles.
-{-# INLINE word64HexFixed #-}
-word64HexFixed :: Word64 -> Builder
-word64HexFixed = E.encodeWith E.word64HexFixed
-
--- | Encode a 'Word' using 8 or 16 nibbles depending on whether you are on a
--- 32-bit or a 64-bit machine. 
-{-# INLINE wordHexFixed #-}
-wordHexFixed :: Word -> Builder
-wordHexFixed = E.encodeWith E.wordHexFixed
-
-
 -- | Encode a 'Int8' using 2 nibbles (hexadecimal digits).
 {-# INLINE int8HexFixed #-}
 int8HexFixed :: Int8 -> Builder
@@ -256,11 +226,25 @@ int32HexFixed = E.encodeWith E.int32HexFixed
 int64HexFixed :: Int64 -> Builder
 int64HexFixed = E.encodeWith E.int64HexFixed
 
--- | Encode a 'Int' using 8 or 16 nibbles depending on whether you are on a
--- 32-bit or a 64-bit machine. 
-{-# INLINE intHexFixed #-}
-intHexFixed :: Int -> Builder
-intHexFixed = E.encodeWith E.intHexFixed
+-- | Encode a 'Word8' using 2 nibbles (hexadecimal digits).
+{-# INLINE word8HexFixed #-}
+word8HexFixed :: Word8 -> Builder
+word8HexFixed = E.encodeWith E.word8HexFixed
+
+-- | Encode a 'Word16' using 4 nibbles.
+{-# INLINE word16HexFixed #-}
+word16HexFixed :: Word16 -> Builder
+word16HexFixed = E.encodeWith E.word16HexFixed
+
+-- | Encode a 'Word32' using 8 nibbles.
+{-# INLINE word32HexFixed #-}
+word32HexFixed :: Word32 -> Builder
+word32HexFixed = E.encodeWith E.word32HexFixed
+
+-- | Encode a 'Word64' using 16 nibbles.
+{-# INLINE word64HexFixed #-}
+word64HexFixed :: Word64 -> Builder
+word64HexFixed = E.encodeWith E.word64HexFixed
 
 -- | Encode an IEEE 'Float' using 8 nibbles.
 {-# INLINE floatHexFixed #-}

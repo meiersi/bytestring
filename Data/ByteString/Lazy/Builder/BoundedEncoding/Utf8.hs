@@ -68,12 +68,10 @@ module Data.ByteString.Lazy.Builder.BoundedEncoding.Utf8
     , int16HexFixed
     , int32HexFixed
     , int64HexFixed
-    , intHexFixed
     , word8HexFixed
     , word16HexFixed
     , word32HexFixed
     , word64HexFixed
-    , wordHexFixed
     , floatHexFixed
     , doubleHexFixed
 
@@ -289,30 +287,20 @@ word8HexFixed = exactEncoding 2 $
 -- | Encode a 'Word16' using 4 nibbles.
 {-# INLINE word16HexFixed #-}
 word16HexFixed :: Encoding Word16
-word16HexFixed = encode2 word8HexFixed word8HexFixed #.
+word16HexFixed = encodePair word8HexFixed word8HexFixed #.
     (\x -> (fromIntegral $ x `shiftR` 8, fromIntegral x))
 
 -- | Encode a 'Word32' using 8 nibbles.
 {-# INLINE word32HexFixed #-}
 word32HexFixed :: Encoding Word32
-word32HexFixed = encode2 word16HexFixed word16HexFixed #.
+word32HexFixed = encodePair word16HexFixed word16HexFixed #.
     (\x -> (fromIntegral $ x `shiftR` 16, fromIntegral x))
 
 -- | Encode a 'Word64' using 16 nibbles.
 {-# INLINE word64HexFixed #-}
 word64HexFixed :: Encoding Word64
-word64HexFixed = encode2 word32HexFixed word32HexFixed #.
+word64HexFixed = encodePair word32HexFixed word32HexFixed #.
     (\x -> (fromIntegral $ x `shiftR` 32, fromIntegral x))
-
--- | Encode a 'Word' using 8 or 16 nibbles depending on whether you are on a
--- 32-bit or a 64-bit machine. 
-{-# INLINE wordHexFixed #-}
-wordHexFixed :: Encoding Word
-#if WORD_SIZE_IN_BITS < 64
-wordHexFixed = word32HexFixed #. fromIntegral
-#else
-wordHexFixed = word64HexFixed #. fromIntegral
-#endif
 
 -- | Encode a 'Int8' using 2 nibbles (hexadecimal digits).
 {-# INLINE int8HexFixed #-}
@@ -333,12 +321,6 @@ int32HexFixed = word32HexFixed #. fromIntegral
 {-# INLINE int64HexFixed #-}
 int64HexFixed :: Encoding Int64
 int64HexFixed = word64HexFixed #. fromIntegral
-
--- | Encode a 'Int' using 8 or 16 nibbles depending on whether you are on a
--- 32-bit or a 64-bit machine. 
-{-# INLINE intHexFixed #-}
-intHexFixed :: Encoding Int
-intHexFixed = wordHexFixed #. fromIntegral
 
 -- | Encode an IEEE 'Float' using 8 nibbles.
 {-# INLINE floatHexFixed #-}

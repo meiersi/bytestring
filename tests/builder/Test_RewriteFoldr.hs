@@ -121,8 +121,8 @@ data Encoding a = Encoding (a -> String)
 (#.) :: Encoding a -> (b -> a) -> Encoding b
 (Encoding w) #. f = Encoding (w . f)
 
-encode2 :: Encoding a -> Encoding b -> Encoding (a, b)
-encode2 (Encoding w1) (Encoding w2) = Encoding $ \(x,y) -> w1 x ++ " .2. " ++ w2 y
+encodePair :: Encoding a -> Encoding b -> Encoding (a, b)
+encodePair (Encoding w1) (Encoding w2) = Encoding $ \(x,y) -> w1 x ++ " .2. " ++ w2 y
 
 -- | An dummy implementation of a write for strings.
 writeString :: Encoding String
@@ -142,7 +142,7 @@ encodeWith (Encoding f) x = Builder ("write: " ++ f x)
 
 {-# RULES "append/encodeWith" forall w1 w2 x1 x2.
        append (encodeWith w1 x1) (encodeWith w2 x2) 
-     = encodeWith (encode2 w1 w2) (x1, x2)
+     = encodeWith (encodePair w1 w2) (x1, x2)
   #-}
 
 -- | ...as well as for lists. Here, we mark what 'encodeWithXXX' function was
@@ -213,7 +213,7 @@ test8 :: [String] -> Builder
 test8 (x:y:z:_) = fromPut $ do {putString x; putString y; putString z}
 
 test9 :: [String] -> Builder
-test9 (x:y:_) = encodeWith (encode2 writeString writeString) (x, y)
+test9 (x:y:_) = encodeWith (encodePair writeString writeString) (x, y)
 
 
 main :: IO ()

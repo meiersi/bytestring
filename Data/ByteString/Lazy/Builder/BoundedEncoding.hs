@@ -66,7 +66,7 @@
 -- >     char
 --
 -- The definition of 'escapeUtf8' is more complicated than 'escape', because
--- the combinators ('encodeIf', 'encode2', '#.', and 'char') used in
+-- the combinators ('encodeIf', 'encodePair', '#.', and 'char') used in
 -- 'escapeChar' compute both the bound on the maximal number of bytes written
 -- (8 for 'escapeUtf8') as well as the low-level buffer manipulation required
 -- to implement the encoding. Bounded 'Encoding's should always be inlined.
@@ -171,10 +171,9 @@ module Data.ByteString.Lazy.Builder.BoundedEncoding (
   , comapEncoding
   , emptyEncoding
   , encodeIf
-  , encodeMaybe
   , encodeEither
   , (<#>)
-  , encode2
+  , encodePair
   -- , encode3
   -- , encode4
   -- , encode8
@@ -190,10 +189,12 @@ module Data.ByteString.Lazy.Builder.BoundedEncoding (
   -- | UTF-8 encoding of 'Char's and numbers in decimal and hexadecimal formats
   -- is provided by the "Data.ByteString.Lazy.Builder.BoundedEncoding.Utf8" module.
 
+  -- ** ASCII encoding
+  , char8
+
   -- ** Binary encoding
   , int8
   , word8
-  , constByteString
 
   -- *** Big-endian
   , int16BE
@@ -253,6 +254,7 @@ import qualified Data.ByteString.Internal      as S
 import qualified Data.ByteString.Lazy.Internal as L
 
 import Data.Monoid
+import Data.Char (ord)
 
 import Codec.Bounded.Encoding.Internal hiding (append)
 import Codec.Bounded.Encoding.Word
@@ -308,7 +310,7 @@ encodeWith w =
 {-# RULES 
    "append/encodeWith" forall w1 w2 x1 x2.
        append (encodeWith w1 x1) (encodeWith w2 x2) 
-     = encodeWith (encode2 w1 w2) (x1, x2) 
+     = encodeWith (encodePair w1 w2) (x1, x2) 
   #-}
 
 -- TODO: The same rules for 'putBuilder (..) >> putBuilder (..)'
@@ -419,26 +421,11 @@ encodeLazyByteStringWith :: Encoding Word8 -> L.ByteString -> Builder
 encodeLazyByteStringWith w = 
     L.foldrChunks (\x b -> encodeByteStringWith w x `mappend` b) mempty
 
-
 ------------------------------------------------------------------------------
--- Writing constant ByteStrings directly to memory.
+-- ASCII encoding
 ------------------------------------------------------------------------------
 
-
--- | An encoding that always results in the same sequence of bytes specified by
--- the 'S.ByteString'. Typically, 'constByteString' is used for specifying the
--- escaping sequences to be used.
---
--- TODO: Give example.
---
-{-# INLINE constByteString #-}
-constByteString :: S.ByteString -> Encoding ()
-constByteString bs = exactEncoding l io
-  where
-    (fbuf, o, l) = S.toForeignPtr bs
-    io _ pf = withForeignPtr fbuf $ \buf -> copyBytes pf (buf `plusPtr` o) l
-
-
-
-
-
+-- | Encode a 'Char' as its Unicode codepoint modulo 256. For codepoints less
+-- than 128, this coincides with the ASCII encoding.
+char8 :: Encoding Char 
+char8 = word8 #. fromIntegral #. ord

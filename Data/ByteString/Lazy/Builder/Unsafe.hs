@@ -620,7 +620,7 @@ chunks3 _                   = []
 
 cmpEncodingToLib :: [Word8] -> (L.ByteString, L.ByteString)
 cmpEncodingToLib bs = 
-    -- ( toLazyByteString $ encodeListWith encode24bitsBase64 $ chunks3 bs
+    -- ( toLazyByteString $ encodeListWith encodePair4bitsBase64 $ chunks3 bs
     ( toLazyByteString $ encodeBase64 $ S.pack bs
     , (`L.Chunk` L.empty) $ encode $ S.pack bs )
 
@@ -673,17 +673,17 @@ writePaddedBitsBase64 only8 w =
                           w                                      `mappend`
     C8.writeChar '='
 
-{-# INLINE encode24bitsBase64 #-}
-encode24bitsBase64 :: Word32 -> Encoding
-encode24bitsBase64 w = write6bitsBase64 (w `shiftr_w32` 18) `mappend`
+{-# INLINE encodePair4bitsBase64 #-}
+encodePair4bitsBase64 :: Word32 -> Encoding
+encodePair4bitsBase64 w = write6bitsBase64 (w `shiftr_w32` 18) `mappend`
                       write6bitsBase64 (w `shiftr_w32` 12) `mappend`
                       write6bitsBase64 (w `shiftr_w32`  6) `mappend`
                       write6bitsBase64 (w                )
 
 -- ASSUMES bits 25 - 31 are zero.
-{-# INLINE encode24bitsBase64' #-}
-encode24bitsBase64' :: Word32 -> Encoding
-encode24bitsBase64' w = 
+{-# INLINE encodePair4bitsBase64' #-}
+encodePair4bitsBase64' :: Word32 -> Encoding
+encodePair4bitsBase64' w = 
     exactEncoding 4 $ \p -> do
       poke (castPtr p              ) =<< enc (w `shiftR` 12)
       poke (castPtr $ p `plusPtr` 2) =<< enc (w .&.   0xfff)

@@ -230,6 +230,10 @@ module Data.ByteString.Lazy.Builder
 
     -- ** UTF-8 encoding
     -- | Use the "Data.ByteString.Lazy.Builder.Utf8" module.
+
+    -- ** ASCII encoding
+    -- | Use the "Data.ByteString.Lazy.Builder.Extras#ASCII" module.
+      
       
     ) where
 

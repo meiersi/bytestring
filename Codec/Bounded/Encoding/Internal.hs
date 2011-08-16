@@ -61,10 +61,9 @@ module Codec.Bounded.Encoding.Internal (
   , (#.)
   , comapEncoding
   , (<#>)
-  , encode2
+  , encodePair
   , emptyEncoding
   , encodeIf
-  , encodeMaybe
   , encodeEither
 
   -- *** Convenience
@@ -142,7 +141,7 @@ pokeN size io = Poke $ \op -> io op >> return (op `plusPtr` size)
 ------------------------------------------------------------------------------
 
 infixl 4 #.   -- comapEncoding
-infixr 5 <#>  -- encode2
+infixr 5 <#>  -- encodePair
 infixr 5 #>   -- prepend
 infixl 4 <#   -- append
 
@@ -238,7 +237,7 @@ comapEncoding g (Encoding b f) = Encoding b (f . g)
 --
 {-# INLINE prepend #-}
 prepend :: (Encoding a, a) -> Encoding b -> Encoding b
-prepend (w1, x) w2 = encode2 w1 w2 #. (\y -> (x, y))
+prepend (w1, x) w2 = encodePair w1 w2 #. (\y -> (x, y))
 
 -- | An infix synonym for 'prepend'.
 {-# INLINE (#>) #-}
@@ -253,7 +252,7 @@ prepend (w1, x) w2 = encode2 w1 w2 #. (\y -> (x, y))
 --
 {-# INLINE append #-}
 append :: Encoding a -> (Encoding b, b) -> Encoding a
-append w1 (w2, y) = encode2 w1 w2 #. (\x -> (x, y))
+append w1 (w2, y) = encodePair w1 w2 #. (\x -> (x, y))
 
 -- | An infix synonym for 'append'.
 {-# INLINE (<#) #-}
@@ -280,13 +279,6 @@ encodeIf p wTrue wFalse =
   where
     f x = Poke $ if p x then runEncoding wTrue x else runEncoding wFalse x
 
--- | Select an 'Encoding' depending on a 'Maybe' value.
-{-# INLINE encodeMaybe #-}
-encodeMaybe :: (Encoding a, a) -> Encoding b -> Encoding (Maybe b)
-encodeMaybe (wNothing, x) wJust =
-    Encoding (max (getBound wNothing) (getBound wJust))
-          (Poke . maybe (runEncoding wNothing x) (runEncoding wJust))
-
 -- | Select an 'Encoding' depending on an 'Either' value.
 {-# INLINE encodeEither #-}
 encodeEither :: Encoding a
@@ -296,7 +288,7 @@ encodeEither wLeft wRight =
     Encoding (maxBound wLeft wRight)
           (Poke . either (runEncoding wLeft) (runEncoding wRight))
 
--- | A right-associative infix synonym for 'encode2', which composes
+-- | A right-associative infix synonym for 'encodePair', which composes
 -- two 'Encoding's sequentially. For example,
 --
 -- > showEncoding (char <#> char) ('x','y') = "xy"
@@ -313,12 +305,12 @@ encodeEither wLeft wRight =
 --
 {-# INLINE (<#>) #-}
 (<#>) :: Encoding a -> Encoding b -> Encoding (a, b)
-(<#>) = encode2
+(<#>) = encodePair
 
 -- | Sequentially compose two 'Encoding's. 
-{-# INLINE encode2 #-}
-encode2 :: Encoding a -> Encoding b -> Encoding (a, b)
-encode2 w1 w2 =
+{-# INLINE encodePair #-}
+encodePair :: Encoding a -> Encoding b -> Encoding (a, b)
+encodePair w1 w2 =
     Encoding (addBounds w1 w2) f
   where
     f (a, b) = getPoke w1 a `mappend` getPoke w2 b

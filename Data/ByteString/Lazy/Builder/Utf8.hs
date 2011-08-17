@@ -61,12 +61,19 @@ module Data.ByteString.Lazy.Builder.Utf8
     , word16HexFixed
     , word32HexFixed
     , word64HexFixed
+
     , floatHexFixed
     , doubleHexFixed
+
+    , byteStringHexFixed
+    , lazyByteStringHexFixed
 
     ) where
 
 import Foreign
+
+import Data.ByteString               as S
+import Data.ByteString.Lazy.Internal as L
 
 import Data.ByteString.Lazy.Builder (Builder)
 
@@ -102,7 +109,6 @@ int8Dec = E.encodeWith E.int8Dec
 {-# INLINE int16Dec #-}
 int16Dec :: Int16 -> Builder
 int16Dec = E.encodeWith E.int16Dec
-
 
 -- | Decimal encoding of an 'Int32' using the ASCII digits.
 {-# INLINE int32Dec #-}
@@ -166,7 +172,7 @@ floatDec = string . show
 
 -- | /Currently slow./ Decimal encoding of an IEEE 'Double' using ASCII digits and characters.
 {-# INLINE doubleDec #-}
-doubleDec :: Float -> Builder
+doubleDec :: Double -> Builder
 doubleDec = string . show
 
 
@@ -255,3 +261,13 @@ floatHexFixed = E.encodeWith E.floatHexFixed
 {-# INLINE doubleHexFixed #-}
 doubleHexFixed :: Double -> Builder
 doubleHexFixed = E.encodeWith E.doubleHexFixed
+
+-- | Encode each byte of a 'S.ByteString' using its fixed-width hex encoding.
+{-# INLINE byteStringHexFixed #-}
+byteStringHexFixed :: S.ByteString -> Builder
+byteStringHexFixed = E.encodeByteStringWith E.word8HexFixed
+
+-- | Encode each byte of a lazy 'L.ByteString' using its fixed-width hex encoding.
+{-# INLINE lazyByteStringHexFixed #-}
+lazyByteStringHexFixed :: L.ByteString -> Builder
+lazyByteStringHexFixed = E.encodeLazyByteStringWith E.word8HexFixed

@@ -28,7 +28,7 @@ Todo items
     - check endianness for external representation of IEEE floats and doubles
     - cleanup doc
     - port test and benchmark code from system-io-write
-    - test builders
+    - test builders (more tests and use .cabal to build test-executable)
     - cleanup documentation
     - prepare patches for main darcs repo:
         1. one patch that adds all files for the builder

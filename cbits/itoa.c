@@ -129,7 +129,7 @@ char* long_int_dec (long long int x, char* buf)
 char* uint_dec (unsigned int x, char* buf) 
 {
     char *ptr = buf, *ptr1 = buf, *ptr_end, tmp_char;
-    int x_tmp;
+    unsigned int x_tmp;
 
     do {
         x_tmp = x;
@@ -147,10 +147,10 @@ char* uint_dec (unsigned int x, char* buf)
 }
 
 // unsigned long ints
-char* long_uint_dec (long long int x, char* buf) 
+char* long_uint_dec (long long unsigned int x, char* buf) 
 {
     char *ptr = buf, *ptr1 = buf, *ptr_end, tmp_char;
-    long int x_tmp;
+    long long unsigned int x_tmp;
 
     do {
         x_tmp = x;

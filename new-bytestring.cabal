@@ -49,6 +49,7 @@ library
                      Data.ByteString.Lazy.Builder.BoundedEncoding
                      Data.ByteString.Lazy.Builder.BoundedEncoding.Utf8
                      Codec.Bounded.Encoding.Internal
+                     Codec.Bounded.Encoding.Internal.Test
 
   other-modules:     
                      Codec.Bounded.Encoding.Bench
@@ -58,7 +59,6 @@ library
                      Codec.Bounded.Encoding.Internal.UncheckedShifts
                      Codec.Bounded.Encoding.Internal.Region
                      Codec.Bounded.Encoding.Internal.Base16
-                     Codec.Bounded.Encoding.Internal.Test
 
   extensions:        CPP, ForeignFunctionInterface
 

@@ -5,12 +5,14 @@
 ## Config
 #########
 
-GHC6 = ghc-6.12.3
-GHC7 = ghc-7.0.1
-
 GHC = ghc
 
 # DEBUG = -ddump-rule-firings -ddump-simpl-stats -dppr-debug
+
+# regression testing against blaze-builder and old bytestring
+test-all:
+	$(GHC) --make -O2 $(DEBUG) -fforce-recomp -main-is TestAll TestAll.hs
+	./TestAll -j2 -a1000
 
 # regression testing against blaze-builder and old bytestring
 regression:

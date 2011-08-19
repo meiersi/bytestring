@@ -68,6 +68,8 @@ library
                     UnboxedTuples,
                     DeriveDataTypeable
                     ScopedTypeVariables
+                    Rank2Types
+                    BangPatterns
   if impl(ghc >= 6.11)
       extensions:   NamedFieldPuns
 

@@ -195,6 +195,7 @@ module Data.ByteString.Lazy.Builder
 
       -- * Executing Builders
     , toLazyByteString
+    , hPutBuilder
 
       -- * Creating Builders
 
@@ -245,6 +246,8 @@ import qualified Data.ByteString.Lazy.Builder.BoundedEncoding as E
 import qualified Data.ByteString               as S
 import qualified Data.ByteString.Lazy.Internal as L
 
+import System.IO (Handle)
+
 import Foreign
 
 
@@ -266,6 +269,12 @@ import Foreign
 toLazyByteString :: Builder -> L.ByteString
 toLazyByteString = toLazyByteStringWith
     (safeStrategy L.smallChunkSize L.defaultChunkSize) L.Empty
+
+-- | Output a 'Builder' to the specified handle.
+-- /TODO: Exploit buffer, if there is one./
+hPutBuilder :: Handle -> Builder -> IO ()
+hPutBuilder h = 
+    L.foldrChunks (\c -> (S.hPut h c >>)) (return ()) . toLazyByteString
 
 
 ------------------------------------------------------------------------------

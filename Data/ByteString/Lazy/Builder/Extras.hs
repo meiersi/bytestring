@@ -90,6 +90,10 @@ data AllocationStrategy = AllocationStrategy
          {-# UNPACK #-} !Int  -- size of successive buffers
          (Int -> Int -> Bool) -- trim
 
+-- | Sanitize a buffer size; i.e., make it at least the size of a 'Int'.
+sanitize :: Int -> Int
+sanitize = max (sizeOf (undefined :: Int))
+
 -- | Use this strategy for generating lazy 'L.ByteString's whose chunks are
 -- discarded right after they are generated. For example, if you just generate
 -- them to write them to a network socket.
@@ -99,7 +103,7 @@ untrimmedStrategy :: Int -- ^ Size of the first buffer
                   -- ^ An allocation strategy that does not trim any of the
                   -- filled buffers before converting it to a chunk.
 untrimmedStrategy firstSize bufSize = 
-    AllocationStrategy firstSize bufSize (\_ _ -> False)
+    AllocationStrategy (sanitize firstSize) (sanitize bufSize) (\_ _ -> False)
 
 
 -- | Use this strategy for generating lazy 'L.ByteString's whose chunks are
@@ -115,7 +119,8 @@ safeStrategy :: Int  -- ^ Size of first buffer
              -- ^ An allocation strategy that guarantees that at least half
              -- of the allocated memory is used for live data
 safeStrategy firstSize bufSize = 
-    AllocationStrategy firstSize bufSize (\used size -> 2*used < size)
+    AllocationStrategy (sanitize firstSize) (sanitize bufSize) 
+                       (\used size -> 2*used < size)
 
 -- | Execute a 'Builder' with custom execution parameters.
 --

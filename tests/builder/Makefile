@@ -9,10 +9,11 @@ GHC = ghc
 
 # DEBUG = -ddump-rule-firings -ddump-simpl-stats -dppr-debug
 
-# regression testing against blaze-builder and old bytestring
+# testing all builder-related functions
 test-all:
 	$(GHC) --make -O2 $(DEBUG) -fforce-recomp -main-is TestAll TestAll.hs
 	./TestAll -j2 -a1000
+
 
 # regression testing against blaze-builder and old bytestring
 regression:

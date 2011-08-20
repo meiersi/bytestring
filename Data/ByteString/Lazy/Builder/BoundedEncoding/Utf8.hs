@@ -146,7 +146,7 @@ encodeCharUtf8 f1 f2 f3 f4 c = case ord c of
 foreign import ccall unsafe "static int_dec" c_int_dec
     :: CInt -> Ptr Word8 -> IO (Ptr Word8)
 
-foreign import ccall unsafe "static long_int_dec" c_long_int_dec
+foreign import ccall unsafe "static long_long_int_dec" c_long_long_int_dec
     :: CLLong -> Ptr Word8 -> IO (Ptr Word8)
 
 {-# INLINE encodeIntDecimal #-}
@@ -174,7 +174,7 @@ int32Dec = encodeIntDecimal 11
 {-# INLINE int64Dec #-}
 int64Dec :: Encoding Int64
 int64Dec = 
-    boundedEncoding 20 $ \x -> pokeIO $ c_long_int_dec  (fromIntegral x)
+    boundedEncoding 20 $ \x -> pokeIO $ c_long_long_int_dec  (fromIntegral x)
 
 -- | Decimal encoding of an 'Int'.
 {-# INLINE intDec #-}
@@ -192,7 +192,7 @@ intDec = int64Dec #. fromIntegral
 foreign import ccall unsafe "static uint_dec" c_uint_dec
     :: CUInt -> Ptr Word8 -> IO (Ptr Word8)
 
-foreign import ccall unsafe "static long_uint_dec" c_long_uint_dec
+foreign import ccall unsafe "static long_long_uint_dec" c_long_long_uint_dec
     :: CULLong -> Ptr Word8 -> IO (Ptr Word8)
 
 {-# INLINE encodeWordDecimal #-}
@@ -219,7 +219,7 @@ word32Dec = encodeWordDecimal 10
 {-# INLINE word64Dec #-}
 word64Dec :: Encoding Word64
 word64Dec = 
-    boundedEncoding 20 $ \x -> pokeIO $ c_long_uint_dec  (fromIntegral x)
+    boundedEncoding 20 $ \x -> pokeIO $ c_long_long_uint_dec  (fromIntegral x)
 
 -- | Decimal encoding of a 'Word'.
 {-# INLINE wordDec #-}
@@ -240,7 +240,7 @@ wordDec = word64Dec #. fromIntegral
 foreign import ccall unsafe "static uint_hex" c_uint_hex
     :: CUInt -> Ptr Word8 -> IO (Ptr Word8)
 
-foreign import ccall unsafe "static long_uint_hex" c_long_uint_hex
+foreign import ccall unsafe "static long_long_uint_hex" c_long_long_uint_hex
     :: CULLong -> Ptr Word8 -> IO (Ptr Word8)
 
 {-# INLINE encodeWordHex #-}
@@ -264,7 +264,7 @@ word32Hex = encodeWordHex
 {-# INLINE word64Hex #-}
 word64Hex :: Encoding Word64
 word64Hex = 
-    boundedEncoding 16 $ \x -> pokeIO $ c_long_uint_hex  (fromIntegral x)
+    boundedEncoding 16 $ \x -> pokeIO $ c_long_long_uint_hex  (fromIntegral x)
 
 {-# INLINE wordHex #-}
 wordHex :: Encoding Word

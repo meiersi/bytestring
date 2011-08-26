@@ -273,8 +273,7 @@ toLazyByteString = toLazyByteStringWith
 -- | Output a 'Builder' to the specified handle.
 -- /TODO: Exploit buffer, if there is one./
 hPutBuilder :: Handle -> Builder -> IO ()
-hPutBuilder h = 
-    L.foldrChunks (\c -> (S.hPut h c >>)) (return ()) . toLazyByteString
+hPutBuilder h = hPut h . putBuilder
 
 
 ------------------------------------------------------------------------------

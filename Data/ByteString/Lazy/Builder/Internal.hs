@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, BangPatterns, Rank2Types, MonoPatBinds #-}
+{-# LANGUAGE ScopedTypeVariables, CPP, BangPatterns, Rank2Types, MonoPatBinds #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Copyright   : (c) 2010 Simon Meier
@@ -69,6 +69,7 @@ module Data.ByteString.Lazy.Builder.Internal (
   , Put
   , put
   , runPut
+  , hPut
 
   -- ** Conversion to and from Builders
   , putBuilder
@@ -84,12 +85,19 @@ module Data.ByteString.Lazy.Builder.Internal (
 -- #ifdef APPLICATIVE_IN_BASE
 import Control.Applicative (Applicative(..))
 -- #endif
+import Control.Monad (when)
 
 import Data.Monoid
 import qualified Data.ByteString               as S
 
+import GHC.IO.Buffer (Buffer(..), newByteBuffer)
+import GHC.IO.Handle.Internals (wantWritableHandle, flushWriteBuffer)
+import GHC.IO.Handle.Types (Handle__, haByteBuffer) 
+import GHC.IORef
 
 import Foreign
+
+import System.IO (Handle)
 
 
 -- | A range of bytes in a buffer represented by the pointer to the first byte
@@ -376,3 +384,71 @@ fromPut (Put p) = Builder $ \k -> p (\_ -> k)
 putLiftIO :: IO a -> Put a
 putLiftIO io = put $ \k br -> io >>= (`k` br)
 
+
+------------------------------------------------------------------------------
+-- Executing a Put directly on a buffered Handle
+------------------------------------------------------------------------------
+
+-- | Run a 'Put' action redirecting the produced output to a 'Handle'.
+--
+-- The output is buffered using the 'Handle's associated buffer. If this
+-- buffer is too small to execute one step of the 'Put' action, then
+-- it is replaced with a large enough buffer.
+hPut :: forall a. Handle -> Put a -> IO a
+hPut h b =
+    fillHandle (runPut b)
+  where
+    fillHandle :: BuildStep a -> IO a
+    fillHandle step = do
+        next <- wantWritableHandle "hPut" h fill
+        next
+      where
+        -- | We need to return an inner IO action that is executed outside
+        -- the lock taken on the Handle for two reasons:
+        --
+        --   1. GHC.IO.Handle.Internals mentions in "Note [async]" that
+        --      we should never do any side-effecting operations before
+        --      an interuptible operation that may raise an async. exception
+        --      as long as we are inside 'wantWritableHandle' and the like.
+        --      'flushWriteBuffer' is interuptible therefore we move it
+        --      outside.
+        --
+        --   2. We use the 'S.hPut' function to also write to the handle.
+        --      This function tries to take the same lock taken by
+        --      'wantWritableHandle'. Therefore, we cannot call 'S.hPut'
+        --      inside 'wantWritableHandle'.
+        --
+        fill :: Handle__ -> IO (IO a)
+        fill h_ = 
+            go =<< readIORef refBuf
+          where
+            refBuf = haByteBuffer h_
+
+            go buf = do
+                let !br  = BufferRange op (pBuf `plusPtr` bufSize buf)
+                res <- fillWithBuildStep step doneH fullH insertChunkH br
+                touchForeignPtr fpBuf
+                return res
+              where
+                fpBuf = bufRaw buf
+                pBuf  = unsafeForeignPtrToPtr fpBuf
+                op    = pBuf `plusPtr` bufR buf
+
+                updatBufR op' next = do
+                    let !off' = op' `minusPtr` pBuf
+                        !buf' = buf {bufR = off'}
+                    writeIORef refBuf buf'
+                    return next
+
+                doneH op' x = updatBufR op' $ return x
+
+                fullH op' minSize nextStep = updatBufR op' $ do
+                    flushWriteBuffer h_
+                    when (minSize > bufSize buf) $ do
+                        newByteBuffer minSize (bufState buf)
+                            >>= writeIORef refBuf
+                    fillHandle nextStep
+
+                insertChunkH op' bs nextStep = updatBufR op' $ do
+                    S.hPut h bs
+                    fillHandle nextStep

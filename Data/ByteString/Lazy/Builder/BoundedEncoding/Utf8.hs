@@ -91,6 +91,8 @@ import Codec.Bounded.Encoding.Internal.Base16
 char :: Encoding Char
 char = boundedEncoding 4 (encodeCharUtf8 f1 f2 f3 f4)
   where
+    pokeN n io op = io op >> return (op `plusPtr` n)
+
     f1 x1          = pokeN 1 $ \op -> do pokeByteOff op 0 x1
 
     f2 x1 x2       = pokeN 2 $ \op -> do pokeByteOff op 0 x1
@@ -151,8 +153,7 @@ foreign import ccall unsafe "static long_long_int_dec" c_long_long_int_dec
 
 {-# INLINE encodeIntDecimal #-}
 encodeIntDecimal :: Integral a => Int -> Encoding a
-encodeIntDecimal bound = 
-    boundedEncoding bound $ \x -> pokeIO $ c_int_dec  (fromIntegral x)
+encodeIntDecimal bound = boundedEncoding bound $ c_int_dec . fromIntegral
 
 -- | Decimal encoding of an 'Int8'.
 {-# INLINE int8Dec #-}
@@ -173,8 +174,7 @@ int32Dec = encodeIntDecimal 11
 -- | Decimal encoding of an 'Int64'.
 {-# INLINE int64Dec #-}
 int64Dec :: Encoding Int64
-int64Dec = 
-    boundedEncoding 20 $ \x -> pokeIO $ c_long_long_int_dec  (fromIntegral x)
+int64Dec = boundedEncoding 20 $ c_long_long_int_dec . fromIntegral
 
 -- | Decimal encoding of an 'Int'.
 {-# INLINE intDec #-}
@@ -197,8 +197,7 @@ foreign import ccall unsafe "static long_long_uint_dec" c_long_long_uint_dec
 
 {-# INLINE encodeWordDecimal #-}
 encodeWordDecimal :: Integral a => Int -> Encoding a
-encodeWordDecimal bound = 
-    boundedEncoding bound $ \x -> pokeIO $ c_uint_dec  (fromIntegral x)
+encodeWordDecimal bound = boundedEncoding bound $ c_uint_dec . fromIntegral
 
 -- | Decimal encoding of a 'Word8'.
 {-# INLINE word8Dec #-}
@@ -218,8 +217,7 @@ word32Dec = encodeWordDecimal 10
 -- | Decimal encoding of a 'Word64'.
 {-# INLINE word64Dec #-}
 word64Dec :: Encoding Word64
-word64Dec = 
-    boundedEncoding 20 $ \x -> pokeIO $ c_long_long_uint_dec  (fromIntegral x)
+word64Dec = boundedEncoding 20 $ c_long_long_uint_dec . fromIntegral
 
 -- | Decimal encoding of a 'Word'.
 {-# INLINE wordDec #-}
@@ -246,8 +244,7 @@ foreign import ccall unsafe "static long_long_uint_hex" c_long_long_uint_hex
 {-# INLINE encodeWordHex #-}
 encodeWordHex :: forall a. (Storable a, Integral a) => Encoding a
 encodeWordHex = 
-    boundedEncoding (2 * sizeOf (undefined :: a)) $ 
-        \x -> pokeIO $ c_uint_hex  (fromIntegral x)
+    boundedEncoding (2 * sizeOf (undefined :: a)) $ c_uint_hex  . fromIntegral
 
 {-# INLINE word8Hex #-}
 word8Hex :: Encoding Word8
@@ -263,8 +260,7 @@ word32Hex = encodeWordHex
 
 {-# INLINE word64Hex #-}
 word64Hex :: Encoding Word64
-word64Hex = 
-    boundedEncoding 16 $ \x -> pokeIO $ c_long_long_uint_hex  (fromIntegral x)
+word64Hex = boundedEncoding 16 $ c_long_long_uint_hex . fromIntegral
 
 {-# INLINE wordHex #-}
 wordHex :: Encoding Word

@@ -20,23 +20,10 @@
 -- utilities for testing your encodings thoroughly.
 --
 module Codec.Bounded.Encoding.Internal (
-  -- * Poking a buffer
-  
-  -- | We abstract raw 'IO' actions for poking a buffer in a separate type.
-  -- This allows us to change the actual implementation of buffer-poking in the
-  -- future with minimal breakage of client code inside this library. Note
-  -- that, in contrast to the 'poke' function provided by 'Storable', a 'Poke'
-  -- is not restricted to poking a fixed number of bytes.
-  --
-    Poke
-  , pokeIO
-  , pokeN
-
   -- * Encodings
-  , Encoding
+    Encoding
   , runEncoding
   , getBound
-  , getPoke
 
   -- ** Unsafe creation of Encodings
   , boundedEncoding
@@ -185,10 +172,11 @@ addBounds w1 w2 = getBound w1 + getBound w2
 -- /Precondition:/ the bound must be valid for the implementation of the
 -- encoding scheme.
 {-# INLINE boundedEncoding #-}
-boundedEncoding :: Int          -- ^ Maximal number of bytes written
-             -> (a -> Poke)  -- ^ Implementation of the encoding scheme
-             -> Encoding a      
-boundedEncoding = Encoding
+boundedEncoding 
+    :: Int                                 -- ^ Maximal number of bytes written
+    -> (a -> Ptr Word8 -> IO (Ptr Word8))  -- ^ Implementation of the encoding scheme
+    -> Encoding a      
+boundedEncoding b io = Encoding b $ pokeIO . io
 
 -- | Create an 'Encoding' from an 'IO' action that encodings a fixed number of bytes.
 --

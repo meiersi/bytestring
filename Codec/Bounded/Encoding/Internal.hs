@@ -51,7 +51,6 @@ module Codec.Bounded.Encoding.Internal (
   , withSizeFB
   , withSizeBB
 
-
   ) where
 
 import Foreign
@@ -97,8 +96,7 @@ storableF = FE (sizeOf (undefined :: a)) (\x op -> poke (castPtr op) x)
 
 {-# INLINE CONLIKE liftIOF #-}
 liftIOF :: FixedEncoding a -> FixedEncoding (IO a)
-liftIOF (FE l io) =
-    FE l (\xWrapped op -> do x <- xWrapped; io x op)
+liftIOF (FE l io) = FE l (\xWrapped op -> do x <- xWrapped; io x op)
 
 ------------------------------------------------------------------------------
 -- Bounded-size Encodings
@@ -141,9 +139,10 @@ ifB :: (a -> Bool) -> BoundedEncoding a -> BoundedEncoding a -> BoundedEncoding 
 ifB p be1 be2 = 
     contramapB (\x -> if p x then Left x else Right x) (eitherB be1 be2)
 
+newtype Size = Size { getSize :: Int }
 
 {-# INLINE withSizeFB #-}
-withSizeFB :: (Int -> FixedEncoding Int) -> BoundedEncoding a -> BoundedEncoding a
+withSizeFB :: (Size -> FixedEncoding Size) -> BoundedEncoding a -> BoundedEncoding a
 withSizeFB feSize (BE b io) = 
     BE (lSize + b)
        (\x op0 -> do let !op1 = op0 `plusPtr` lSize
@@ -151,7 +150,7 @@ withSizeFB feSize (BE b io) =
                      ioSize (op2 `minusPtr` op1) op0
                      return op2)
   where
-    FE lSize ioSize = feSize b
+    FE lSize ioSize = feSize (Size b)
 
 
 {-# INLINE withSizeBB #-}
@@ -167,8 +166,94 @@ withSizeBB (BE bSize ioSize) (BE b io) =
 
 {-# INLINE CONLIKE liftIOB #-}
 liftIOB :: BoundedEncoding a -> BoundedEncoding (IO a)
-liftIOB (BE l io) =
-    BE l (\xWrapped op -> do x <- xWrapped; io x op)
+liftIOB (BE l io) = BE l (\xWrapped op -> do x <- xWrapped; io x op)
+
+
+sizeHexPadded :: Char -> Size -> FixedEncoding Size
+
+sizeDecPadded :: Char -> Size -> FixedEncoding Size
+
+sizeVar       :: Size -> FixedEncoding Size
+
+encodeChunked
+    :: Size                           -- ^ Minimal free-size
+    -> Size                           -- ^ Maximal chunk-size
+    -> (Size -> FixedEncoding Size)   
+    -- ^ Given a bound on the maximal encodable size this function must return
+    -- a fixed-size encoding for encoding all smaller size.
+    -> BoundedEncoding Size
+    -- ^ Encoding of the size of a directly inserted chunk.
+    -> BoundedEncoding Size
+    -- ^ An encoding for terminating a chunk of the given size.
+    -> Put a
+    -- ^ Inner 'Put' to transform
+    -> Put a
+    -- ^ 'Put' with chunked encoding.
+
+
+httpChunkedTransfer = encodeChunked 32 maxBound 
+                                       (sizeHexPadded '0') 
+                                       (intHex >.< getSize)
+                                       (toB $ constByteStringF "\r\n\r\n")
+
+{-# INLINE CONLIKE constByteStringF #-}
+constByteStringF :: S.ByteString -> FixedEncoding a
+constByteStringF bs = 
+    FE len io
+  where
+    (S.PS fp off len) = bs
+    io _ op = do 
+        copyBytes op (unsafeForeignPtrToPtr fp `plusPtr` off) len
+        touchForeignPtr fp
+
+{-# INLINE byteStringPrefixB #-}
+byteStringPrefixB :: Int -> BoundedEncoding S.ByteString
+byteStringPrefixB n =
+    BE n io
+  where
+    io (S.PS fp off len) op = do 
+        let !s = max len n
+        copyBytes op (unsafeForeignPtrToPtr fp `plusPtr` off) s
+        touchForeignPtr fp
+        return $! op `plusPtr` s
+
+
+{-# INLINE listPrefixB #-}
+listPrefixB :: Int -> BoundedEncoding a -> BoundedEncoding [a]
+listPrefixB n0 (BE b0 io) =
+    -- The new bound will always be forced before the IO action.
+    -- Hence, it's sufficient to attach the error condition to it.
+    -- This simplifies inlining, as then BE is the outermost constructor.
+    BE b (go n)
+  where
+    n = max 0 n0
+    
+    b | n  > sqrtIntMaxBound = listPrefixBErr "max. number of elements" n
+      | b0 > sqrtIntMaxBound = listPrefixBErr "max. number of bytes"    b0
+      | otherwise            = b0 * n
+
+    go 0   _      !op = return op
+    go _   []     !op = return op
+    go !n  (x:xs) !op = io x op >>= go (pred n) xs
+
+-- TODO: Adapt bound for 64-bit machines.
+sqrtIntMaxBound :: Int
+sqrtIntMaxBound = 46340
+
+listPrefixBerr msg x = error $ "listPrefixB: " ++ msg ++ " too high (" ++ 
+                               show x ++ " > " ++ show sqrtIntMaxBound ++ ")"
+
+
+
+chunked64k = encodeChunked 16 (fromIntegral $ maxBound :: Word16)
+                              (const $ word16LE >.< fromIntegral)
+                              (toB $ word16LE >.< fromIntegral)
+                              (emptyB)
+
+
+
+
+
 
 
 -------------------------------------------------------------------------------

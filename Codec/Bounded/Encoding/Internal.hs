@@ -20,6 +20,167 @@
 -- utilities for testing your encodings thoroughly.
 --
 module Codec.Bounded.Encoding.Internal (
+  -- * Fixed-size Encodings
+    FixedEncoding
+  , fixedEncoding
+  , size
+  , runF
+  
+  , emptyF
+  , contramapF
+  , pairF
+  , liftIOF
+
+  , storableF
+
+  -- * Bounded-size Encodings
+  , BoundedEncoding
+  , boundedEncoding
+  , bound
+  , runB
+
+  , emptyB
+  , contramapB
+  , pairB
+  , eitherB
+  , ifB
+
+  , liftIOB
+
+  , toB
+  , withSizeFB
+  , withSizeBB
+
+
+  ) where
+
+import Foreign
+import Prelude hiding (maxBound)
+
+------------------------------------------------------------------------------
+-- Fixed-size Encodings
+------------------------------------------------------------------------------
+
+data FixedEncoding a = FE {-# UNPACK #-} !Int (a -> Ptr Word8 -> IO ())
+
+fixedEncoding :: Int -> (a -> Ptr Word8 -> IO ()) -> FixedEncoding a
+fixedEncoding = FE
+
+{-# INLINE CONLIKE size #-}
+size :: FixedEncoding a -> Int
+size (FE l _) = l
+
+{-# INLINE CONLIKE runF #-}
+runF :: FixedEncoding a -> a -> Ptr Word8 -> IO ()
+runF (FE _ io) = io
+
+{-# INLINE CONLIKE emptyF #-}
+emptyF :: FixedEncoding a 
+emptyF = FE 0 (\_ _ -> return ())
+
+{-# INLINE CONLIKE pairF #-}
+pairF :: FixedEncoding a -> FixedEncoding b -> FixedEncoding (a, b)
+pairF (FE l1 io1) (FE l2 io2) =
+    FE (l1 + l2) (\(x1,x2) op -> io1 x1 op >> io2 x2 (op `plusPtr` l1))
+
+{-# INLINE CONLIKE contramapF #-}
+contramapF :: (b -> a) -> FixedEncoding a -> FixedEncoding b
+contramapF f (FE l io) = FE l (\x op -> io (f x) op)
+
+{-# INLINE CONLIKE toB #-}
+toB :: FixedEncoding a -> BoundedEncoding a 
+toB (FE l io) = BE l (\x op -> io x op >> (return $! op `plusPtr` l))
+
+{-# INLINE CONLIKE storableF #-}
+storableF :: forall a. Storable a => FixedEncoding a
+storableF = FE (sizeOf (undefined :: a)) (\x op -> poke (castPtr op) x)
+
+{-# INLINE CONLIKE liftIOF #-}
+liftIOF :: FixedEncoding a -> FixedEncoding (IO a)
+liftIOF (FE l io) =
+    FE l (\xWrapped op -> do x <- xWrapped; io x op)
+
+------------------------------------------------------------------------------
+-- Bounded-size Encodings
+------------------------------------------------------------------------------
+
+data BoundedEncoding a = BE {-# UNPACK #-} !Int (a -> Ptr Word8 -> IO (Ptr Word8))
+
+{-# INLINE CONLIKE bound #-}
+bound :: BoundedEncoding a -> Int
+bound (BE b _) = b
+
+boundedEncoding :: Int -> (a -> Ptr Word8 -> IO (Ptr Word8)) -> BoundedEncoding a
+boundedEncoding = BE
+
+{-# INLINE CONLIKE runB #-}
+runB :: BoundedEncoding a -> a -> Ptr Word8 -> IO (Ptr Word8)
+runB (BE _ io) = io
+
+{-# INLINE CONLIKE contramapB #-}
+contramapB :: (b -> a) -> BoundedEncoding a -> BoundedEncoding b
+contramapB f (BE b io) = BE b (\x op -> io (f x) op)
+
+{-# INLINE CONLIKE emptyB #-}
+emptyB :: BoundedEncoding a 
+emptyB = BE 0 (\_ op -> return op)
+
+{-# INLINE CONLIKE pairB #-}
+pairB :: BoundedEncoding a -> BoundedEncoding b -> BoundedEncoding (a, b)
+pairB (BE b1 io1) (BE b2 io2) =
+    BE (b1 + b2) (\(x1,x2) op -> io1 x1 op >>= io2 x2)
+
+{-# INLINE CONLIKE eitherB #-}
+eitherB :: BoundedEncoding a -> BoundedEncoding b -> BoundedEncoding (Either a b)
+eitherB (BE b1 io1) (BE b2 io2) =
+    BE (max b1 b2) 
+        (\x op -> case x of Left x1 -> io1 x1 op; Right x2 -> io2 x2 op)
+
+{-# INLINE CONLIKE ifB #-}
+ifB :: (a -> Bool) -> BoundedEncoding a -> BoundedEncoding a -> BoundedEncoding a
+ifB p be1 be2 = 
+    contramapB (\x -> if p x then Left x else Right x) (eitherB be1 be2)
+
+
+{-# INLINE withSizeFB #-}
+withSizeFB :: (Int -> FixedEncoding Int) -> BoundedEncoding a -> BoundedEncoding a
+withSizeFB feSize (BE b io) = 
+    BE (lSize + b)
+       (\x op0 -> do let !op1 = op0 `plusPtr` lSize
+                     op2 <- io x op1
+                     ioSize (op2 `minusPtr` op1) op0
+                     return op2)
+  where
+    FE lSize ioSize = feSize b
+
+
+{-# INLINE withSizeBB #-}
+withSizeBB :: BoundedEncoding Int -> BoundedEncoding a -> BoundedEncoding a
+withSizeBB (BE bSize ioSize) (BE b io) = 
+    BE (bSize + 2*b)
+       (\x op0 -> do let !opTmp = op0 `plusPtr` (bSize + b)
+                     opTmp' <- io x opTmp
+                     let !s = opTmp' `minusPtr` opTmp
+                     op1 <- ioSize s op0
+                     copyBytes op1 opTmp s
+                     return $! op1 `plusPtr` s)
+
+{-# INLINE CONLIKE liftIOB #-}
+liftIOB :: BoundedEncoding a -> BoundedEncoding (IO a)
+liftIOB (BE l io) =
+    BE l (\xWrapped op -> do x <- xWrapped; io x op)
+
+
+-------------------------------------------------------------------------------
+-------------------------------------------------------------------------------
+---- OLD
+--------- OLD             OLD
+---------------- OLD                    OOOOOOOOOOOOOLD
+-------------------------------------------------------------------------------
+
+{- OOOOOOLD STUFF
+
+  {-
   -- * Encodings
     Encoding
   , runEncoding
@@ -65,12 +226,7 @@ module Codec.Bounded.Encoding.Internal (
   , encode4
   , encode8
   
-  ) where
-
-import Control.Monad ( (>=>) )
-import Data.Monoid
-import Foreign
-import Prelude hiding (maxBound)
+  -}
 
 ------------------------------------------------------------------------------
 -- Poking a buffer
@@ -113,7 +269,7 @@ instance Monoid Poke where
 pokeIO :: (Ptr Word8 -> IO (Ptr Word8)) -> Poke
 pokeIO = Poke
 
--- | An abbrevation for constructing 'Poke's of fixed-length sequences.
+-- | An abbrevation for constructing 'Poke's of fixed-size sequences.
 --
 -- /Preconditions:/ the given number of the poked bytes must agree precisely
 -- with the actual implementation (analogously to 'pokeIO').
@@ -348,4 +504,4 @@ liftIO :: Encoding a -> Encoding (IO a)
 liftIO w =
     Encoding (getBound w) (\io -> Poke $ \op -> do x <- io; runEncoding w x op)
 
-
+-}

@@ -3,6 +3,8 @@
 /builder/Regression
 /builder/EncodingListFusion
 /builder/Test_RewriteFoldr
+/builder/DumbPutTest
+/builder/DumbPutTest-out.txt
 *.hi
 *.o
 

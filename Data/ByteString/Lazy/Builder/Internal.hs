@@ -85,7 +85,7 @@ module Data.ByteString.Lazy.Builder.Internal (
 -- #ifdef APPLICATIVE_IN_BASE
 import Control.Applicative (Applicative(..))
 -- #endif
-import Control.Monad (when)
+import Control.Applicative ((<$>))
 
 import Data.Monoid
 import qualified Data.ByteString               as S
@@ -133,9 +133,9 @@ done = Done
 -- | Signal that the current buffer is full.
 {-# INLINE bufferFull #-}
 bufferFull :: Int                              
-           -- ^ Minimal size of next 'BufferRange'
+           -- ^ Minimal size of next 'BufferRange'. 
            -> Ptr Word8                        
-           -- ^ Next free byte in current 'BufferRange'
+           -- ^ Next free byte in current 'BufferRange'. 
            -> (BufferRange -> IO (BuildSignal a)) 
            -- ^ 'BuildStep' to run on the next 'BufferRange'. This 'BuildStep'
            -- may assume that it is called with a 'BufferRange' of at least the
@@ -396,11 +396,11 @@ putLiftIO io = put $ \k br -> io >>= (`k` br)
 -- it is replaced with a large enough buffer.
 hPut :: forall a. Handle -> Put a -> IO a
 hPut h b =
-    fillHandle (runPut b)
+    fillHandle 1 (runPut b)
   where
-    fillHandle :: BuildStep a -> IO a
-    fillHandle step = do
-        next <- wantWritableHandle "hPut" h fill
+    fillHandle :: Int -> BuildStep a -> IO a
+    fillHandle !minFree step = do
+        next <- wantWritableHandle "hPut" h fillHandle_
         next
       where
         -- | We need to return an inner IO action that is executed outside
@@ -410,45 +410,65 @@ hPut h b =
         --      we should never do any side-effecting operations before
         --      an interuptible operation that may raise an async. exception
         --      as long as we are inside 'wantWritableHandle' and the like.
-        --      'flushWriteBuffer' is interuptible therefore we move it
-        --      outside.
+        --      We possibly run the interuptible 'flushWriteBuffer' right at
+        --      the start of 'fillHandle', hence entering it a second time is
+        --      not safe, as it could lead to a 'BuildStep' being run twice.
         --
         --   2. We use the 'S.hPut' function to also write to the handle.
         --      This function tries to take the same lock taken by
         --      'wantWritableHandle'. Therefore, we cannot call 'S.hPut'
         --      inside 'wantWritableHandle'.
         --
-        fill :: Handle__ -> IO (IO a)
-        fill h_ = 
-            go =<< readIORef refBuf
+        fillHandle_ :: Handle__ -> IO (IO a)
+        fillHandle_ h_ = do
+            makeSpace  =<< readIORef refBuf 
+            fillBuffer =<< readIORef refBuf
           where
-            refBuf = haByteBuffer h_
+            refBuf        = haByteBuffer h_
+            freeSpace buf = bufSize buf - bufR buf
 
-            go buf = do
-                let !br  = BufferRange op (pBuf `plusPtr` bufSize buf)
-                res <- fillWithBuildStep step doneH fullH insertChunkH br
-                touchForeignPtr fpBuf
-                return res
+            makeSpace buf
+              | bufSize buf < minFree = do
+                  flushWriteBuffer h_                   
+                  s <- bufState <$> readIORef refBuf
+                  newByteBuffer minFree s >>= writeIORef refBuf
+
+              | freeSpace buf < minFree = flushWriteBuffer h_
+              | otherwise               = return ()
+
+            fillBuffer buf 
+              | freeSpace buf < minFree = 
+                  error $ unlines
+                    [ "Data.ByteString.Lazy.Builder.Internal.hPut: internal error."
+                    , "  Not enough space after flush."
+                    , "    required: " ++ show minFree 
+                    , "    free: "     ++ show (freeSpace buf)
+                    ]
+              | otherwise = do
+                  let !br = BufferRange op (pBuf `plusPtr` bufSize buf)
+                  res <- fillWithBuildStep step doneH fullH insertChunkH br
+                  touchForeignPtr fpBuf
+                  return res
               where
                 fpBuf = bufRaw buf
                 pBuf  = unsafeForeignPtrToPtr fpBuf
                 op    = pBuf `plusPtr` bufR buf
 
-                updatBufR op' next = do
+                {-# INLINE updateBufR #-}
+                updateBufR op' next = do
                     let !off' = op' `minusPtr` pBuf
                         !buf' = buf {bufR = off'}
                     writeIORef refBuf buf'
                     return next
 
-                doneH op' x = updatBufR op' $ return x
+                doneH op' x = updateBufR op' $ return x
 
-                fullH op' minSize nextStep = updatBufR op' $ do
-                    flushWriteBuffer h_
-                    when (minSize > bufSize buf) $ do
-                        newByteBuffer minSize (bufState buf)
-                            >>= writeIORef refBuf
-                    fillHandle nextStep
+                fullH op' minSize nextStep = updateBufR op' $
+                    -- 'fillHandle' will flush the buffer (provided there is
+                    -- really less than 'minSize' space left) before executing
+                    -- the 'nextStep'.
+                    fillHandle minSize nextStep
 
-                insertChunkH op' bs nextStep = updatBufR op' $ do
+                insertChunkH op' bs nextStep = updateBufR op' $ do
                     S.hPut h bs
-                    fillHandle nextStep
+                    fillHandle 1 nextStep

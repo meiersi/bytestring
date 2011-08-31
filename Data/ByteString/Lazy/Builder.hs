@@ -292,31 +292,6 @@ int8 = E.encodeWithF E.int8
 word8 :: Word8 -> Builder
 word8 = E.encodeWithF E.word8
 
--- | Create a 'Builder' denoting the same sequence of bytes as a strict
--- 'S.ByteString'.
---
--- The 'Builder' copies short 'S.ByteString's and inserts long 'S.ByteString's
--- directly. This way the 'Builder' ensures that chunks are large on average,
--- which is important for the efficiency of consumers of the generated chunks.
--- See the "Data.ByteString.Lazy.Builder.Extras" module, if you need more
--- control over chunk sizes.
---
-{-# INLINE byteString #-}
-byteString :: S.ByteString -> Builder
-byteString = byteStringThreshold defaultMaximalCopySize
-
--- | Chunk-wise application of 'byteString' to a lazy 'L.ByteString'.
---
-{-# INLINE lazyByteString #-}
-lazyByteString :: L.ByteString -> Builder
-lazyByteString = lazyByteStringThreshold defaultMaximalCopySize
-
--- | The maxiamal size of a bytestring that is copied. 
--- @2 * 'L.smallChunkSize'@ to guarantee that on average a chunk is of
--- 'L.smallChunkSize'.
-defaultMaximalCopySize :: Int
-defaultMaximalCopySize = 2 * L.smallChunkSize
-
 
 
 ------------------------------------------------------------------------------

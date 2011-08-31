@@ -66,6 +66,26 @@ module Data.ByteString.Lazy.Builder.Internal (
   , append
   , flush
 
+  , byteStringCopy
+  , byteStringInsert
+  , byteStringThreshold
+
+  , lazyByteStringCopy
+  , lazyByteStringInsert
+  , lazyByteStringThreshold
+
+  , maximalCopySize
+  , byteString
+  , lazyByteString
+
+  -- ** Execution strategies
+  , toLazyByteStringWith
+  , AllocationStrategy
+  , safeStrategy
+  , untrimmedStrategy
+  , L.smallChunkSize
+  , L.defaultChunkSize
+
   -- * The Put monad
   , Put
   , put
@@ -90,6 +110,8 @@ import Control.Applicative ((<$>))
 
 import Data.Monoid
 import qualified Data.ByteString               as S
+import qualified Data.ByteString.Internal      as S
+import qualified Data.ByteString.Lazy.Internal as L
 
 import GHC.IO.Buffer (Buffer(..), newByteBuffer)
 import GHC.IO.Handle.Internals (wantWritableHandle, flushWriteBuffer)
@@ -139,7 +161,7 @@ bufferFull :: Int
            -- ^ Minimal size of next 'BufferRange'. 
            -> Ptr Word8                        
            -- ^ Next free byte in current 'BufferRange'. 
-           -> (BufferRange -> IO (BuildSignal a)) 
+           -> BuildStep a
            -- ^ 'BuildStep' to run on the next 'BufferRange'. This 'BuildStep'
            -- may assume that it is called with a 'BufferRange' of at least the
            -- required minimal size; i.e., the caller of this 'BuildStep' must
@@ -156,7 +178,7 @@ insertChunk :: Ptr Word8
             -- ^ Next free byte in current 'BufferRange'
             -> S.ByteString                     
             -- ^ Chunk to insert
-            -> (BufferRange -> IO (BuildSignal a)) 
+            -> BuildStep a
             -- ^ 'BuildStep' to run on next 'BufferRange'
             -> BuildSignal a
 insertChunk = InsertByteString
@@ -445,3 +467,260 @@ hPut h b =
                 insertChunkH op' bs nextStep = updateBufR op' $ do
                     S.hPut h bs
                     fillHandle 1 nextStep
+
+
+------------------------------------------------------------------------------
+-- ByteString insertion / controlling chunk boundaries
+------------------------------------------------------------------------------
+
+
+-- Strict ByteStrings
+------------------------------------------------------------------------------
+
+
+-- | Create a 'Builder' denoting the same sequence of bytes as a strict
+-- 'S.ByteString'.
+--
+-- A 'Builder' defined as @'byteStringThreshold' maxCopySize bs@ copies @bs@, if
+-- it is shorter than @maxCopySize@, and inserts it directly, otherwise.
+--
+{-# INLINE byteStringThreshold #-}
+byteStringThreshold :: Int -> S.ByteString -> Builder     
+byteStringThreshold maxCopySize = 
+    \bs -> builder $ step bs
+  where
+    step !bs !k br@(BufferRange !op _)
+      | maxCopySize < S.length bs = return $ insertChunk op bs k
+      | otherwise                 = byteStringCopyStep bs k br
+
+-- | The created 'Builder' always copies the 'S.ByteString'. Use this function
+-- to create 'Builder's from smallish (@<= 4kb@) 'S.ByteString's or if you need
+-- to guarantee that the 'S.ByteString' is not shared with the chunks generated
+-- by the 'Builder'.
+--
+{-# INLINE byteStringCopy #-}
+byteStringCopy :: S.ByteString -> Builder
+byteStringCopy = \bs -> builder $ byteStringCopyStep bs
+
+{-# INLINE byteStringCopyStep #-}
+byteStringCopyStep :: S.ByteString 
+                   -> (BufferRange -> IO (BuildSignal a))
+                   -> (BufferRange -> IO (BuildSignal a))
+byteStringCopyStep (S.PS ifp ioff isize) !k = 
+    goBS (unsafeForeignPtrToPtr ifp `plusPtr` ioff)
+  where
+    !ipe = unsafeForeignPtrToPtr ifp `plusPtr` (ioff + isize)
+    goBS !ip !(BufferRange op ope)
+      | inpRemaining <= outRemaining = do
+          copyBytes op ip inpRemaining
+          touchForeignPtr ifp -- input consumed: OK to release from here
+          let !br' = BufferRange (op `plusPtr` inpRemaining) ope
+          k br'
+      | otherwise = do
+          copyBytes op ip outRemaining
+          let !ip' = ip `plusPtr` outRemaining
+          return $ bufferFull 1 ope (goBS ip')
+      where
+        outRemaining = ope `minusPtr` op
+        inpRemaining = ipe `minusPtr` ip
+
+-- | The created 'Builder' always inserts the 'S.ByteString' directly as a chunk. 
+-- This implies flushing the output buffer; even if it contains just
+-- a single byte! Hence, you should use 'byteStringInsert' only for large (@>
+-- 8kb@) 'S.ByteString's. Otherwise, the generated chunks are too fragmented to
+-- be processed efficiently.
+--
+{-# INLINE byteStringInsert #-}
+byteStringInsert :: S.ByteString -> Builder
+byteStringInsert = 
+    \bs -> builder $ step bs
+  where
+    step !bs !k !(BufferRange op _) = return $ insertChunk op bs k
+
+
+-- Lazy bytestrings
+------------------------------------------------------------------------------
+
+-- | Chunk-wise application of 'byteStringThreshold' to a lazy 'L.ByteString'.
+--
+{-# INLINE lazyByteStringThreshold #-}
+lazyByteStringThreshold :: Int -> L.ByteString -> Builder
+lazyByteStringThreshold maxCopySize = 
+  L.foldrChunks (\bs b -> byteStringThreshold maxCopySize bs `mappend` b) mempty
+
+-- | Chunk-wise application of 'byteStringCopy' to a lazy 'L.ByteString'.
+--
+{-# INLINE lazyByteStringCopy #-}
+lazyByteStringCopy :: L.ByteString -> Builder
+lazyByteStringCopy = 
+  L.foldrChunks (\bs b -> byteStringCopy bs `mappend` b) mempty
+
+-- This function costs /O(n)/ where /n/ is the number of chunks of the lazy
+-- 'L.ByteString'. The design of the 'Builder' could be changed to support an
+-- /O(1)/ insertion of a difference-list style lazy bytestring. Please contact
+-- me, if you have a use case for that.
+
+-- | Chunk-wise application of 'byteStringInsert' to a lazy 'L.ByteString'.
+--
+{-# INLINE lazyByteStringInsert #-}
+lazyByteStringInsert :: L.ByteString -> Builder
+lazyByteStringInsert =
+  L.foldrChunks (\bs b -> byteStringInsert bs `mappend` b) mempty
+
+-- | Create a 'Builder' denoting the same sequence of bytes as a strict
+-- 'S.ByteString'.
+--
+-- The 'Builder' copies short 'S.ByteString's and inserts long 'S.ByteString's
+-- directly. This way the 'Builder' ensures that chunks are large on average,
+-- which is important for the efficiency of consumers of the generated chunks.
+-- See the "Data.ByteString.Lazy.Builder.Extras" module, if you need more
+-- control over chunk sizes.
+--
+{-# INLINE byteString #-}
+byteString :: S.ByteString -> Builder
+byteString = byteStringThreshold maximalCopySize
+
+-- | Chunk-wise application of 'byteString' to a lazy 'L.ByteString'.
+--
+{-# INLINE lazyByteString #-}
+lazyByteString :: L.ByteString -> Builder
+lazyByteString = lazyByteStringThreshold maximalCopySize
+
+-- | The maximal size of a 'S.ByteString' that is copied. 
+-- @2 * 'L.smallChunkSize'@ to guarantee that on average a chunk is of
+-- 'L.smallChunkSize'.
+maximalCopySize :: Int
+maximalCopySize = 2 * L.smallChunkSize
+
+------------------------------------------------------------------------------
+-- Builder execution
+------------------------------------------------------------------------------
+
+-- | A buffer allocation strategy for executing 'Builder's. 
+
+-- The strategy
+--
+-- > 'AllocationStrategy' firstBufSize bufSize trim
+--
+-- states that the first buffer is of size @firstBufSize@, all following buffers
+-- are of size @bufSize@, and a buffer of size @n@ filled with @k@ bytes should
+-- be trimmed iff @trim k n@ is 'True'.
+data AllocationStrategy = AllocationStrategy 
+         {-# UNPACK #-} !Int  -- size of first buffer
+         {-# UNPACK #-} !Int  -- size of successive buffers
+         (Int -> Int -> Bool) -- trim
+
+-- | Sanitize a buffer size; i.e., make it at least the size of a 'Int'.
+sanitize :: Int -> Int
+sanitize = max (sizeOf (undefined :: Int))
+
+-- | Use this strategy for generating lazy 'L.ByteString's whose chunks are
+-- discarded right after they are generated. For example, if you just generate
+-- them to write them to a network socket.
+untrimmedStrategy :: Int -- ^ Size of the first buffer
+                  -> Int -- ^ Size of successive buffers
+                  -> AllocationStrategy 
+                  -- ^ An allocation strategy that does not trim any of the
+                  -- filled buffers before converting it to a chunk.
+untrimmedStrategy firstSize bufSize = 
+    AllocationStrategy (sanitize firstSize) (sanitize bufSize) (\_ _ -> False)
+
+
+-- | Use this strategy for generating lazy 'L.ByteString's whose chunks are
+-- likely to survive one garbage collection. Note that
+--
+-- > toLazyByteString = 
+-- >   toLazyByteStringWith (safeStrategy smallChunkSize defaultChunkSize) empty
+--
+-- where @empty@ is the zero-length lazy 'L.ByteString'.
+safeStrategy :: Int  -- ^ Size of first buffer
+             -> Int  -- ^ Size of successive buffers
+             -> AllocationStrategy
+             -- ^ An allocation strategy that guarantees that at least half
+             -- of the allocated memory is used for live data
+safeStrategy firstSize bufSize = 
+    AllocationStrategy (sanitize firstSize) (sanitize bufSize) 
+                       (\used size -> 2*used < size)
+
+-- | Execute a 'Builder' with custom execution parameters.
+--
+-- In most cases, the parameters used by 'toLazyByteString' give good
+-- performance. A slightly sub-performing case is generating lots of short
+-- (<128 bytes) 'L.ByteString's using 'Builder's. In this case, you might gain
+-- additional performance by executing the 'Builder's using
+--
+-- > toLazyByteStringWith (safeStrategy 128 smallChunkSize) empty
+--
+-- This reduces the allocation and trimming overhead, as all generated
+-- 'L.ByteString's fit into the first allocated buffer and chances are better
+-- that the buffer doesn't have to be trimmed.
+--
+{-# INLINE toLazyByteStringWith #-}
+toLazyByteStringWith 
+    :: AllocationStrategy
+       -- ^ Buffer allocation strategy to use
+    -> L.ByteString  
+       -- ^ Lazy 'L.ByteString' to use as the tail of the generated lazy
+       -- 'L.ByteString'
+    -> Builder 
+       -- ^ Builder to execute
+    -> L.ByteString
+       -- ^ Resulting lazy 'L.ByteString'
+toLazyByteStringWith (AllocationStrategy firstSize bufSize trim) k b = 
+    S.inlinePerformIO $ fillNew (runBuilder b) firstSize 
+  where
+    fillNew !step0 !size = do
+        S.mallocByteString size >>= fill step0
+      where
+        fill !step !fpbuf =
+            fillWithBuildStep step doneH fullH insertChunkH br
+          where
+            op  = unsafeForeignPtrToPtr fpbuf -- safe due to mkbs
+            pe  = op `plusPtr` size
+            !br = BufferRange op pe
+            
+            -- we are done: return lazy bytestring continuation
+            doneH op' _ 
+              | op' == op = return k
+              | otherwise = mkbs op' k
+
+            -- buffer full: add chunk if it is non-empty and fill next buffer
+            fullH op' minSize nextStep 
+              | op' == op = fillNew nextStep (max minSize bufSize)
+
+              | otherwise = 
+                  mkbs op' $ S.inlinePerformIO
+                           $ fillNew nextStep (max minSize bufSize)
+            
+            -- insert a chunk: prepend current chunk, if there is one
+            insertChunkH op' bs nextStep
+              | op' == op =
+                  return $ nonEmptyChunk bs 
+                         $ S.inlinePerformIO 
+                         $ fill nextStep fpbuf
+
+              | otherwise =
+                  mkbs op' $ nonEmptyChunk bs 
+                           $ S.inlinePerformIO 
+                           $ fillNew nextStep bufSize
+
+            -- add a chunk to a lazy bytestring, trimming the chunk if necesary
+            mkbs !op' lbs
+              | trim filledSize size = do
+                  fpbuf' <- S.mallocByteString filledSize
+                  copyBytes (unsafeForeignPtrToPtr fpbuf') op filledSize
+                  touchForeignPtr fpbuf
+                  return $ L.Chunk (S.PS fpbuf' 0 filledSize) lbs
+              | otherwise                     = 
+                  return $ L.Chunk (S.PS fpbuf 0 filledSize) lbs
+              where
+                filledSize = op' `minusPtr` op
+
+                    
+
+-- | Prepend the chunk if it is non-empty.
+{-# INLINE nonEmptyChunk #-}
+nonEmptyChunk :: S.ByteString -> L.ByteString -> L.ByteString
+nonEmptyChunk bs lbs | S.null bs = lbs 
+                     | otherwise = L.Chunk bs lbs
+

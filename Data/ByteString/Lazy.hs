@@ -296,7 +296,7 @@ singleton w = Chunk (S.singleton w) Empty
 
 -- | /O(n)/ Convert a '[Word8]' into a 'ByteString'. 
 pack :: [Word8] -> ByteString
-pack = B.toLazyByteString . E.encodeListWith E.word8
+pack = B.toLazyByteString . E.encodeListWithF E.word8
 
 -- | /O(n)/ Converts a 'ByteString' to a '[Word8]'.
 unpack :: ByteString -> [Word8]
@@ -424,7 +424,7 @@ append xs ys = foldrChunks Chunk ys xs
 -- element of @xs@.
 {-# INLINE map #-}
 map :: (Word8 -> Word8) -> ByteString -> ByteString
-map f = B.toLazyByteString . E.encodeLazyByteStringWith (E.word8 E.#. f)
+map f = B.toLazyByteString . E.encodeLazyByteStringWithF (f E.>$< E.word8)
 
 -- | /O(n)/ 'reverse' @xs@ returns the elements of @xs@ in reverse order.
 reverse :: ByteString -> ByteString
@@ -636,7 +636,7 @@ cycle cs    = cs' where cs' = foldrChunks Chunk cs' cs
 -- recursive call.
 {-# INLINE unfoldr #-}
 unfoldr :: (a -> Maybe (Word8, a)) -> a -> ByteString
-unfoldr f s0 = B.toLazyByteString $ E.encodeUnfoldrWith E.word8 f s0
+unfoldr f s0 = B.toLazyByteString $ E.encodeUnfoldrWithF E.word8 f s0
  
 -- ---------------------------------------------------------------------
 -- Substrings
@@ -1018,9 +1018,9 @@ notElem w cs = not (elem w cs)
 -- returns a ByteString containing those characters that satisfy the
 -- predicate.
 filter :: (Word8 -> Bool) -> ByteString -> ByteString
-filter p = B.toLazyByteString . E.encodeLazyByteStringWith write
-  where
-    write = E.encodeIf p E.word8 E.emptyEncoding
+filter p = 
+    B.toLazyByteString . 
+    E.encodeLazyByteStringWithB (E.ifB p (E.toB E.word8) E.emptyB)
 {-# INLINE filter #-}
 
 {-

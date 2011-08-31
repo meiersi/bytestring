@@ -59,7 +59,7 @@
 -- > import Data.ByteString.Lazy.Builder.BoundedEncoding.Utf8 (char)
 -- >
 -- > {-# INLINE escapeChar #-}
--- > escapeUtf8 :: Encoding Char
+-- > escapeUtf8 :: BoundedEncoding Char
 -- > escapeUtf8 = 
 -- >     encodeIf ('\'' ==) (char <#> char #. const ('\\','\'')) $
 -- >     encodeIf ('\\' ==) (char <#> char #. const ('\\','\\')) $
@@ -107,12 +107,12 @@
 -- > import qualified Codec.Bounded.Encoding as E
 -- >
 -- > filter :: (Word8 -> Bool) -> ByteString -> ByteString
--- > filter p = toLazyByteString . encodeLazyByteStringWith write
+-- > filter p = toLazyByteString . encodeLazyByteStringWithB write
 -- >   where
 -- >     write = E.encodeIf p E.word8 E.emptyEncoding
 -- >
 -- > map :: (Word8 -> Word8) -> ByteString -> ByteString
--- > map f = toLazyByteString . encodeLazyByteStringWith (E.word8 E.#. f)
+-- > map f = toLazyByteString . encodeLazyByteStringWithB (E.word8 E.#. f)
 --
 -- Compared to earlier versions of @filter@ and @map@ on lazy 'L.ByteString's,
 -- these versions use a more efficient inner loop and have the additional
@@ -136,14 +136,14 @@
 --
 -- > import Data.ByteString.Lazy.Builder.Extras     -- assume these three
 -- > import Codec.Bounded.Encoding                  -- imports are present
--- >        ( Encoding, encodeIf, (<#>), (#.) )
+-- >        ( BoundedEncoding, encodeIf, (<#>), (#.) )
 -- > import Data.ByteString.Lazy.Builder.BoundedEncoding.Utf8 (char)  
 -- > 
 -- > renderString :: String -> Builder
 -- > renderString cs = 
--- >     charUtf8 '"' <> encodeListWith escapedUtf8 cs <> charUtf8 '"'
+-- >     charUtf8 '"' <> encodeListWithB escapedUtf8 cs <> charUtf8 '"'
 -- >   where
--- >     escapedUtf8 :: Encoding Char
+-- >     escapedUtf8 :: BoundedEncoding Char
 -- >     escapedUtf8 = 
 -- >       encodeIf (== '\\') (char <#> char #. const ('\\', '\\')) $
 -- >       encodeIf (== '\"') (char <#> char #. const ('\\', '\"')) $
@@ -156,17 +156,45 @@
 --
 module Data.ByteString.Lazy.Builder.BoundedEncoding (
 
-  -- * The Encoding type
+  -- * Fixed-size encodings
+    FixedEncoding
 
-    Encoding
-  , encodeWith
-  , encodeListWith
-  , encodeUnfoldrWith
+  , encodeWithF 
+  , encodeListWithF 
+  , encodeUnfoldrWithF 
+
+  , encodeByteStringWithF 
+  , encodeLazyByteStringWithF 
+
+  , toB
+
+  -- ** Combinators
+  , emptyF
+  , pairB
+  , (>*<)
+  , contramapF
+  , (>$<)
+
+  -- * Bounded-size encodings
+
+  , BoundedEncoding
+
+  , encodeWithB
+  , encodeListWithB
+  , encodeUnfoldrWithB
   
-  , encodeByteStringWith
-  , encodeLazyByteStringWith
+  , encodeByteStringWithB
+  , encodeLazyByteStringWithB
 
-  -- * Encoding combinators
+  -- ** Combinators
+  , emptyB
+  , pairB
+  , eitherB
+  , ifB
+  , contramapB
+
+  {-
+  -- * BoundedEncoding combinators
   , (#.)
   , comapEncoding
   , emptyEncoding
@@ -181,6 +209,7 @@ module Data.ByteString.Lazy.Builder.BoundedEncoding (
   -- , prepend
   -- , (<#)
   -- , append
+  -}
 
   -- * Standard encodings of Haskell values
 
@@ -235,15 +264,15 @@ module Data.ByteString.Lazy.Builder.BoundedEncoding (
   , doubleHost
 
   -- * Benchmarking
-  , benchIntEncoding
+  -- , benchIntEncoding
 
   -- * Debugging
   -- | Note that the following two functions are intended for debugging use
   -- only. They are not efficient. Bounded encodings are efficently executed
   -- using the lazy bytestring builders provided in the
   -- 'Data.ByteString.Lazy.Builder.Extras' module of the 'bytestring' library.
-  , evalEncoding
-  , showEncoding
+  -- , evalEncoding
+  -- , showEncoding
 
   ) where
 
@@ -256,16 +285,37 @@ import qualified Data.ByteString.Lazy.Internal as L
 import Data.Monoid
 import Data.Char (ord)
 
-import Codec.Bounded.Encoding.Internal hiding (append)
-import Codec.Bounded.Encoding.Word
-import Codec.Bounded.Encoding.Int
-import Codec.Bounded.Encoding.Floating
+import Codec.Bounded.Encoding.Internal
+-- import Codec.Bounded.Encoding.Word
+-- import Codec.Bounded.Encoding.Int
+-- import Codec.Bounded.Encoding.Floating
 
-import Codec.Bounded.Encoding.Internal.Test
-import Codec.Bounded.Encoding.Bench
+-- import Codec.Bounded.Encoding.Internal.Test
+-- import Codec.Bounded.Encoding.Bench
+import Codec.Bounded.Encoding.Internal.UncheckedShifts
+import Data.ByteString.Lazy.Builder.BoundedEncoding.Internal.Floating
 
 import Foreign
 
+
+------------------------------------------------------------------------------
+-- Creating Builders from bounded encodings
+------------------------------------------------------------------------------
+
+encodeWithF :: FixedEncoding a -> (a -> Builder)
+encodeWithF = encodeWithB . toB
+
+encodeListWithF :: FixedEncoding a -> ([a] -> Builder)
+encodeListWithF = encodeListWithB . toB
+
+encodeUnfoldrWithF :: FixedEncoding b -> (a -> Maybe (b, a)) -> a -> Builder
+encodeUnfoldrWithF = encodeUnfoldrWithB . toB
+
+encodeByteStringWithF :: FixedEncoding Word8 -> (S.ByteString -> Builder)
+encodeByteStringWithF = encodeByteStringWithB . toB
+
+encodeLazyByteStringWithF :: FixedEncoding Word8 -> (L.ByteString -> Builder)
+encodeLazyByteStringWithF = encodeLazyByteStringWithB . toB
 
 -- IMPLEMENTATION NOTE: Sadly, 'encodeListWith' cannot be used for foldr/build
 -- fusion. Its performance relies on hoisting several variables out of the
@@ -279,7 +329,7 @@ import Foreign
 -- We rewrite consecutive uses of 'encodeWith' such that the bound-checks are
 -- fused. For example,
 --
--- > encodeWith (word32 c1) `mappend` encodeWith (word32 c2)
+-- > encodeWithB (word32 c1) `mappend` encodeWithB (word32 c2)
 --
 -- is rewritten such that the resulting 'Builder' checks only once, if ther are
 -- at 8 free bytes, instead of checking twice, if there are 4 free bytes. This
@@ -292,25 +342,25 @@ import Foreign
 -- memory spilled due to the more agressive buffer wrapping introduced by this
 -- optimization.
 --
-{-# INLINE[1] encodeWith #-}
-encodeWith :: Encoding a -> (a -> Builder)
-encodeWith w = 
+{-# INLINE[1] encodeWithB #-}
+encodeWithB :: BoundedEncoding a -> (a -> Builder)
+encodeWithB w = 
     mkBuilder
   where
-    bound = getBound w
+    bound = sizeBound w
     mkBuilder x = builder step
       where
         step k (BufferRange op ope)
           | op `plusPtr` bound <= ope = do
-              op' <- runEncoding w x op
+              op' <- runB w x op
               let !br' = BufferRange op' ope
               k br'
           | otherwise = return $ bufferFull bound op (step k)
 
 {-# RULES 
    "append/encodeWith" forall w1 w2 x1 x2.
-       append (encodeWith w1 x1) (encodeWith w2 x2) 
-     = encodeWith (encodePair w1 w2) (x1, x2) 
+       append (encodeWithB w1 x1) (encodeWithB w2 x2) 
+     = encodeWithB (pairB w1 w2) (x1, x2) 
   #-}
 
 -- TODO: The same rules for 'putBuilder (..) >> putBuilder (..)'
@@ -318,19 +368,19 @@ encodeWith w =
 -- | Create a 'Builder' that encodes a list of values consecutively using an
 -- 'Encoding'. This function is more efficient than the canonical
 --
--- > mconcat . map (encodeWith w)
+-- > mconcat . map (encodeWithB w)
 --
 -- or
 --
--- > foldMap (encodeWith w)
+-- > foldMap (encodeWithB w)
 --
 -- because it moves several variables out of the inner loop. 
-{-# INLINE encodeListWith #-}
-encodeListWith :: Encoding a -> [a] -> Builder
-encodeListWith w = 
+{-# INLINE encodeListWithB #-}
+encodeListWithB :: BoundedEncoding a -> [a] -> Builder
+encodeListWithB w = 
     makeBuilder
   where
-    bound = getBound w
+    bound = sizeBound w
     makeBuilder xs0 = builder $ step xs0
       where
         step xs1 k !(BufferRange op0 ope0) = go xs1 op0
@@ -341,21 +391,21 @@ encodeListWith w =
 
             go xs@(x':xs') !op
               | op `plusPtr` bound <= ope0 = do
-                  !op' <- runEncoding w x' op
+                  !op' <- runB w x' op
                   go xs' op'
              | otherwise = return $ bufferFull bound op (step xs k)
 
 -- TODO: Add 'foldMap/encodeWith' its variants
--- TODO: Ensure rewriting 'encodeWith w . f = encodeWith (w #. f)'
+-- TODO: Ensure rewriting 'encodeWithB w . f = encodeWithB (w #. f)'
 
 -- | Create a 'Builder' that encodes a sequence generated from a seed value
 -- using an 'Encoding'.
-{-# INLINE encodeUnfoldrWith #-}
-encodeUnfoldrWith :: Encoding b -> (a -> Maybe (b, a)) -> a -> Builder
-encodeUnfoldrWith w = 
+{-# INLINE encodeUnfoldrWithB #-}
+encodeUnfoldrWithB :: BoundedEncoding b -> (a -> Maybe (b, a)) -> a -> Builder
+encodeUnfoldrWithB w = 
     makeBuilder
   where
-    bound = getBound w
+    bound = sizeBound w
     makeBuilder f x0 = builder $ step x0
       where
         step x1 !k = fill x1
@@ -367,11 +417,11 @@ encodeUnfoldrWith w =
                     k br'
                 go !(Just (y, x')) !pf
                   | pf `plusPtr` bound <= pe0 = do
-                      !pf' <- runEncoding w y pf
+                      !pf' <- runB w y pf
                       go (f x') pf'
                   | otherwise = return $ bufferFull bound pf $ 
                       \(BufferRange pfNew peNew) -> do 
-                          !pfNew' <- runEncoding w y pfNew
+                          !pfNew' <- runB w y pfNew
                           fill x' (BufferRange pfNew' peNew)
 
 -- | Create a 'Builder' that encodes each 'Word8' of a strict 'S.ByteString'
@@ -382,12 +432,12 @@ encodeUnfoldrWith w =
 --
 -- > filterBS p = E.encodeIf p E.word8 E.encodeNothing
 --
-{-# INLINE encodeByteStringWith #-}
-encodeByteStringWith :: Encoding Word8 -> S.ByteString -> Builder
-encodeByteStringWith w =
+{-# INLINE encodeByteStringWithB #-}
+encodeByteStringWithB :: BoundedEncoding Word8 -> S.ByteString -> Builder
+encodeByteStringWithB w =
     \bs -> builder $ step bs
   where
-    bound = getBound w
+    bound = sizeBound w
     step (S.PS ifp ioff isize) !k = 
         goBS (unsafeForeignPtrToPtr ifp `plusPtr` ioff)
       where
@@ -410,16 +460,292 @@ encodeByteStringWith w =
                 go !ip !op
                   | ip < ipeTmp = do
                       x   <- peek ip
-                      op' <- runEncoding w x op
+                      op' <- runB w x op
                       go (ip `plusPtr` 1) op'
                   | otherwise =
                       goBS ip (BufferRange op ope)
 
 -- | Chunk-wise application of 'encodeByteStringWith'.
-{-# INLINE encodeLazyByteStringWith #-}
-encodeLazyByteStringWith :: Encoding Word8 -> L.ByteString -> Builder
-encodeLazyByteStringWith w = 
-    L.foldrChunks (\x b -> encodeByteStringWith w x `mappend` b) mempty
+{-# INLINE encodeLazyByteStringWithB #-}
+encodeLazyByteStringWithB :: BoundedEncoding Word8 -> L.ByteString -> Builder
+encodeLazyByteStringWithB w = 
+    L.foldrChunks (\x b -> encodeByteStringWithB w x `mappend` b) mempty
+
+------------------------------------------------------------------------------
+-- Binary encoding
+------------------------------------------------------------------------------
+
+-- Word encodings
+-----------------
+
+-- | Encoding single unsigned bytes as-is.
+--
+{-# INLINE word8 #-}
+word8 :: FixedEncoding Word8
+word8 = storableToF
+
+--
+-- We rely on the fromIntegral to do the right masking for us.
+-- The inlining here is critical, and can be worth 4x performance
+--
+
+-- | Encoding 'Word16's in big endian format.
+{-# INLINE word16BE #-}
+word16BE :: FixedEncoding Word16
+#ifdef WORD_BIGENDIAN
+word16BE = word16Host
+#else
+word16BE = fixedEncoding 2 $ \w p -> do
+    poke p               (fromIntegral (shiftr_w16 w 8) :: Word8)
+    poke (p `plusPtr` 1) (fromIntegral (w)              :: Word8)
+#endif
+
+-- | Encoding 'Word16's in little endian format.
+{-# INLINE word16LE #-}
+word16LE :: FixedEncoding Word16
+#ifdef WORD_BIGENDIAN
+word16LE = fixedEncoding 2 $ \w p -> do
+    poke p               (fromIntegral (w)              :: Word8)
+    poke (p `plusPtr` 1) (fromIntegral (shiftr_w16 w 8) :: Word8)
+#else
+word16LE = word16Host
+#endif
+
+-- | Encoding 'Word32's in big endian format.
+{-# INLINE word32BE #-}
+word32BE :: FixedEncoding Word32
+#ifdef WORD_BIGENDIAN
+word32BE = word32Host
+#else
+word32BE = fixedEncoding 4 $ \w p -> do
+    poke p               (fromIntegral (shiftr_w32 w 24) :: Word8)
+    poke (p `plusPtr` 1) (fromIntegral (shiftr_w32 w 16) :: Word8)
+    poke (p `plusPtr` 2) (fromIntegral (shiftr_w32 w  8) :: Word8)
+    poke (p `plusPtr` 3) (fromIntegral (w)               :: Word8)
+#endif
+
+-- | Encoding 'Word32's in little endian format.
+{-# INLINE word32LE #-}
+word32LE :: FixedEncoding Word32
+#ifdef WORD_BIGENDIAN
+word32LE = fixedEncoding 4 $ \w p -> do
+    poke p               (fromIntegral (w)               :: Word8)
+    poke (p `plusPtr` 1) (fromIntegral (shiftr_w32 w  8) :: Word8)
+    poke (p `plusPtr` 2) (fromIntegral (shiftr_w32 w 16) :: Word8)
+    poke (p `plusPtr` 3) (fromIntegral (shiftr_w32 w 24) :: Word8)
+#else
+word32LE = word32Host
+#endif
+
+-- on a little endian machine:
+-- word32LE w32 = fixedEncoding 4 (\w p -> poke (castPtr p) w32)
+
+-- | Encoding 'Word64's in big endian format.
+{-# INLINE word64BE #-}
+word64BE :: FixedEncoding Word64
+#ifdef WORD_BIGENDIAN
+word64BE = word64Host
+#else
+#if WORD_SIZE_IN_BITS < 64
+--
+-- To avoid expensive 64 bit shifts on 32 bit machines, we cast to
+-- Word32, and write that
+--
+word64BE =
+    fixedEncoding 8 $ \w p -> do
+        let a = fromIntegral (shiftr_w64 w 32) :: Word32
+            b = fromIntegral w                 :: Word32
+        poke p               (fromIntegral (shiftr_w32 a 24) :: Word8)
+        poke (p `plusPtr` 1) (fromIntegral (shiftr_w32 a 16) :: Word8)
+        poke (p `plusPtr` 2) (fromIntegral (shiftr_w32 a  8) :: Word8)
+        poke (p `plusPtr` 3) (fromIntegral (a)               :: Word8)
+        poke (p `plusPtr` 4) (fromIntegral (shiftr_w32 b 24) :: Word8)
+        poke (p `plusPtr` 5) (fromIntegral (shiftr_w32 b 16) :: Word8)
+        poke (p `plusPtr` 6) (fromIntegral (shiftr_w32 b  8) :: Word8)
+        poke (p `plusPtr` 7) (fromIntegral (b)               :: Word8)
+#else
+word64BE = fixedEncoding 8 $ \w p -> do
+    poke p               (fromIntegral (shiftr_w64 w 56) :: Word8)
+    poke (p `plusPtr` 1) (fromIntegral (shiftr_w64 w 48) :: Word8)
+    poke (p `plusPtr` 2) (fromIntegral (shiftr_w64 w 40) :: Word8)
+    poke (p `plusPtr` 3) (fromIntegral (shiftr_w64 w 32) :: Word8)
+    poke (p `plusPtr` 4) (fromIntegral (shiftr_w64 w 24) :: Word8)
+    poke (p `plusPtr` 5) (fromIntegral (shiftr_w64 w 16) :: Word8)
+    poke (p `plusPtr` 6) (fromIntegral (shiftr_w64 w  8) :: Word8)
+    poke (p `plusPtr` 7) (fromIntegral (w)               :: Word8)
+#endif
+#endif
+
+-- | Encoding 'Word64's in little endian format.
+{-# INLINE word64LE #-}
+word64LE :: FixedEncoding Word64
+#ifdef WORD_BIGENDIAN
+#if WORD_SIZE_IN_BITS < 64
+word64LE =
+    fixedEncoding 8 $ \w p -> do
+        let b = fromIntegral (shiftr_w64 w 32) :: Word32
+            a = fromIntegral w                 :: Word32
+        poke (p)             (fromIntegral (a)               :: Word8)
+        poke (p `plusPtr` 1) (fromIntegral (shiftr_w32 a  8) :: Word8)
+        poke (p `plusPtr` 2) (fromIntegral (shiftr_w32 a 16) :: Word8)
+        poke (p `plusPtr` 3) (fromIntegral (shiftr_w32 a 24) :: Word8)
+        poke (p `plusPtr` 4) (fromIntegral (b)               :: Word8)
+        poke (p `plusPtr` 5) (fromIntegral (shiftr_w32 b  8) :: Word8)
+        poke (p `plusPtr` 6) (fromIntegral (shiftr_w32 b 16) :: Word8)
+        poke (p `plusPtr` 7) (fromIntegral (shiftr_w32 b 24) :: Word8)
+#else
+word64LE = fixedEncoding 8 $ \w p -> do
+    poke p               (fromIntegral (w)               :: Word8)
+    poke (p `plusPtr` 1) (fromIntegral (shiftr_w64 w  8) :: Word8)
+    poke (p `plusPtr` 2) (fromIntegral (shiftr_w64 w 16) :: Word8)
+    poke (p `plusPtr` 3) (fromIntegral (shiftr_w64 w 24) :: Word8)
+    poke (p `plusPtr` 4) (fromIntegral (shiftr_w64 w 32) :: Word8)
+    poke (p `plusPtr` 5) (fromIntegral (shiftr_w64 w 40) :: Word8)
+    poke (p `plusPtr` 6) (fromIntegral (shiftr_w64 w 48) :: Word8)
+    poke (p `plusPtr` 7) (fromIntegral (shiftr_w64 w 56) :: Word8)
+#endif
+#else
+word64LE = word64Host
+#endif
+
+
+-- | Encode a single native machine 'Word'. The 'Word's is encoded in host order,
+-- host endian form, for the machine you are on. On a 64 bit machine the 'Word'
+-- is an 8 byte value, on a 32 bit machine, 4 bytes. Values encoded this way
+-- are not portable to different endian or word sized machines, without
+-- conversion.
+--
+{-# INLINE wordHost #-}
+wordHost :: FixedEncoding Word
+wordHost = storableToF
+
+-- | Encoding 'Word16's in native host order and host endianness.
+{-# INLINE word16Host #-}
+word16Host :: FixedEncoding Word16
+word16Host = storableToF
+
+-- | Encoding 'Word32's in native host order and host endianness.
+{-# INLINE word32Host #-}
+word32Host :: FixedEncoding Word32
+word32Host = storableToF
+
+-- | Encoding 'Word64's in native host order and host endianness.
+{-# INLINE word64Host #-}
+word64Host :: FixedEncoding Word64
+word64Host = storableToF
+
+
+------------------------------------------------------------------------------
+-- Int encodings
+------------------------------------------------------------------------------
+--
+-- We rely on 'fromIntegral' to do a loss-less conversion to the corresponding
+-- 'Word' type
+-- 
+------------------------------------------------------------------------------
+
+-- | Encoding single signed bytes as-is.
+--
+{-# INLINE int8 #-}
+int8 :: FixedEncoding Int8
+int8 = fromIntegral >$< word8
+
+-- | Encoding 'Int16's in big endian format.
+{-# INLINE int16BE #-}
+int16BE :: FixedEncoding Int16
+int16BE = fromIntegral >$< word16BE
+
+-- | Encoding 'Int16's in little endian format.
+{-# INLINE int16LE #-}
+int16LE :: FixedEncoding Int16
+int16LE = fromIntegral >$< word16LE
+
+-- | Encoding 'Int32's in big endian format.
+{-# INLINE int32BE #-}
+int32BE :: FixedEncoding Int32
+int32BE = fromIntegral >$< word32BE
+
+-- | Encoding 'Int32's in little endian format.
+{-# INLINE int32LE #-}
+int32LE :: FixedEncoding Int32
+int32LE = fromIntegral >$< word32LE
+
+-- | Encoding 'Int64's in big endian format.
+{-# INLINE int64BE #-}
+int64BE :: FixedEncoding Int64
+int64BE = fromIntegral >$< word64BE
+
+-- | Encoding 'Int64's in little endian format.
+{-# INLINE int64LE #-}
+int64LE :: FixedEncoding Int64
+int64LE = fromIntegral >$< word64LE
+
+
+-- TODO: Ensure that they are safe on architectures where an unaligned write is
+-- an error.
+
+-- | Encode a single native machine 'Int'. The 'Int's is encoded in host order,
+-- host endian form, for the machine you are on. On a 64 bit machine the 'Int'
+-- is an 8 byte value, on a 32 bit machine, 4 bytes. Values encoded this way
+-- are not portable to different endian or integer sized machines, without
+-- conversion.
+--
+{-# INLINE intHost #-}
+intHost :: FixedEncoding Int
+intHost = storableToF
+
+-- | Encoding 'Int16's in native host order and host endianness.
+{-# INLINE int16Host #-}
+int16Host :: FixedEncoding Int16
+int16Host = storableToF
+
+-- | Encoding 'Int32's in native host order and host endianness.
+{-# INLINE int32Host #-}
+int32Host :: FixedEncoding Int32
+int32Host = storableToF
+
+-- | Encoding 'Int64's in native host order and host endianness.
+{-# INLINE int64Host #-}
+int64Host :: FixedEncoding Int64
+int64Host = storableToF
+
+-- IEEE Floating Point Numbers
+------------------------------
+
+-- | Encode a 'Float' in big endian format.
+{-# INLINE floatBE #-}
+floatBE :: FixedEncoding Float
+floatBE = coerceFloatToWord32 >$< word32BE 
+
+-- | Encode a 'Float' in little endian format.
+{-# INLINE floatLE #-}
+floatLE :: FixedEncoding Float
+floatLE = coerceFloatToWord32 >$< word32LE
+
+-- | Encode a 'Double' in big endian format.
+{-# INLINE doubleBE #-}
+doubleBE :: FixedEncoding Double
+doubleBE = coerceDoubleToWord64 >$< word64BE 
+
+-- | Encode a 'Double' in little endian format.
+{-# INLINE doubleLE #-}
+doubleLE :: FixedEncoding Double
+doubleLE = coerceDoubleToWord64 >$< word64LE 
+
+
+-- | Encode a 'Float' in native host order and host endianness. Values written
+-- this way are not portable to different endian machines, without conversion.
+--
+{-# INLINE floatHost #-}
+floatHost :: FixedEncoding Float
+floatHost = storableToF
+
+-- | Encode a 'Double' in native host order and host endianness.
+{-# INLINE doubleHost #-}
+doubleHost :: FixedEncoding Double
+doubleHost = storableToF
+
+
 
 ------------------------------------------------------------------------------
 -- ASCII encoding
@@ -427,5 +753,7 @@ encodeLazyByteStringWith w =
 
 -- | Encode a 'Char' as its Unicode codepoint modulo 256. For codepoints less
 -- than 128, this coincides with the ASCII encoding.
-char8 :: Encoding Char 
-char8 = word8 #. fromIntegral #. ord
+char8 :: FixedEncoding Char 
+char8 = (fromIntegral . ord) >$< word8
+
+

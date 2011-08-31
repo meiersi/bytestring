@@ -21,7 +21,8 @@
 --
 module Codec.Bounded.Encoding.Internal (
   -- * Fixed-size Encodings
-    FixedEncoding
+    Size
+  , FixedEncoding
   , fixedEncoding
   , size
   , runF
@@ -31,12 +32,12 @@ module Codec.Bounded.Encoding.Internal (
   , pairF
   , liftIOF
 
-  , storableF
+  , storableToF
 
   -- * Bounded-size Encodings
   , BoundedEncoding
   , boundedEncoding
-  , bound
+  , sizeBound
   , runB
 
   , emptyB
@@ -48,13 +49,65 @@ module Codec.Bounded.Encoding.Internal (
   , liftIOB
 
   , toB
+
   , withSizeFB
   , withSizeBB
+
+  -- * Shared operators
+  , (>.<)
+  , (>$<)
+  , (>*<)
 
   ) where
 
 import Foreign
 import Prelude hiding (maxBound)
+
+------------------------------------------------------------------------------
+-- Supporting infrastructure
+------------------------------------------------------------------------------
+
+-- | Contravariant functors as in the 'contravariant' package.
+class Contravariant f where
+    contramap :: (b -> a) -> f a -> f b
+
+infixl 4 >$<
+
+(>$<) :: Contravariant f => (b -> a) -> f a -> f b
+(>$<) = contramap
+
+
+infixl 4 >.<
+
+(>.<) :: Contravariant f => f a -> (b -> a) -> f b
+(>.<) = flip contramap
+
+instance Contravariant FixedEncoding where
+    contramap = contramapF
+
+instance Contravariant BoundedEncoding where
+    contramap = contramapB
+
+
+-- | Type-constructors supporting lifting of type-products.
+class Monoidal f where
+    pair :: f a -> f b -> f (a, b)
+
+instance Monoidal FixedEncoding where
+    pair = pairF
+
+instance Monoidal BoundedEncoding where
+    pair = pairB
+
+infixr 5 >*<
+
+(>*<) :: Monoidal f => f a -> f b -> f (a, b)
+(>*<) = pair
+
+
+-- | The type used for sizes and sizeBounds of sizes.
+type Size = Int
+
 
 ------------------------------------------------------------------------------
 -- Fixed-size Encodings
@@ -90,9 +143,9 @@ contramapF f (FE l io) = FE l (\x op -> io (f x) op)
 toB :: FixedEncoding a -> BoundedEncoding a 
 toB (FE l io) = BE l (\x op -> io x op >> (return $! op `plusPtr` l))
 
-{-# INLINE CONLIKE storableF #-}
-storableF :: forall a. Storable a => FixedEncoding a
-storableF = FE (sizeOf (undefined :: a)) (\x op -> poke (castPtr op) x)
+{-# INLINE CONLIKE storableToF #-}
+storableToF :: forall a. Storable a => FixedEncoding a
+storableToF = FE (sizeOf (undefined :: a)) (\x op -> poke (castPtr op) x)
 
 {-# INLINE CONLIKE liftIOF #-}
 liftIOF :: FixedEncoding a -> FixedEncoding (IO a)
@@ -104,9 +157,9 @@ liftIOF (FE l io) = FE l (\xWrapped op -> do x <- xWrapped; io x op)
 
 data BoundedEncoding a = BE {-# UNPACK #-} !Int (a -> Ptr Word8 -> IO (Ptr Word8))
 
-{-# INLINE CONLIKE bound #-}
-bound :: BoundedEncoding a -> Int
-bound (BE b _) = b
+{-# INLINE CONLIKE sizeBound #-}
+sizeBound :: BoundedEncoding a -> Int
+sizeBound (BE b _) = b
 
 boundedEncoding :: Int -> (a -> Ptr Word8 -> IO (Ptr Word8)) -> BoundedEncoding a
 boundedEncoding = BE
@@ -139,7 +192,6 @@ ifB :: (a -> Bool) -> BoundedEncoding a -> BoundedEncoding a -> BoundedEncoding 
 ifB p be1 be2 = 
     contramapB (\x -> if p x then Left x else Right x) (eitherB be1 be2)
 
-newtype Size = Size { getSize :: Int }
 
 {-# INLINE withSizeFB #-}
 withSizeFB :: (Size -> FixedEncoding Size) -> BoundedEncoding a -> BoundedEncoding a
@@ -150,7 +202,7 @@ withSizeFB feSize (BE b io) =
                      ioSize (op2 `minusPtr` op1) op0
                      return op2)
   where
-    FE lSize ioSize = feSize (Size b)
+    FE lSize ioSize = feSize b
 
 
 {-# INLINE withSizeBB #-}
@@ -170,16 +222,20 @@ liftIOB (BE l io) = BE l (\xWrapped op -> do x <- xWrapped; io x op)
 
 
 sizeHexPadded :: Char -> Size -> FixedEncoding Size
+sizeHexPadded = undefined
 
 sizeDecPadded :: Char -> Size -> FixedEncoding Size
+sizeDecPadded = undefined
 
-sizeVar       :: Size -> FixedEncoding Size
+sizeVarInt :: Size -> FixedEncoding Size
+sizeVarInt = undefined
 
+{-
 encodeChunked
     :: Size                           -- ^ Minimal free-size
     -> Size                           -- ^ Maximal chunk-size
     -> (Size -> FixedEncoding Size)   
-    -- ^ Given a bound on the maximal encodable size this function must return
+    -- ^ Given a sizeBound on the maximal encodable size this function must return
     -- a fixed-size encoding for encoding all smaller size.
     -> BoundedEncoding Size
     -- ^ Encoding of the size of a directly inserted chunk.
@@ -189,6 +245,7 @@ encodeChunked
     -- ^ Inner 'Put' to transform
     -> Put a
     -- ^ 'Put' with chunked encoding.
+encodeChunked = undefined 
 
 
 httpChunkedTransfer = encodeChunked 32 maxBound 
@@ -216,12 +273,13 @@ byteStringPrefixB n =
         copyBytes op (unsafeForeignPtrToPtr fp `plusPtr` off) s
         touchForeignPtr fp
         return $! op `plusPtr` s
+-}
 
 
 {-# INLINE listPrefixB #-}
 listPrefixB :: Int -> BoundedEncoding a -> BoundedEncoding [a]
 listPrefixB n0 (BE b0 io) =
-    -- The new bound will always be forced before the IO action.
+    -- The new sizeBound will always be forced before the IO action.
     -- Hence, it's sufficient to attach the error condition to it.
     -- This simplifies inlining, as then BE is the outermost constructor.
     BE b (go n)
@@ -236,22 +294,23 @@ listPrefixB n0 (BE b0 io) =
     go _   []     !op = return op
     go !n  (x:xs) !op = io x op >>= go (pred n) xs
 
--- TODO: Adapt bound for 64-bit machines.
+-- TODO: Adapt sizeBound for 64-bit machines.
 sqrtIntMaxBound :: Int
 sqrtIntMaxBound = 46340
 
-listPrefixBerr msg x = error $ "listPrefixB: " ++ msg ++ " too high (" ++ 
+listPrefixBErr msg x = error $ "listPrefixB: " ++ msg ++ " too high (" ++ 
                                show x ++ " > " ++ show sqrtIntMaxBound ++ ")"
 
 
 
+{-
 chunked64k = encodeChunked 16 (fromIntegral $ maxBound :: Word16)
                               (const $ word16LE >.< fromIntegral)
                               (toB $ word16LE >.< fromIntegral)
                               (emptyB)
 
 
-
+-}
 
 
 
@@ -281,10 +340,10 @@ chunked64k = encodeChunked 16 (fromIntegral $ maxBound :: Word16)
 
   -- ** Safe combinators
 
-  -- | The following combinators ensure that the bound on the maximal number of
+  -- | The following combinators ensure that the sizeBound on the maximal number of
   -- bytes written is always computed correctly. Hence, applying them to safe
   -- encodings always results in a safe encoding. Moreover, care is taken to
-  -- compute that bound such that the compiler can optimize it to a compile
+  -- compute that sizeBound such that the compiler can optimize it to a compile
   -- time constant, if that is possible.
   
   -- *** Basic building blocks
@@ -393,12 +452,12 @@ getBound (Encoding b _) = b
 runEncoding :: Encoding a -> a -> Ptr Word8 -> IO (Ptr Word8)
 runEncoding (Encoding _ f) = runPoke . f
 
--- | Utility function to compute the maximal bound of two encodings.
+-- | Utility function to compute the maximal sizeBound of two encodings.
 {-# INLINE maxBound #-}
 maxBound :: Encoding a -> Encoding b -> Int
 maxBound w1 w2 = max (getBound w1) (getBound w2)
 
--- | Utility function to compute the sum of the bounds of two encodings.
+-- | Utility function to compute the sum of the sizeBounds of two encodings.
 {-# INLINE addBounds #-}
 addBounds :: Encoding a -> Encoding b -> Int
 addBounds w1 w2 = getBound w1 + getBound w2
@@ -407,10 +466,10 @@ addBounds w1 w2 = getBound w1 + getBound w2
 -- Unsafe creation of encodings
 -------------------------------
 
--- | Create an 'Encoding' from a bound on the maximal number of bytes written
+-- | Create an 'Encoding' from a sizeBound on the maximal number of bytes written
 -- and an implementation of the encoding scheme.
 --
--- /Precondition:/ the bound must be valid for the implementation of the
+-- /Precondition:/ the sizeBound must be valid for the implementation of the
 -- encoding scheme.
 {-# INLINE boundedEncoding #-}
 boundedEncoding 

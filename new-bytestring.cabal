@@ -45,20 +45,21 @@ library
                      Data.ByteString.Lazy.Builder
                      Data.ByteString.Lazy.Builder.Internal
                      Data.ByteString.Lazy.Builder.Extras
-                     Data.ByteString.Lazy.Builder.Utf8
+                     -- Data.ByteString.Lazy.Builder.Utf8
                      Data.ByteString.Lazy.Builder.BoundedEncoding
-                     Data.ByteString.Lazy.Builder.BoundedEncoding.Utf8
+                     Data.ByteString.Lazy.Builder.BoundedEncoding.Internal.Floating
+                     -- Data.ByteString.Lazy.Builder.BoundedEncoding.Utf8
                      Codec.Bounded.Encoding.Internal
-                     Codec.Bounded.Encoding.Internal.Test
+                     -- Codec.Bounded.Encoding.Internal.Test
 
   other-modules:     
-                     Codec.Bounded.Encoding.Bench
-                     Codec.Bounded.Encoding.Int
-                     Codec.Bounded.Encoding.Word
-                     Codec.Bounded.Encoding.Floating
+                     -- Codec.Bounded.Encoding.Bench
+                     -- Codec.Bounded.Encoding.Int
+                     -- Codec.Bounded.Encoding.Word
+                     -- Codec.Bounded.Encoding.Floating
                      Codec.Bounded.Encoding.Internal.UncheckedShifts
-                     Codec.Bounded.Encoding.Internal.Region
-                     Codec.Bounded.Encoding.Internal.Base16
+                     -- Codec.Bounded.Encoding.Internal.Region
+                     -- Codec.Bounded.Encoding.Internal.Base16
 
   extensions:        CPP, ForeignFunctionInterface
 

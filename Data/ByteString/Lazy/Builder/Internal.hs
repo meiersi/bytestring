@@ -59,6 +59,7 @@ module Data.ByteString.Lazy.Builder.Internal (
   , Builder
   , builder
   , runBuilder
+  , runBuilderWith
 
   -- ** Primitive combinators
   , empty
@@ -110,6 +111,8 @@ data BufferRange = BufferRange {-# UNPACK #-} !(Ptr Word8)  -- First byte of ran
 -- Build signals
 ------------------------------------------------------------------------------
 
+type BuildStep a = BufferRange -> IO (BuildSignal a)
+
 -- | 'BuildSignal's abstract signals to the caller of a 'BuildStep'. There are
 -- exactly three signals: 'done', 'bufferFull', and 'insertChunk'.
 data BuildSignal a =
@@ -142,7 +145,7 @@ bufferFull :: Int
            -- required minimal size; i.e., the caller of this 'BuildStep' must
            -- guarantee this.
            -> BuildSignal a
-bufferFull size op step = BufferFull size op (buildStep step)
+bufferFull = BufferFull
 
 -- TODO: Decide whether we should inline the bytestring constructor.
 -- Therefore, making builders independent of strict bytestrings.
@@ -156,34 +159,7 @@ insertChunk :: Ptr Word8
             -> (BufferRange -> IO (BuildSignal a)) 
             -- ^ 'BuildStep' to run on next 'BufferRange'
             -> BuildSignal a
-insertChunk op bs step = InsertByteString op bs (buildStep step)
-
-------------------------------------------------------------------------------
--- Build steps
-------------------------------------------------------------------------------
-
--- | 'BuildStep's abstract 'IO' functions that fill a 'BufferRange' and signal 
--- the caller how to proceed. They are constructed using 'runBuilder' and
--- executed using 'fillWithBuildStep'. The result of executing a 'BuildStep'
--- twice is /not defined/; i.e, 'BuildStep's are not guaranteed to be
--- referentially transparent.
-newtype BuildStep a =  
-    BuildStep { runBuildStep :: BufferRange -> IO (BuildSignal a) }
-
--- | 'BuildStep's are executed using the function 'fillWithBuildStep'. All callers
--- of this function guarantee that it is called at most once for every
--- 'BuildStep'. This allows 'BuildStep's to use mutable state. For example, a
--- file handle or the state of a compression algorithm.
-buildStep :: (BufferRange -> IO (BuildSignal a)) 
-          -- ^ A function that fills a prefix of the given 'BufferRange'
-          -- and signals the caller how to proceed using 'done', 'bufferFull',
-          -- or 'insertChunk'.
-          --
-          -- This function must write all bytes in the prefix. Otherwise,
-          -- sensitive data might leak.
-          -> BuildStep a
-          -- ^ The constructed 'BuildStep'.
-buildStep = BuildStep
+insertChunk = InsertByteString
 
 -- | Fill a 'BufferRange' using a 'BuildStep'.
 {-# INLINE fillWithBuildStep #-}
@@ -200,8 +176,8 @@ fillWithBuildStep
     -- ^ Buffer range to fill.
     -> IO b
     -- ^ Value computed by filling this 'BufferRange'.
-fillWithBuildStep step fDone fFull fChunk br = do
-    signal <- runBuildStep step br
+fillWithBuildStep step fDone fFull fChunk !br = do
+    signal <- step br
     case signal of
         Done op x                       -> fDone op x
         BufferFull minSize op nextStep  -> fFull op minSize nextStep
@@ -221,9 +197,7 @@ newtype Builder = Builder (forall r. BuildStep r -> BuildStep r)
 -- | Construct a 'Builder'. In contrast to 'BuildStep's, 'Builder's are
 -- referentially transparent. 
 {-# INLINE builder #-}
-builder :: (forall r. (BufferRange -> IO (BuildSignal r)) -> 
-                      (BufferRange -> IO (BuildSignal r))
-           )
+builder :: (forall r. BuildStep r -> BuildStep r)
         -- ^ A function that fills a 'BufferRange', calls the continuation with
         -- the updated 'BufferRange' once its done, and signals its caller how
         -- to proceed using 'done', 'bufferFull', or 'insertChunk'.
@@ -238,17 +212,21 @@ builder :: (forall r. (BufferRange -> IO (BuildSignal r)) ->
         -- 'Builder' is not guaranteed to be referentially transparent and
         -- sensitive data might leak.
         -> Builder
-builder step = Builder (\k -> buildStep (step (runBuildStep k)))
+builder = Builder
 
 -- | Run a 'Builder'.
 {-# INLINE runBuilder #-}
 runBuilder :: Builder      -- ^ 'Builder' to run
            -> BuildStep () -- ^ 'BuildStep' that writes the byte stream of this
                            -- 'Builder' and signals 'done' upon completion.
-runBuilder (Builder b) =
-    b (buildStep finalStep)
-  where
-    finalStep (BufferRange op _) = return $ done op ()
+runBuilder (Builder b) = b $ \(BufferRange op _) -> return $ done op ()
+
+-- | Run a 'Builder'.
+{-# INLINE runBuilderWith #-}
+runBuilderWith :: Builder      -- ^ 'Builder' to run
+               -> BuildStep a -- ^ Continuation 'BuildStep'
+               -> BuildStep a 
+runBuilderWith (Builder b) = b
 
 -- | The 'Builder' denoting a zero-length sequence of bytes. This function is
 -- only exported for use in rewriting rules. Use 'mempty' otherwise.
@@ -306,9 +284,7 @@ newtype Put a = Put { unPut :: forall r. (a -> BuildStep r) -> BuildStep r }
 -- referentially transparent in the sense that sequencing the same 'Put'
 -- multiple times yields every time the same value with the same side-effect.
 {-# INLINE put #-}
-put :: (forall r. (a -> BufferRange -> IO (BuildSignal r)) -> 
-                  (     BufferRange -> IO (BuildSignal r))
-       )
+put :: (forall r. (a -> BuildStep r) -> BuildStep r)
        -- ^ A function that fills a 'BufferRange', calls the continuation with
        -- the updated 'BufferRange' and its computed value once its done, and
        -- signals its caller how to proceed using 'done', 'bufferFull', or
@@ -324,7 +300,7 @@ put :: (forall r. (a -> BufferRange -> IO (BuildSignal r)) ->
        -- Otherwise, the resulting 'Put' is not guaranteed to be referentially
        -- transparent and sensitive data might leak.
        -> Put a
-put step = Put (\k -> BuildStep (step (\x -> runBuildStep (k x))))
+put = Put 
 
 -- | Run a 'Put'.
 {-# INLINE runPut #-}
@@ -332,10 +308,7 @@ runPut :: Put a       -- ^ Put to run
        -> BuildStep a -- ^ 'BuildStep' that first writes the byte stream of
                       -- this 'Put' and then yields the computed value using
                       -- the 'done' signal.
-runPut (Put p) = 
-    p finalStep
-  where
-    finalStep x = buildStep $ \(BufferRange op _) -> return $ Done op x
+runPut (Put p) = p $ \x (BufferRange op _) -> return $ Done op x
 
 instance Functor Put where
   fmap f p = Put $ \k -> unPut p (\x -> k (f x))

@@ -757,3 +757,109 @@ char8 :: FixedEncoding Char
 char8 = (fromIntegral . ord) >$< word8
 
 
+------------------------------------------------------------------------------
+-- Chunked Encoding Transformer
+------------------------------------------------------------------------------
+
+data BufferStream a =
+       Finished Buffer a
+     | Full Buffer Int (Buffer -> IO (BufferStream a))
+
+{-# INLINE encodeChunked #-}
+encodeChunked
+    :: Size                           -- ^ Minimal free-size
+    -> Size                           -- ^ Maximal chunk-size
+    -> (Builder -> L.ByteString)      -- ^ Escape hatch.
+    -> (Size -> FixedEncoding Size)   
+    -- ^ Given a sizeBound on the maximal encodable size this function must return
+    -- a fixed-size encoding for encoding all smaller size.
+    -> (Size -> Builder)
+    -- ^ Encoding the size before a directly inserted chunk.
+    -> (Size -> Builder)
+    -- ^ An encoding for terminating a chunk of the given size.
+    -> Builder
+    -- ^ Inner 'Put' to transform
+    -> Builder
+    -- ^ 'Put' with chunked encoding.
+encodeChunked minFree0 maxChunkSize0 toLBS mkSizeFE sizeB afterB b =
+    builder encodingStep
+  where
+    -- sanitize: 1 <= minFree <= maxChunkSize
+    maxChunkSize = max 1 maxChunkSize0                -- sanitize
+    minFree      = min maxChunkSize (max 1 minFree0)
+
+    encodingStep :: BuildStep () -> BuildStep ()
+    encodingStep k = 
+        fill 1 (runBuilder b)
+      where
+        fill !minSize innerStep0 !br@(BufferRange op ope)
+          | outRemaining < minBufferSize = 
+              return $! bufferFull minBufferSize op (fill innerStep)
+          | minSize > maxChunkSize =
+              fill 1 (runBuilder $ copyLazyByteString 
+                                 $ toLBS (builder (const innerStep0)))
+                     br
+          | otherwise = fillInner innerStep0 opeInner0
+          where
+            outRemaining   = ope `minusPtr` op
+            sizeFE         = mkSizeFE outRemaining
+            reserved       = size sizeFE
+            minBufferSize  = max minSize minFree + reserved
+           
+            opInner0       = op  `plusPtr` reserved
+
+            fillInner innerStep opInner = do
+                let !brInner = BufferRange opInner opeInner0
+                fillWithBuildStep innerStep doneH fullH insertChunkH brInner
+            
+            -- wraps the chunk, if it is non-empty, and returns the
+            -- signal constructed with the correct end-of-data pointer
+            {-# INLINE wrapChunk #-}
+            wrapChunk :: Ptr Word8 -> (Ptr Word8 -> IO (BuildSignal a)) 
+                      -> IO (BuildSignal a)
+            wrapChunk !opInner' mkSignal 
+              | opInner' == opInner = mkSignal op
+              | otherwise           = do
+                  runF (feSize outRemaining) (opInner' `minusPtr` opInner) op
+                  mkSignal opInner'
+
+            doneH opInner' _ = 
+              wrapChunk opInner' $ \op' -> do
+                let !br' = BufferRange op' ope
+                k br'
+
+            fullH opInner' minSize opInner' nextInnerStep 
+              | minSize > maxChunkSize = do
+                  fillInner (runBuilder $ copyLazyByteString 
+                                        $ toLBS (builder (const nextStep)))
+                            opInner'
+              | innerSize == 0 =
+                  return $! bufferFull 
+                    (max minBufferSize (minRequiredSize + reserved))
+                    op
+                  
+              | otherwise = do
+                  runF sizeFE innerSize op
+                  return $! bufferFull 
+                    (max minBufferSize (minRequiredSize + encodingOverhead))
+                    op'
+                    (runBuilderWith fill nextInnerStep)  
+              where
+                innerSize = opInner' `minusPtr` opInner0
+
+            insertChunkH opInner' bs nextInnerStep
+              | S.null bs =                         -- flush
+                  wrapChunk opInner' $ \op' ->
+                    return $! BI.insertByteString 
+                      op' S.empty 
+                      (fill nextInnerStep)
+
+              | S.length bs > maxChunkSize =
+                  fillInner (runBuilder $ copyByteString bs) opInner'
+
+              | otherwise =                         -- insert non-empty bytestring
+                  wrapChunk opInner' $ \op' -> do
+                    let !br' = BufferRange op' ope
+                    runBuilderWith (chunk bs) br' (go nextInnerStep)
+
+

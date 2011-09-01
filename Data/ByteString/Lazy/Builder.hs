@@ -239,7 +239,6 @@ module Data.ByteString.Lazy.Builder
     ) where
 
 import Data.ByteString.Lazy.Builder.Internal
-import Data.ByteString.Lazy.Builder.Extras
 
 import qualified Data.ByteString.Lazy.Builder.BoundedEncoding as E
 

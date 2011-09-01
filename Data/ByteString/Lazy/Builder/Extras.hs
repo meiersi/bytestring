@@ -19,8 +19,8 @@ module Data.ByteString.Lazy.Builder.Extras
     , AllocationStrategy
     , safeStrategy
     , untrimmedStrategy
-    , L.smallChunkSize
-    , L.defaultChunkSize
+    , smallChunkSize
+    , defaultChunkSize
 
     -- * Controlling chunk boundaries
     , byteStringCopy
@@ -64,12 +64,8 @@ import Data.ByteString.Lazy.Builder.Internal
 
 import qualified Data.ByteString.Lazy.Builder.BoundedEncoding as E
 
-import qualified Data.ByteString               as S
-import qualified Data.ByteString.Internal      as S
-import qualified Data.ByteString.Lazy.Internal as L
 
 import Foreign
-import Data.Monoid
 
 
 

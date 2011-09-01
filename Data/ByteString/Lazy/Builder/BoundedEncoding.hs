@@ -170,7 +170,7 @@ module Data.ByteString.Lazy.Builder.BoundedEncoding (
 
   -- ** Combinators
   , emptyF
-  , pairB
+  , pairF
   , (>*<)
   , contramapF
   , (>$<)
@@ -193,23 +193,8 @@ module Data.ByteString.Lazy.Builder.BoundedEncoding (
   , ifB
   , contramapB
 
-  {-
-  -- * BoundedEncoding combinators
-  , (#.)
-  , comapEncoding
-  , emptyEncoding
-  , encodeIf
-  , encodeEither
-  , (<#>)
-  , encodePair
-  -- , encode3
-  -- , encode4
-  -- , encode8
-  -- , (#>)
-  -- , prepend
-  -- , (<#)
-  -- , append
-  -}
+  -- * Chunked Encoding
+  , encodeChunked
 
   -- * Standard encodings of Haskell values
 
@@ -756,10 +741,115 @@ doubleHost = storableToF
 char8 :: FixedEncoding Char 
 char8 = (fromIntegral . ord) >$< word8
 
+------------------------------------------------------------------------------
+-- Padded Encodings
+------------------------------------------------------------------------------
+
 
 ------------------------------------------------------------------------------
 -- Chunked Encoding Transformer
 ------------------------------------------------------------------------------
+
+{-# INLINE encodeChunked #-}
+encodeChunked
+    :: Size                           -- ^ Minimal free-size
+    -> (Size -> FixedEncoding Size)   
+    -- ^ Given a sizeBound on the maximal encodable size this function must return
+    -- a fixed-size encoding for encoding all smaller size.
+    -> (BoundedEncoding Size)
+    -- ^ An encoding for terminating a chunk of the given size.
+    -> Builder
+    -- ^ Inner Builder to transform
+    -> Builder
+    -- ^ 'Put' with chunked encoding.
+encodeChunked minFree mkBeforeFE afterBE =
+    fromPut 
+  . encodeChunkedInternal minFree mkBeforeFE afterBE chunkB 
+  . putBuilder
+  where
+    chunkB bs = 
+        encodeWithF (mkBeforeFE l) l `mappend`
+        byteStringInsert bs `mappend`
+        encodeWithB afterBE l
+      where
+        l = S.length bs
+
+{-# INLINE encodeChunkedInternal #-}
+encodeChunkedInternal
+    :: Size                           -- ^ Minimal free-size
+    -> (Size -> FixedEncoding Size)   
+    -- ^ Given a sizeBound on the maximal encodable size this function must return
+    -- a fixed-size encoding for encoding all smaller size.
+    -> (BoundedEncoding Size)
+    -- ^ An encoding for terminating a chunk of the given size.
+    -> (S.ByteString -> Builder)
+    -- ^ Encoding a directly inserted chunk.
+    -> Put a
+    -- ^ Inner Put to transform
+    -> Put a
+    -- ^ 'Put' with chunked encoding.
+encodeChunkedInternal minFree0 mkBeforeFE afterBE chunkB p =
+    put encodingStep
+  where
+    minFree      = max 1 minFree0   -- sanitize
+
+    -- encodingStep :: BuildStep r -> BuildStep ()
+    encodingStep k = 
+        fill (runPut p)
+      where
+        fill innerStep !(BufferRange op ope)
+          | outRemaining < minBufferSize = 
+              return $! bufferFull minBufferSize op (fill innerStep)
+          | otherwise = do
+              fillWithBuildStep innerStep doneH fullH insertChunkH brInner
+          where
+            outRemaining   = ope `minusPtr` op
+            beforeFE       = mkBeforeFE outRemaining
+            reservedBefore = size beforeFE
+            reservedAfter  = sizeBound afterBE
+            reserved       = reservedBefore + reservedAfter
+            minBufferSize  = minFree + reserved
+           
+            opInner        = op  `plusPtr` reservedBefore
+            opeInner       = ope `plusPtr` (-reservedAfter)
+            brInner        = BufferRange opInner opeInner
+
+            {-# INLINE wrapChunk #-}
+            wrapChunk :: Ptr Word8 -> (Ptr Word8 -> IO (BuildSignal r)) 
+                      -> IO (BuildSignal r)
+            wrapChunk !opInner' mkSignal 
+              | innerSize == 0 = mkSignal op
+              | otherwise      = do
+                  runF beforeFE innerSize op
+                  runB afterBE innerSize opInner' >>= mkSignal
+              where
+                innerSize = opInner' `minusPtr` opInner
+
+            doneH opInner' x = 
+                wrapChunk opInner' $ \op' -> do
+                  let !br' = BufferRange op' ope
+                  k x br'
+
+            fullH opInner' minSize nextInnerStep =
+                wrapChunk opInner' $ \op' -> do
+                  return $! bufferFull 
+                    (max minBufferSize (minSize + reserved))
+                    op'
+                    (fill nextInnerStep)  
+
+            insertChunkH opInner' bs nextInnerStep
+              | S.null bs =                         -- flush
+                  wrapChunk opInner' $ \op' ->
+                    return $! insertChunk op' S.empty 
+                      (fill nextInnerStep)
+
+              | otherwise =                         -- insert non-empty bytestring
+                  wrapChunk opInner' $ \op' -> do
+                    let !br' = BufferRange op' ope
+                    runBuilderWith (chunkB bs) (fill nextInnerStep) br'
+
+
+{-
 
 data BufferStream a =
        Finished Buffer a
@@ -863,3 +953,4 @@ encodeChunked minFree0 maxChunkSize0 toLBS mkSizeFE sizeB afterB b =
                     runBuilderWith (chunk bs) br' (go nextInnerStep)
 
 
+-}

@@ -242,7 +242,6 @@ import Data.ByteString.Lazy.Builder.Internal
 
 import qualified Data.ByteString.Lazy.Builder.BoundedEncoding as E
 
-import qualified Data.ByteString               as S
 import qualified Data.ByteString.Lazy.Internal as L
 
 import System.IO (Handle)

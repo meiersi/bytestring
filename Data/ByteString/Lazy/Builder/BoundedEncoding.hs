@@ -242,19 +242,19 @@ module Data.ByteString.Lazy.Builder.BoundedEncoding (
   , int64Var
   , intVar
 
-  -- , int8VarSigned
-  -- , int16VarSigned
-  -- , int32VarSigned
-  -- , int64VarSigned
-  -- , intVarSigned
-
   , word8Var
   , word16Var
   , word32Var
   , word64Var
   , wordVar
 
-  , intVarBounded
+  , int8VarSigned
+  , int16VarSigned
+  , int32VarSigned
+  , int64VarSigned
+  , intVarSigned
+
+  , intVarFixed
 
   -- *** Non-portable, host-dependent
   , intHost
@@ -826,6 +826,29 @@ intVar :: BoundedEncoding Int
 intVar = fromIntegral >$< wordVar
 
 
+zigZag :: (Storable a, Bits a) => a -> a
+zigZag x = (x `shift` 1) `xor` (x `shift` (1 - 8 * sizeOf x))
+
+{-# INLINE int8VarSigned #-}
+int8VarSigned :: BoundedEncoding Int8
+int8VarSigned = zigZag >$< int8Var
+
+{-# INLINE int16VarSigned #-}
+int16VarSigned :: BoundedEncoding Int16
+int16VarSigned = zigZag >$< int16Var
+
+{-# INLINE int32VarSigned #-}
+int32VarSigned :: BoundedEncoding Int32
+int32VarSigned = zigZag >$< int32Var
+
+{-# INLINE int64VarSigned #-}
+int64VarSigned :: BoundedEncoding Int64
+int64VarSigned = zigZag >$< int64Var
+
+{-# INLINE intVarSigned #-}
+intVarSigned :: BoundedEncoding Int
+intVarSigned = zigZag >$< intVar
+
 
 -- Padded versions for streamed prefixing of output sizes
 ---------------------------------------------------------
@@ -839,15 +862,15 @@ appsUntilZero f x0 =
     count !n x = count (succ n) (f x)
         
 
-{-# INLINE wordVarBounded #-}
-wordVarBounded :: Word -> FixedEncoding Word
-wordVarBounded bound = 
+{-# INLINE wordVarFixed #-}
+wordVarFixed :: Word -> FixedEncoding Word
+wordVarFixed bound = 
     fixedEncoding n0 io
   where
     n0 = appsUntilZero (`shiftr_w` 7) bound
 
     io !x0 !op 
-      | x0 > bound = error $ "genericVarBounded: value " ++ show x0 ++ 
+      | x0 > bound = error $ "genericVarFixed: value " ++ show x0 ++ 
                              " > bound " ++ show bound
       | otherwise  = loop 0 x0
       where
@@ -858,9 +881,9 @@ wordVarBounded bound =
           where
             poke8 = pokeElemOff op n . fromIntegral
 
-{-# INLINE intVarBounded #-}
-intVarBounded :: Size -> FixedEncoding Size
-intVarBounded bound = fromIntegral >$< wordVarBounded (fromIntegral bound)
+{-# INLINE intVarFixed #-}
+intVarFixed :: Size -> FixedEncoding Size
+intVarFixed bound = fromIntegral >$< wordVarFixed (fromIntegral bound)
 
 
 

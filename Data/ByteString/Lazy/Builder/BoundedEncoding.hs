@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, BangPatterns, MonoPatBinds #-}
+{-# LANGUAGE CPP, BangPatterns, MonoPatBinds, ScopedTypeVariables #-}
 -- |
 -- Module      : Data.ByteString.Lazy.Builder.BoundedEncoding
 -- Copyright   : (c) 2010-2011 Simon Meier
@@ -195,6 +195,7 @@ module Data.ByteString.Lazy.Builder.BoundedEncoding (
 
   -- * Chunked Encoding
   , encodeChunked
+  , encodeWithSize
 
   -- * Standard encodings of Haskell values
 
@@ -234,6 +235,27 @@ module Data.ByteString.Lazy.Builder.BoundedEncoding (
   , floatLE
   , doubleLE
 
+  -- *** Base 128 Variable-length
+  , int8Var
+  , int16Var
+  , int32Var
+  , int64Var
+  , intVar
+
+  -- , int8VarSigned
+  -- , int16VarSigned
+  -- , int32VarSigned
+  -- , int64VarSigned
+  -- , intVarSigned
+
+  , word8Var
+  , word16Var
+  , word32Var
+  , word64Var
+  , wordVar
+
+  , intVarBounded
+
   -- *** Non-portable, host-dependent
   , intHost
   , int16Host
@@ -269,6 +291,7 @@ import qualified Data.ByteString.Lazy.Internal as L
 
 import Data.Monoid
 import Data.Char (ord)
+import Control.Monad ((<=<))
 
 import Codec.Bounded.Encoding.Internal
 -- import Codec.Bounded.Encoding.Word
@@ -742,8 +765,103 @@ char8 :: FixedEncoding Char
 char8 = (fromIntegral . ord) >$< word8
 
 ------------------------------------------------------------------------------
--- Padded Encodings
+-- Base-128 Variable-Length Encodings
 ------------------------------------------------------------------------------
+
+encodeBase128 
+    :: forall a b. (Integral a, Bits a, Storable b, Integral b, Num b) 
+    => (a -> Int -> a) -> BoundedEncoding b
+encodeBase128 shiftr = 
+    -- We add 6 because we require the result of (`div` 7) to be rounded up.
+    boundedEncoding ((8 * sizeOf (undefined :: b) + 6) `div` 7) (io . fromIntegral)
+  where
+    io !x !op
+      | x' == 0   = do poke8 (x .&. 0x7f)
+                       return $! op `plusPtr` 1
+      | otherwise = do poke8 ((x .&. 0x7f) .|. 0x80)
+                       io x' (op `plusPtr` 1)
+      where
+        x'    = x `shiftr` 7
+        poke8 = poke op . fromIntegral
+
+{-# INLINE word8Var #-}
+word8Var :: BoundedEncoding Word8
+word8Var = encodeBase128 shiftr_w
+
+{-# INLINE word16Var #-}
+word16Var :: BoundedEncoding Word16
+word16Var = encodeBase128 shiftr_w
+
+{-# INLINE word32Var #-}
+word32Var :: BoundedEncoding Word32
+word32Var = encodeBase128 shiftr_w32
+
+{-# INLINE word64Var #-}
+word64Var :: BoundedEncoding Word64
+word64Var = encodeBase128 shiftr_w64
+
+{-# INLINE wordVar #-}
+wordVar :: BoundedEncoding Word
+wordVar = encodeBase128 shiftr_w
+
+
+{-# INLINE int8Var #-}
+int8Var :: BoundedEncoding Int8
+int8Var = fromIntegral >$< word8Var
+
+{-# INLINE int16Var #-}
+int16Var :: BoundedEncoding Int16
+int16Var = fromIntegral >$< word16Var
+
+{-# INLINE int32Var #-}
+int32Var :: BoundedEncoding Int32
+int32Var = fromIntegral >$< word32Var
+
+{-# INLINE int64Var #-}
+int64Var :: BoundedEncoding Int64
+int64Var = fromIntegral >$< word64Var
+
+{-# INLINE intVar #-}
+intVar :: BoundedEncoding Int
+intVar = fromIntegral >$< wordVar
+
+
+
+-- Padded versions for streamed prefixing of output sizes
+---------------------------------------------------------
+
+{-# INLINE appsUntilZero #-}
+appsUntilZero :: Num a => (a -> a) -> a -> Int
+appsUntilZero f x0 = 
+    count 0 x0
+  where
+    count !n 0 = n
+    count !n x = count (succ n) (f x)
+        
+
+{-# INLINE wordVarBounded #-}
+wordVarBounded :: Word -> FixedEncoding Word
+wordVarBounded bound = 
+    fixedEncoding n0 io
+  where
+    n0 = appsUntilZero (`shiftr_w` 7) bound
+
+    io !x0 !op 
+      | x0 > bound = error $ "genericVarBounded: value " ++ show x0 ++ 
+                             " > bound " ++ show bound
+      | otherwise  = loop 0 x0
+      where
+        loop !n !x
+          | n0 <= n   = do poke8 (x .&. 0x7f)
+          | otherwise = do poke8 ((x .&. 0x7f) .|. 0x80)
+                           loop (n + 1) (x `shiftr_w` 7)
+          where
+            poke8 = pokeElemOff op n . fromIntegral
+
+{-# INLINE intVarBounded #-}
+intVarBounded :: Size -> FixedEncoding Size
+intVarBounded bound = fromIntegral >$< wordVarBounded (fromIntegral bound)
+
 
 
 ------------------------------------------------------------------------------
@@ -763,9 +881,7 @@ encodeChunked
     -> Builder
     -- ^ 'Put' with chunked encoding.
 encodeChunked minFree mkBeforeFE afterBE =
-    fromPut 
-  . encodeChunkedInternal minFree mkBeforeFE afterBE chunkB 
-  . putBuilder
+    fromPut . putChunked minFree mkBeforeFE afterBE chunkB . putBuilder
   where
     chunkB bs = 
         encodeWithF (mkBeforeFE l) l `mappend`
@@ -774,8 +890,8 @@ encodeChunked minFree mkBeforeFE afterBE =
       where
         l = S.length bs
 
-{-# INLINE encodeChunkedInternal #-}
-encodeChunkedInternal
+{-# INLINE putChunked #-}
+putChunked
     :: Size                           -- ^ Minimal free-size
     -> (Size -> FixedEncoding Size)   
     -- ^ Given a sizeBound on the maximal encodable size this function must return
@@ -788,12 +904,11 @@ encodeChunkedInternal
     -- ^ Inner Put to transform
     -> Put a
     -- ^ 'Put' with chunked encoding.
-encodeChunkedInternal minFree0 mkBeforeFE afterBE chunkB p =
+putChunked minFree0 mkBeforeFE afterBE chunkB p =
     put encodingStep
   where
     minFree      = max 1 minFree0   -- sanitize
 
-    -- encodingStep :: BuildStep r -> BuildStep ()
     encodingStep k = 
         fill (runPut p)
       where
@@ -814,37 +929,157 @@ encodeChunkedInternal minFree0 mkBeforeFE afterBE chunkB p =
             opeInner       = ope `plusPtr` (-reservedAfter)
             brInner        = BufferRange opInner opeInner
 
-            {-# INLINE wrapChunk #-}
-            wrapChunk :: Ptr Word8 -> (Ptr Word8 -> IO (BuildSignal r)) 
-                      -> IO (BuildSignal r)
-            wrapChunk !opInner' mkSignal 
-              | innerSize == 0 = mkSignal op
+            wrapChunk :: Ptr Word8 -> IO (Ptr Word8)
+            wrapChunk !opInner' 
+              | innerSize == 0 = return op -- no data written => no chunk to wrap
               | otherwise      = do
                   runF beforeFE innerSize op
-                  runB afterBE innerSize opInner' >>= mkSignal
+                  runB afterBE innerSize opInner'
               where
                 innerSize = opInner' `minusPtr` opInner
 
-            doneH opInner' x = 
-                wrapChunk opInner' $ \op' -> do
-                  let !br' = BufferRange op' ope
-                  k x br'
+            doneH opInner' x = do
+                op' <- wrapChunk opInner'
+                let !br' = BufferRange op' ope
+                k x br'
 
-            fullH opInner' minSize nextInnerStep =
-                wrapChunk opInner' $ \op' -> do
-                  return $! bufferFull 
-                    (max minBufferSize (minSize + reserved))
-                    op'
-                    (fill nextInnerStep)  
+            fullH opInner' minSize nextInnerStep = do
+                op' <- wrapChunk opInner' 
+                return $! bufferFull 
+                  (max minBufferSize (minSize + reserved))
+                  op'
+                  (fill nextInnerStep)  
 
             insertChunkH opInner' bs nextInnerStep
-              | S.null bs =                         -- flush
-                  wrapChunk opInner' $ \op' ->
-                    return $! insertChunk op' S.empty 
-                      (fill nextInnerStep)
+              | S.null bs = do                      -- flush
+                  op' <- wrapChunk opInner'
+                  return $! insertChunk op' S.empty 
+                    (fill nextInnerStep)
 
-              | otherwise =                         -- insert non-empty bytestring
-                  wrapChunk opInner' $ \op' -> do
-                    let !br' = BufferRange op' ope
-                    runBuilderWith (chunkB bs) (fill nextInnerStep) br'
+              | otherwise = do                      -- insert non-empty bytestring
+                  op' <- wrapChunk opInner'
+                  let !br' = BufferRange op' ope
+                  runBuilderWith (chunkB bs) (fill nextInnerStep) br'
+
+  
+
+-- | /Heavy inlining./ Prefix a 'Put a' with its length.
+--
+-- This function is optimized for streaming use. It tries to prefix the length
+-- without copying the output. This is achieved by reserving space for the
+-- maximum length to be encoded. This succeeds if the output is smaller than
+-- the current free buffer size, which is guaranteed to be at least @8kb@.
+--
+-- If the output does not fit into the current free buffer size, 
+-- the method falls back to encoding the data to a separate lazy bytestring,
+-- computing the size, and encoding the size before inserting the chunks of
+-- the separate lazy bytestring.
+--
+-- Note that the generated chunks might hold on to a lot of unused memory. If
+-- you need to hold on to the generated chunks, then you should copy their
+-- content.
+{-# INLINE encodeWithSize #-}
+encodeWithSize
+    :: (Size -> FixedEncoding Size)   
+    -- ^ Given a bound on the maximal size to encode, this function must return
+    -- a fixed-size encoding for all smaller sizes.
+    -> BoundedEncoding Int64
+    -- ^ Encoding the size for the fallback case.
+    -> Builder
+    -- ^ 'Put' to prefix with the length of its sequence of bytes.
+    -> Builder
+encodeWithSize mkSizeFE sizeBE = 
+    fromPut . putWithSize mkSizeFE sizeBE . putBuilder
+
+-- | Prefix a 'Put' with the size of its written data.
+{-# INLINE putWithSize #-}
+putWithSize 
+    :: forall a.
+       (Size -> FixedEncoding Size)   
+    -- ^ Given a bound on the maximal size to encode, this function must return
+    -- a fixed-size encoding for all smaller sizes.
+    -> BoundedEncoding Int64
+    -- ^ Encoding the size for the fallback case.
+    -> Put a
+    -- ^ 'Put' to prefix with the length of its sequence of bytes.
+    -> Put a
+putWithSize mkSizeFE sizeBE innerP =
+    put encodingStep
+  where
+    -- The minimal free-size must be as large as '2 * smallChunkSize' to
+    -- guarantee that when switching to the slow-mode, we can always just
+    -- insert the generated chunks while guaranteeing the minimal average
+    -- chunk-size.  We /must/ insert the chunks directly to avoid copying data
+    -- multiple times when nesting 'encodeWithSize' transformers.
+    minFree      = 2 * L.smallChunkSize
+
+    encodingStep :: forall r. (a -> BuildStep r) -> BuildStep r
+    encodingStep k = 
+        fill (runPut innerP)
+      where
+        fill :: BuildStep a -> BufferRange -> IO (BuildSignal r)
+        fill innerStep !br@(BufferRange op ope)
+          | outRemaining < minBufferSize = 
+              return $! bufferFull minBufferSize op (fill innerStep)
+          | otherwise = do
+              fillWithBuildStep innerStep doneH fullH insertChunkH brInner
+          where
+            outRemaining  = ope `minusPtr` op
+            sizeFE        = mkSizeFE outRemaining
+            reserved      = size sizeFE
+            minBufferSize = minFree + reserved
+           
+            opInner       = op  `plusPtr` reserved
+            brInner       = BufferRange opInner ope
+
+            fastPrefixSize :: Ptr Word8 -> IO (Ptr Word8)
+            fastPrefixSize !opInner'
+              | innerSize == 0 = do runB sizeBE 0 op
+              | otherwise      = do runF sizeFE innerSize op
+                                    return opInner'
+              where
+                innerSize = opInner' `minusPtr` opInner
+
+            slowPrefixSize :: Ptr Word8 -> Builder -> BuildStep a -> IO (BuildSignal r)
+            slowPrefixSize opInner' replaySignal nextStep = do
+                (x, lbs, l) <- toLBS $ runBuilderWith bInner nextStep
+                runBuilderWith (encodeWithB sizeBE l `mappend` 
+                                lazyByteStringInsert lbs)
+                               (k x) br
+              where
+                toLBS = runCIOSWithLength <=< buildStepToCIOSUntrimmed
+                -- FIXME: We are missing a signal to retrieve the foreign pointer
+                -- of the buffer in order to avoid the copy below.
+                bInner = bytesCopy (BufferRange opInner opInner') `mappend` 
+                         replaySignal
+
+            doneH :: Ptr Word8 -> a -> IO (BuildSignal r)
+            doneH opInner' x = do
+                op' <- fastPrefixSize opInner'
+                let !br' = BufferRange op' ope
+                k x br'
+
+            fullH :: Ptr Word8 -> Int -> BuildStep a -> IO (BuildSignal r)
+            fullH opInner' minSize nextInnerStep =
+                slowPrefixSize opInner' (ensureFree minSize) nextInnerStep
+
+            insertChunkH :: Ptr Word8 -> S.ByteString -> BuildStep a -> IO (BuildSignal r)
+            insertChunkH opInner' bs nextInnerStep =
+                slowPrefixSize opInner' (byteStringInsert bs) nextInnerStep
+
+
+-- | Run a 'ChunkIOStream' and gather its results and their length.
+runCIOSWithLength :: ChunkIOStream a -> IO (a, L.ByteString, Int64)
+runCIOSWithLength = 
+    go 0 id
+  where
+    go !l lbsd (Finished x)  = return (x, lbsd L.Empty, l)
+    go !l lbsd (Yield bs io) = 
+        go (l + fromIntegral (S.length bs)) (L.Chunk bs . lbsd) =<< io
+
+------------------------------------------------------------------------------
+-- Debugging encodings
+------------------------------------------------------------------------------
+
+-- TODO: Port testing infrastructure.
 

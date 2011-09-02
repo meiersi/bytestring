@@ -66,6 +66,9 @@ module Data.ByteString.Lazy.Builder.Internal (
   , append
   , flush
 
+  , ensureFree
+  , bytesCopy
+
   , byteStringCopy
   , byteStringInsert
   , byteStringThreshold
@@ -90,7 +93,14 @@ module Data.ByteString.Lazy.Builder.Internal (
   , Put
   , put
   , runPut
+  , runPutWith
   , hPut
+
+  -- ** Streams of chunks interleaved with IO
+  , ChunkIOStream(..)
+  , buildStepToCIOS
+  , buildStepToCIOSUntrimmed
+  , ciosToLazyByteString
 
   -- ** Conversion to and from Builders
   , putBuilder
@@ -332,6 +342,11 @@ runPut :: Put a       -- ^ Put to run
                       -- the 'done' signal.
 runPut (Put p) = p $ \x (BufferRange op _) -> return $ Done op x
 
+-- | Run a 'Put' with a continuation step.
+{-# INLINE runPutWith #-}
+runPutWith :: Put a  -> (a -> BuildStep b) -> BuildStep b 
+runPutWith (Put p) = p 
+
 instance Functor Put where
   fmap f p = Put $ \k -> unPut p (\x -> k (f x))
   {-# INLINE fmap #-}
@@ -503,23 +518,46 @@ byteStringCopy :: S.ByteString -> Builder
 byteStringCopy = \bs -> builder $ byteStringCopyStep bs
 
 {-# INLINE byteStringCopyStep #-}
-byteStringCopyStep :: S.ByteString 
-                   -> (BufferRange -> IO (BuildSignal a))
-                   -> (BufferRange -> IO (BuildSignal a))
-byteStringCopyStep (S.PS ifp ioff isize) !k = 
-    goBS (unsafeForeignPtrToPtr ifp `plusPtr` ioff)
+byteStringCopyStep :: S.ByteString -> BuildStep a -> BuildStep a
+byteStringCopyStep (S.PS ifp ioff isize) !k0 = 
+    bytesCopyStep (BufferRange ip ipe) k
   where
-    !ipe = unsafeForeignPtrToPtr ifp `plusPtr` (ioff + isize)
-    goBS !ip !(BufferRange op ope)
+    ip   = unsafeForeignPtrToPtr ifp `plusPtr` ioff
+    ipe  = ip `plusPtr` isize
+    k br = do touchForeignPtr ifp  -- input consumed: OK to release here
+              k0 br
+
+-- | Ensure that there are at least 'n' free bytes for the following 'Builder'.
+{-# INLINE ensureFree #-}
+ensureFree :: Int -> Builder
+ensureFree minFree =
+    builder step
+  where
+    step k br@(BufferRange op ope)
+      | ope `minusPtr` op < minFree = return $ bufferFull minFree op k
+      | otherwise                   = k br
+
+-- | A 'Builder' that copies the bytes denoted by the 'BufferRange'.
+{-# INLINE bytesCopy #-}
+bytesCopy :: BufferRange -> Builder
+bytesCopy = \br -> builder $ bytesCopyStep br
+
+-- | Copy the bytes from a 'BufferRange' into the output stream.
+{-# INLINE bytesCopyStep #-}
+bytesCopyStep :: BufferRange  -- ^ Input 'BufferRange'.
+              -> BuildStep a -> BuildStep a
+bytesCopyStep !(BufferRange ip0 ipe) k = 
+    go ip0
+  where
+    go !ip !(BufferRange op ope)
       | inpRemaining <= outRemaining = do
           copyBytes op ip inpRemaining
-          touchForeignPtr ifp -- input consumed: OK to release from here
           let !br' = BufferRange (op `plusPtr` inpRemaining) ope
           k br'
       | otherwise = do
           copyBytes op ip outRemaining
           let !ip' = ip `plusPtr` outRemaining
-          return $ bufferFull 1 ope (goBS ip')
+          return $ bufferFull 1 ope (go ip')
       where
         outRemaining = ope `minusPtr` op
         inpRemaining = ipe `minusPtr` ip
@@ -642,7 +680,7 @@ safeStrategy firstSize bufSize =
     AllocationStrategy (sanitize firstSize) (sanitize bufSize) 
                        (\used size -> 2*used < size)
 
--- | Execute a 'Builder' with custom execution parameters.
+-- | /Heavy inlining./ Execute a 'Builder' with custom execution parameters.
 --
 -- In most cases, the parameters used by 'toLazyByteString' give good
 -- performance. A slightly sub-performing case is generating lots of short
@@ -666,8 +704,44 @@ toLazyByteStringWith
        -- ^ Builder to execute
     -> L.ByteString
        -- ^ Resulting lazy 'L.ByteString'
-toLazyByteStringWith (AllocationStrategy firstSize bufSize trim) k b = 
-    S.inlinePerformIO $ fillNew (runBuilder b) firstSize 
+toLazyByteStringWith strategy k b = 
+    ciosToLazyByteString k $ unsafePerformIO $
+        buildStepToCIOS strategy (return . Finished) (runBuilder b)
+
+-- | A stream of non-empty chunks interleaved with 'IO'.
+data ChunkIOStream a =
+       Finished a
+     | Yield {-# UNPACK #-} !S.ByteString (IO (ChunkIOStream a))
+
+-- | Smart constructor that ensures the non-empty chunk invariant.
+yield :: S.ByteString -> IO (ChunkIOStream a) -> IO (ChunkIOStream a)
+yield bs@(S.PS _ _ len) k | len == 0  = k
+                          | otherwise = return $ Yield bs k
+
+{-# INLINE ciosToLazyByteString #-}
+ciosToLazyByteString :: L.ByteString -> ChunkIOStream () -> L.ByteString
+ciosToLazyByteString k = go
+  where
+    go (Finished _)  = k
+    go (Yield bs io) = L.Chunk bs $ unsafePerformIO (go <$> io)
+
+
+-- | A default way for converting a 'BuildStep' expected to be large (> 4kb) to
+-- a throw-away 'ChunkIOStream'. 
+buildStepToCIOSUntrimmed :: BuildStep a -> IO (ChunkIOStream a)
+buildStepToCIOSUntrimmed =
+    buildStepToCIOS (untrimmedStrategy L.defaultChunkSize L.defaultChunkSize)
+                    (return . Finished)
+
+
+{-# INLINE buildStepToCIOS #-}
+buildStepToCIOS
+    :: AllocationStrategy          -- ^ Buffer allocation strategy to use
+    -> (a -> IO (ChunkIOStream b)) -- ^ Continuation stream constructor.
+    -> BuildStep a                 -- ^ 'Put' to execute
+    -> IO (ChunkIOStream b)
+buildStepToCIOS (AllocationStrategy firstSize bufSize trim) k = 
+    \step -> fillNew step firstSize 
   where
     fillNew !step0 !size = do
         S.mallocByteString size >>= fill step0
@@ -675,52 +749,31 @@ toLazyByteStringWith (AllocationStrategy firstSize bufSize trim) k b =
         fill !step !fpbuf =
             fillWithBuildStep step doneH fullH insertChunkH br
           where
-            op  = unsafeForeignPtrToPtr fpbuf -- safe due to mkbs
-            pe  = op `plusPtr` size
-            !br = BufferRange op pe
+            op = unsafeForeignPtrToPtr fpbuf -- safe due to mkCIOS
+            pe = op `plusPtr` size
+            br = BufferRange op pe
             
-            -- we are done: return lazy bytestring continuation
-            doneH op' _ 
-              | op' == op = return k
-              | otherwise = mkbs op' k
+            doneH op' x = wrapChunk op' (const $ k x)
 
-            -- buffer full: add chunk if it is non-empty and fill next buffer
-            fullH op' minSize nextStep 
-              | op' == op = fillNew nextStep (max minSize bufSize)
-
-              | otherwise = 
-                  mkbs op' $ S.inlinePerformIO
-                           $ fillNew nextStep (max minSize bufSize)
+            fullH op' minSize nextStep =
+                wrapChunk op' (const $ fillNew nextStep (max minSize bufSize))
             
-            -- insert a chunk: prepend current chunk, if there is one
-            insertChunkH op' bs nextStep
-              | op' == op =
-                  return $ nonEmptyChunk bs 
-                         $ S.inlinePerformIO 
-                         $ fill nextStep fpbuf
+            insertChunkH op' bs nextStep =
+                wrapChunk op' $ \isEmpty -> yield bs $
+                    -- Checking for empty case avoids allocating 'n-1' empty
+                    -- buffers for 'n' chunks inserted right after each other.
+                    if isEmpty 
+                      then fill nextStep fpbuf 
+                      else fillNew nextStep bufSize
 
-              | otherwise =
-                  mkbs op' $ nonEmptyChunk bs 
-                           $ S.inlinePerformIO 
-                           $ fillNew nextStep bufSize
-
-            -- add a chunk to a lazy bytestring, trimming the chunk if necesary
-            mkbs !op' lbs
-              | trim filledSize size = do
-                  fpbuf' <- S.mallocByteString filledSize
-                  copyBytes (unsafeForeignPtrToPtr fpbuf') op filledSize
-                  touchForeignPtr fpbuf
-                  return $ L.Chunk (S.PS fpbuf' 0 filledSize) lbs
-              | otherwise                     = 
-                  return $ L.Chunk (S.PS fpbuf 0 filledSize) lbs
+            -- Yield a chunk, trimming it if necesary
+            {-# INLINE wrapChunk #-}
+            wrapChunk !op' mkCIOS
+              | chunkSize == 0      = mkCIOS True
+              | trim chunkSize size = do
+                  bs <- S.create chunkSize $ \pbuf -> copyBytes pbuf op chunkSize
+                  return $ Yield bs (mkCIOS False)
+              | otherwise            = 
+                  return $ Yield (S.PS fpbuf 0 chunkSize) (mkCIOS False)
               where
-                filledSize = op' `minusPtr` op
-
-                    
-
--- | Prepend the chunk if it is non-empty.
-{-# INLINE nonEmptyChunk #-}
-nonEmptyChunk :: S.ByteString -> L.ByteString -> L.ByteString
-nonEmptyChunk bs lbs | S.null bs = lbs 
-                     | otherwise = L.Chunk bs lbs
-
+                chunkSize = op' `minusPtr` op

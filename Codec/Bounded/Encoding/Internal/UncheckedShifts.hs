@@ -24,6 +24,7 @@ module Codec.Bounded.Encoding.Internal.UncheckedShifts (
     shiftr_w16
   , shiftr_w32
   , shiftr_w64
+  , shiftr_w
   ) where
 
 
@@ -37,6 +38,8 @@ import GHC.Word (uncheckedShiftRL64#)
 #else
 import Data.Word
 #endif
+
+import Foreign
 
 
 ------------------------------------------------------------------------
@@ -53,6 +56,15 @@ shiftr_w32 :: Word32 -> Int -> Word32
 -- | Right-shift of a 'Word64'.
 {-# INLINE shiftr_w64 #-}
 shiftr_w64 :: Word64 -> Int -> Word64
+
+-- | Right-shift of a 'Word'.
+{-# INLINE shiftr_w #-}
+shiftr_w :: Word -> Int -> Word
+#if WORD_SIZE_IN_BITS < 64
+shiftr_w w s = fromIntegral $ (`shiftr_w32` s) $ fromIntegral w
+#else
+shiftr_w w s = fromIntegral $ (`shiftr_w64` s) $ fromIntegral w
+#endif
 
 #if defined(__GLASGOW_HASKELL__) && !defined(__HADDOCK__)
 shiftr_w16 (W16# w) (I# i) = W16# (w `uncheckedShiftRL#`   i)

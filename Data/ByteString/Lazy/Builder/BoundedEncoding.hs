@@ -893,41 +893,32 @@ intVarFixed bound = fromIntegral >$< wordVarFixed (fromIntegral bound)
 
 {-# INLINE encodeChunked #-}
 encodeChunked
-    :: Size                           -- ^ Minimal free-size
-    -> (Size -> FixedEncoding Size)   
+    :: Int                           -- ^ Minimal free-size
+    -> (Int64 -> FixedEncoding Int64)   
     -- ^ Given a sizeBound on the maximal encodable size this function must return
     -- a fixed-size encoding for encoding all smaller size.
-    -> (BoundedEncoding Size)
+    -> (BoundedEncoding Int64)
     -- ^ An encoding for terminating a chunk of the given size.
     -> Builder
     -- ^ Inner Builder to transform
     -> Builder
     -- ^ 'Put' with chunked encoding.
 encodeChunked minFree mkBeforeFE afterBE =
-    fromPut . putChunked minFree mkBeforeFE afterBE chunkB . putBuilder
-  where
-    chunkB bs = 
-        encodeWithF (mkBeforeFE l) l `mappend`
-        byteStringInsert bs `mappend`
-        encodeWithB afterBE l
-      where
-        l = S.length bs
+    fromPut . putChunked minFree mkBeforeFE afterBE . putBuilder
 
 {-# INLINE putChunked #-}
 putChunked
-    :: Size                           -- ^ Minimal free-size
-    -> (Size -> FixedEncoding Size)   
+    :: Int                           -- ^ Minimal free-size
+    -> (Int64 -> FixedEncoding Int64)   
     -- ^ Given a sizeBound on the maximal encodable size this function must return
     -- a fixed-size encoding for encoding all smaller size.
-    -> (BoundedEncoding Size)
-    -- ^ An encoding for terminating a chunk of the given size.
-    -> (S.ByteString -> Builder)
+    -> (BoundedEncoding Int64)
     -- ^ Encoding a directly inserted chunk.
     -> Put a
     -- ^ Inner Put to transform
     -> Put a
     -- ^ 'Put' with chunked encoding.
-putChunked minFree0 mkBeforeFE afterBE chunkB p =
+putChunked minFree0 mkBeforeFE afterBE p =
     put encodingStep
   where
     minFree      = max 1 minFree0   -- sanitize
@@ -939,10 +930,10 @@ putChunked minFree0 mkBeforeFE afterBE chunkB p =
           | outRemaining < minBufferSize = 
               return $! bufferFull minBufferSize op (fill innerStep)
           | otherwise = do
-              fillWithBuildStep innerStep doneH fullH insertChunkH brInner
+              fillWithBuildStep innerStep doneH fullH insertChunksH brInner
           where
             outRemaining   = ope `minusPtr` op
-            beforeFE       = mkBeforeFE outRemaining
+            beforeFE       = mkBeforeFE $ fromIntegral outRemaining
             reservedBefore = size beforeFE
             reservedAfter  = sizeBound afterBE
             reserved       = reservedBefore + reservedAfter
@@ -959,7 +950,7 @@ putChunked minFree0 mkBeforeFE afterBE chunkB p =
                   runF beforeFE innerSize op
                   runB afterBE innerSize opInner'
               where
-                innerSize = opInner' `minusPtr` opInner
+                innerSize = fromIntegral $ opInner' `minusPtr` opInner
 
             doneH opInner' x = do
                 op' <- wrapChunk opInner'
@@ -973,17 +964,20 @@ putChunked minFree0 mkBeforeFE afterBE chunkB p =
                   op'
                   (fill nextInnerStep)  
 
-            insertChunkH opInner' bs nextInnerStep
-              | S.null bs = do                      -- flush
+            insertChunksH opInner' n lbsC nextInnerStep
+              | n == 0 = do                      -- flush
                   op' <- wrapChunk opInner'
-                  return $! insertChunk op' S.empty 
-                    (fill nextInnerStep)
+                  return $! insertChunks op' 0 id (fill nextInnerStep)
 
-              | otherwise = do                      -- insert non-empty bytestring
+              | otherwise = do                   -- insert non-empty bytestring
                   op' <- wrapChunk opInner'
                   let !br' = BufferRange op' ope
-                  runBuilderWith (chunkB bs) (fill nextInnerStep) br'
-
+                  runBuilderWith chunkB (fill nextInnerStep) br'
+              where
+                chunkB =
+                  encodeWithF (mkBeforeFE n) n `mappend`
+                  lazyByteStringC n lbsC       `mappend`
+                  encodeWithB afterBE n
   
 
 -- | /Heavy inlining./ Prefix a 'Put a' with its length.
@@ -1003,40 +997,32 @@ putChunked minFree0 mkBeforeFE afterBE chunkB p =
 -- content.
 {-# INLINE encodeWithSize #-}
 encodeWithSize
-    :: (Size -> FixedEncoding Size)   
+    :: (Int64 -> FixedEncoding Int64)   
     -- ^ Given a bound on the maximal size to encode, this function must return
     -- a fixed-size encoding for all smaller sizes.
-    -> BoundedEncoding Int64
-    -- ^ Encoding the size for the fallback case.
     -> Builder
     -- ^ 'Put' to prefix with the length of its sequence of bytes.
     -> Builder
-encodeWithSize mkSizeFE sizeBE = 
-    fromPut . putWithSize mkSizeFE sizeBE . putBuilder
+encodeWithSize mkSizeFE = 
+    fromPut . putWithSize mkSizeFE . putBuilder
 
 -- | Prefix a 'Put' with the size of its written data.
 {-# INLINE putWithSize #-}
 putWithSize 
     :: forall a.
-       (Size -> FixedEncoding Size)   
-    -- ^ Given a bound on the maximal size to encode, this function must return
-    -- a fixed-size encoding for all smaller sizes.
-    -> BoundedEncoding Int64
+       (Int64 -> FixedEncoding Int64)   
     -- ^ Encoding the size for the fallback case.
     -> Put a
     -- ^ 'Put' to prefix with the length of its sequence of bytes.
     -> Put a
-putWithSize mkSizeFE sizeBE innerP =
-    put encodingStep
+putWithSize mkSizeFE innerP =
+    put $ encodingStep
   where
-    -- The minimal free-size must be as large as '2 * smallChunkSize' to
-    -- guarantee that when switching to the slow-mode, we can always just
-    -- insert the generated chunks while guaranteeing the minimal average
-    -- chunk-size.  We /must/ insert the chunks directly to avoid copying data
-    -- multiple times when nesting 'encodeWithSize' transformers.
-    minFree      = 2 * L.smallChunkSize
+    -- | The minimal free-size must be at least the small chunk-size to ensure
+    -- that the slow-mode inserts large enough chunks.
+    minFree = L.smallChunkSize
 
-    encodingStep :: forall r. (a -> BuildStep r) -> BuildStep r
+    encodingStep :: (forall r. (a -> BuildStep r) -> BuildStep r)
     encodingStep k = 
         fill (runPut innerP)
       where
@@ -1045,10 +1031,10 @@ putWithSize mkSizeFE sizeBE innerP =
           | outRemaining < minBufferSize = 
               return $! bufferFull minBufferSize op (fill innerStep)
           | otherwise = do
-              fillWithBuildStep innerStep doneH fullH insertChunkH brInner
+              fillWithBuildStep innerStep doneH fullH insertChunksH brInner
           where
             outRemaining  = ope `minusPtr` op
-            sizeFE        = mkSizeFE outRemaining
+            sizeFE        = mkSizeFE $ fromIntegral outRemaining
             reserved      = size sizeFE
             minBufferSize = minFree + reserved
            
@@ -1057,22 +1043,29 @@ putWithSize mkSizeFE sizeBE innerP =
 
             fastPrefixSize :: Ptr Word8 -> IO (Ptr Word8)
             fastPrefixSize !opInner'
-              | innerSize == 0 = do runB sizeBE 0 op
-              | otherwise      = do runF sizeFE innerSize op
-                                    return opInner'
+              | innerSize == 0 = do runB (toB $ mkSizeFE 0) 0          op
+              | otherwise      = do runB (toB $ sizeFE)      innerSize op
               where
-                innerSize = opInner' `minusPtr` opInner
+                innerSize = fromIntegral $ opInner' `minusPtr` opInner
 
             slowPrefixSize :: Ptr Word8 -> Builder -> BuildStep a -> IO (BuildSignal r)
             slowPrefixSize opInner' replaySignal nextStep = do
-                (x, lbs, l) <- toLBS $ runBuilderWith bInner nextStep
-                runBuilderWith (encodeWithB sizeBE l `mappend` 
-                                lazyByteStringInsert lbs)
+                (x, lbsC, l) <- toLBS $ runBuilderWith bInner nextStep
+                -- TODO: We could get rid of one more chunk-boundary
+                -- when encoding large messages by reserving space for the 
+                -- size and modifying the returned bytestring afterwards.
+                runBuilderWith (encodeWithF (mkSizeFE l) l `mappend` 
+                                -- inserting the continuation is crucial to
+                                -- avoid quadratic runtime when nesting
+                                -- 'encodeWithSize'.
+                                lazyByteStringC l lbsC)
                                (k x) br
               where
-                toLBS = runCIOSWithLength <=< buildStepToCIOSUntrimmed
-                -- FIXME: We are missing a signal to retrieve the foreign pointer
-                -- of the buffer in order to avoid the copy below.
+                toLBS  = runCIOSWithLength <=< buildStepToCIOSUntrimmed
+                -- Note that we there's no 'unsafePerformIO' involved at this
+                -- level. This is crucial to ensure a total ordering of all
+                -- actions and, therefore, the execution of the 'bytesCopy'
+                -- builder before returning a signal to the driver.
                 bInner = bytesCopy (BufferRange opInner opInner') `mappend` 
                          replaySignal
 
@@ -1086,19 +1079,21 @@ putWithSize mkSizeFE sizeBE innerP =
             fullH opInner' minSize nextInnerStep =
                 slowPrefixSize opInner' (ensureFree minSize) nextInnerStep
 
-            insertChunkH :: Ptr Word8 -> S.ByteString -> BuildStep a -> IO (BuildSignal r)
-            insertChunkH opInner' bs nextInnerStep =
-                slowPrefixSize opInner' (byteStringInsert bs) nextInnerStep
+            insertChunksH :: Ptr Word8 -> Int64 -> LazyByteStringC 
+                          -> BuildStep a -> IO (BuildSignal r)
+            insertChunksH opInner' n lbsC nextInnerStep =
+                slowPrefixSize opInner' (lazyByteStringC n lbsC) nextInnerStep
 
 
 -- | Run a 'ChunkIOStream' and gather its results and their length.
-runCIOSWithLength :: ChunkIOStream a -> IO (a, L.ByteString, Int64)
+runCIOSWithLength :: ChunkIOStream a -> IO (a, LazyByteStringC, Int64)
 runCIOSWithLength = 
     go 0 id
   where
-    go !l lbsd (Finished x)  = return (x, lbsd L.Empty, l)
-    go !l lbsd (Yield bs io) = 
-        go (l + fromIntegral (S.length bs)) (L.Chunk bs . lbsd) =<< io
+    go !l lbsC (Finished x)        = return (x, lbsC, l)
+    go !l lbsC (YieldC n lbsC' io) = io >>= go (l + n) (lbsC . lbsC')
+    go !l lbsC (Yield1 bs io)      = 
+        io >>= go (l + fromIntegral (S.length bs)) (lbsC . L.Chunk bs)
 
 ------------------------------------------------------------------------------
 -- Debugging encodings

@@ -45,13 +45,14 @@ module Data.ByteString.Lazy.Builder.Internal (
 
   -- * Build signals and steps
     BufferRange(..)
+  , LazyByteStringC
 
   , BuildSignal
   , BuildStep
 
   , done
   , bufferFull
-  , insertChunk
+  , insertChunks
 
   , fillWithBuildStep
 
@@ -76,6 +77,8 @@ module Data.ByteString.Lazy.Builder.Internal (
   , lazyByteStringCopy
   , lazyByteStringInsert
   , lazyByteStringThreshold
+
+  , lazyByteStringC
 
   , maximalCopySize
   , byteString
@@ -133,6 +136,8 @@ import Foreign
 import System.IO (Handle)
 
 
+type LazyByteStringC = L.ByteString -> L.ByteString
+
 -- | A range of bytes in a buffer represented by the pointer to the first byte
 -- of the range and the pointer to the first byte /after/ the range.
 data BufferRange = BufferRange {-# UNPACK #-} !(Ptr Word8)  -- First byte of range
@@ -146,16 +151,17 @@ data BufferRange = BufferRange {-# UNPACK #-} !(Ptr Word8)  -- First byte of ran
 type BuildStep a = BufferRange -> IO (BuildSignal a)
 
 -- | 'BuildSignal's abstract signals to the caller of a 'BuildStep'. There are
--- exactly three signals: 'done', 'bufferFull', and 'insertChunk'.
+-- exactly three signals: 'done', 'bufferFull', and 'insertChunks'.
 data BuildSignal a =
     Done {-# UNPACK #-} !(Ptr Word8) a
   | BufferFull
       {-# UNPACK #-} !Int
       {-# UNPACK #-} !(Ptr Word8)
                      !(BuildStep a)
-  | InsertByteString
+  | InsertChunks
       {-# UNPACK #-} !(Ptr Word8) 
-                     !S.ByteString
+      {-# UNPACK #-} !Int64                   -- size of bytes in continuation
+                      LazyByteStringC
                      !(BuildStep a)
 
 -- | Signal that the current 'BuildStep' is done and has computed a value.
@@ -182,16 +188,18 @@ bufferFull = BufferFull
 -- TODO: Decide whether we should inline the bytestring constructor.
 -- Therefore, making builders independent of strict bytestrings.
 
--- | Signal that a chunk should be inserted directly.
-{-# INLINE insertChunk #-}
-insertChunk :: Ptr Word8                        
+-- | Signal that several chunks should be inserted directly.
+{-# INLINE insertChunks #-}
+insertChunks :: Ptr Word8                        
             -- ^ Next free byte in current 'BufferRange'
-            -> S.ByteString                     
-            -- ^ Chunk to insert
+            -> Int64
+            -- ^ Number of bytes in 'L.ByteString' continuation.
+            -> (L.ByteString -> L.ByteString)
+            -- ^ Chunks to insert. 
             -> BuildStep a
             -- ^ 'BuildStep' to run on next 'BufferRange'
             -> BuildSignal a
-insertChunk = InsertByteString
+insertChunks = InsertChunks
 
 -- | Fill a 'BufferRange' using a 'BuildStep'.
 {-# INLINE fillWithBuildStep #-}
@@ -202,8 +210,8 @@ fillWithBuildStep
     -- ^ Handling the 'done' signal
     -> (Ptr Word8 -> Int -> BuildStep a -> IO b)
     -- ^ Handling the 'bufferFull' signal
-    -> (Ptr Word8 -> S.ByteString -> BuildStep a -> IO b)
-    -- ^ Handling the 'insertChunk' signal
+    -> (Ptr Word8 -> Int64 -> LazyByteStringC -> BuildStep a -> IO b)
+    -- ^ Handling the 'insertChunks' signal
     -> BufferRange 
     -- ^ Buffer range to fill.
     -> IO b
@@ -211,9 +219,9 @@ fillWithBuildStep
 fillWithBuildStep step fDone fFull fChunk !br = do
     signal <- step br
     case signal of
-        Done op x                       -> fDone op x
-        BufferFull minSize op nextStep  -> fFull op minSize nextStep
-        InsertByteString op bs nextStep -> fChunk op bs nextStep 
+        Done op x                         -> fDone op x
+        BufferFull minSize op nextStep    -> fFull op minSize nextStep
+        InsertChunks op len lbsC nextStep -> fChunk op len lbsC nextStep 
                   
 
 
@@ -286,7 +294,7 @@ instance Monoid Builder where
 flush :: Builder
 flush = builder step
   where
-    step k !(BufferRange op _) = return $ insertChunk op S.empty k
+    step k !(BufferRange op _) = return $ insertChunks op 0 id k
 
 
 ------------------------------------------------------------------------------
@@ -456,7 +464,7 @@ hPut h b =
                     ]
               | otherwise = do
                   let !br = BufferRange op (pBuf `plusPtr` bufSize buf)
-                  res <- fillWithBuildStep step doneH fullH insertChunkH br
+                  res <- fillWithBuildStep step doneH fullH insertChunksH br
                   touchForeignPtr fpBuf
                   return res
               where
@@ -479,8 +487,9 @@ hPut h b =
                     -- the 'nextStep'.
                     fillHandle minSize nextStep
 
-                insertChunkH op' bs nextStep = updateBufR op' $ do
-                    S.hPut h bs
+                insertChunksH op' _ lbsC nextStep = updateBufR op' $ do
+                    L.foldrChunks (\c rest -> S.hPut h c >> rest) (return ()) 
+                                  (lbsC L.Empty)
                     fillHandle 1 nextStep
 
 
@@ -488,44 +497,8 @@ hPut h b =
 -- ByteString insertion / controlling chunk boundaries
 ------------------------------------------------------------------------------
 
-
--- Strict ByteStrings
-------------------------------------------------------------------------------
-
-
--- | Create a 'Builder' denoting the same sequence of bytes as a strict
--- 'S.ByteString'.
---
--- A 'Builder' defined as @'byteStringThreshold' maxCopySize bs@ copies @bs@, if
--- it is shorter than @maxCopySize@, and inserts it directly, otherwise.
---
-{-# INLINE byteStringThreshold #-}
-byteStringThreshold :: Int -> S.ByteString -> Builder     
-byteStringThreshold maxCopySize = 
-    \bs -> builder $ step bs
-  where
-    step !bs !k br@(BufferRange !op _)
-      | maxCopySize < S.length bs = return $ insertChunk op bs k
-      | otherwise                 = byteStringCopyStep bs k br
-
--- | The created 'Builder' always copies the 'S.ByteString'. Use this function
--- to create 'Builder's from smallish (@<= 4kb@) 'S.ByteString's or if you need
--- to guarantee that the 'S.ByteString' is not shared with the chunks generated
--- by the 'Builder'.
---
-{-# INLINE byteStringCopy #-}
-byteStringCopy :: S.ByteString -> Builder
-byteStringCopy = \bs -> builder $ byteStringCopyStep bs
-
-{-# INLINE byteStringCopyStep #-}
-byteStringCopyStep :: S.ByteString -> BuildStep a -> BuildStep a
-byteStringCopyStep (S.PS ifp ioff isize) !k0 = 
-    bytesCopyStep (BufferRange ip ipe) k
-  where
-    ip   = unsafeForeignPtrToPtr ifp `plusPtr` ioff
-    ipe  = ip `plusPtr` isize
-    k br = do touchForeignPtr ifp  -- input consumed: OK to release here
-              k0 br
+-- Raw memory
+-------------
 
 -- | Ensure that there are at least 'n' free bytes for the following 'Builder'.
 {-# INLINE ensureFree #-}
@@ -562,6 +535,47 @@ bytesCopyStep !(BufferRange ip0 ipe) k =
         outRemaining = ope `minusPtr` op
         inpRemaining = ipe `minusPtr` ip
 
+
+
+-- Strict ByteStrings
+------------------------------------------------------------------------------
+
+
+-- | Create a 'Builder' denoting the same sequence of bytes as a strict
+-- 'S.ByteString'.
+--
+-- A 'Builder' defined as @'byteStringThreshold' maxCopySize bs@ copies @bs@, if
+-- it is shorter than @maxCopySize@, and inserts it directly, otherwise.
+--
+{-# INLINE byteStringThreshold #-}
+byteStringThreshold :: Int -> S.ByteString -> Builder     
+byteStringThreshold maxCopySize = 
+    \bs -> builder $ step bs
+  where
+    step !bs@(S.PS _ _ len) !k br@(BufferRange !op _)
+      | len <= maxCopySize = byteStringCopyStep bs k br
+      | otherwise          = 
+          return $! insertChunks op (fromIntegral len) (L.chunk bs) k
+
+-- | The created 'Builder' always copies the 'S.ByteString'. Use this function
+-- to create 'Builder's from smallish (@<= 4kb@) 'S.ByteString's or if you need
+-- to guarantee that the 'S.ByteString' is not shared with the chunks generated
+-- by the 'Builder'.
+--
+{-# INLINE byteStringCopy #-}
+byteStringCopy :: S.ByteString -> Builder
+byteStringCopy = \bs -> builder $ byteStringCopyStep bs
+
+{-# INLINE byteStringCopyStep #-}
+byteStringCopyStep :: S.ByteString -> BuildStep a -> BuildStep a
+byteStringCopyStep (S.PS ifp ioff isize) !k0 = 
+    bytesCopyStep (BufferRange ip ipe) k
+  where
+    ip   = unsafeForeignPtrToPtr ifp `plusPtr` ioff
+    ipe  = ip `plusPtr` isize
+    k br = do touchForeignPtr ifp  -- input consumed: OK to release here
+              k0 br
+
 -- | The created 'Builder' always inserts the 'S.ByteString' directly as a chunk. 
 -- This implies flushing the output buffer; even if it contains just
 -- a single byte! Hence, you should use 'byteStringInsert' only for large (@>
@@ -573,7 +587,10 @@ byteStringInsert :: S.ByteString -> Builder
 byteStringInsert = 
     \bs -> builder $ step bs
   where
-    step !bs !k !(BufferRange op _) = return $ insertChunk op bs k
+    step !bs k !br@(BufferRange op _)
+      | S.null bs = k br
+      | otherwise =
+          return $ insertChunks op (fromIntegral $ S.length bs) (L.Chunk bs) k
 
 
 -- Lazy bytestrings
@@ -584,26 +601,33 @@ byteStringInsert =
 {-# INLINE lazyByteStringThreshold #-}
 lazyByteStringThreshold :: Int -> L.ByteString -> Builder
 lazyByteStringThreshold maxCopySize = 
-  L.foldrChunks (\bs b -> byteStringThreshold maxCopySize bs `mappend` b) mempty
+    L.foldrChunks (\bs b -> byteStringThreshold maxCopySize bs `mappend` b) mempty
+    -- TODO: We could do better here. Currently, Large, Small, Large, leads to
+    -- an unnecessary copy of the 'Small' chunk.
 
 -- | Chunk-wise application of 'byteStringCopy' to a lazy 'L.ByteString'.
 --
 {-# INLINE lazyByteStringCopy #-}
 lazyByteStringCopy :: L.ByteString -> Builder
 lazyByteStringCopy = 
-  L.foldrChunks (\bs b -> byteStringCopy bs `mappend` b) mempty
+    L.foldrChunks (\bs b -> byteStringCopy bs `mappend` b) mempty
 
--- This function costs /O(n)/ where /n/ is the number of chunks of the lazy
--- 'L.ByteString'. The design of the 'Builder' could be changed to support an
--- /O(1)/ insertion of a difference-list style lazy bytestring. Please contact
--- me, if you have a use case for that.
 
--- | Chunk-wise application of 'byteStringInsert' to a lazy 'L.ByteString'.
+-- | Insert the chunks of a lazy 'L.ByteString' directly.
 --
 {-# INLINE lazyByteStringInsert #-}
 lazyByteStringInsert :: L.ByteString -> Builder
-lazyByteStringInsert =
-  L.foldrChunks (\bs b -> byteStringInsert bs `mappend` b) mempty
+lazyByteStringInsert = 
+    \lbs -> builder $ step lbs
+  where
+    step L.Empty k br                 = k br
+    step lbs     k (BufferRange op _) = case go 0 id lbs of
+        (n, lbsC) -> return $ insertChunks op n lbsC k
+
+    go !n lbsC L.Empty          = (n, lbsC)
+    go !n lbsC (L.Chunk bs lbs) = 
+        go (n + fromIntegral (S.length bs)) (lbsC . L.Chunk bs) lbs
+
 
 -- | Create a 'Builder' denoting the same sequence of bytes as a strict
 -- 'S.ByteString'.
@@ -629,6 +653,15 @@ lazyByteString = lazyByteStringThreshold maximalCopySize
 -- 'L.smallChunkSize'.
 maximalCopySize :: Int
 maximalCopySize = 2 * L.smallChunkSize
+
+-- LazyByteStringC: difference lists of lazy bytestrings
+--------------------------------------------------------
+
+-- | Insert a 'LazyByteStringC' of the given size directly.
+{-# INLINE lazyByteStringC #-}
+lazyByteStringC :: Int64 -> LazyByteStringC -> Builder
+lazyByteStringC n lbsC =
+    builder $ \k (BufferRange op _) -> return $ insertChunks op n lbsC k
 
 ------------------------------------------------------------------------------
 -- Builder execution
@@ -711,19 +744,16 @@ toLazyByteStringWith strategy k b =
 -- | A stream of non-empty chunks interleaved with 'IO'.
 data ChunkIOStream a =
        Finished a
-     | Yield {-# UNPACK #-} !S.ByteString (IO (ChunkIOStream a))
-
--- | Smart constructor that ensures the non-empty chunk invariant.
-yield :: S.ByteString -> IO (ChunkIOStream a) -> IO (ChunkIOStream a)
-yield bs@(S.PS _ _ len) k | len == 0  = k
-                          | otherwise = return $ Yield bs k
+     | Yield1 {-# UNPACK #-} !S.ByteString (IO (ChunkIOStream a))
+     | YieldC {-# UNPACK #-} !Int64 LazyByteStringC (IO (ChunkIOStream a))
 
 {-# INLINE ciosToLazyByteString #-}
 ciosToLazyByteString :: L.ByteString -> ChunkIOStream () -> L.ByteString
 ciosToLazyByteString k = go
   where
-    go (Finished _)  = k
-    go (Yield bs io) = L.Chunk bs $ unsafePerformIO (go <$> io)
+    go (Finished _)       = k
+    go (Yield1 bs io)     = L.Chunk bs $ unsafePerformIO (go <$> io)
+    go (YieldC _ lbsC io) = lbsC $ unsafePerformIO (go <$> io)
 
 
 -- | A default way for converting a 'BuildStep' expected to be large (> 4kb) to
@@ -747,7 +777,7 @@ buildStepToCIOS (AllocationStrategy firstSize bufSize trim) k =
         S.mallocByteString size >>= fill step0
       where
         fill !step !fpbuf =
-            fillWithBuildStep step doneH fullH insertChunkH br
+            fillWithBuildStep step doneH fullH insertChunksH br
           where
             op = unsafeForeignPtrToPtr fpbuf -- safe due to mkCIOS
             pe = op `plusPtr` size
@@ -758,10 +788,10 @@ buildStepToCIOS (AllocationStrategy firstSize bufSize trim) k =
             fullH op' minSize nextStep =
                 wrapChunk op' (const $ fillNew nextStep (max minSize bufSize))
             
-            insertChunkH op' bs nextStep =
-                wrapChunk op' $ \isEmpty -> yield bs $
+            insertChunksH op' n lbsC nextStep =
+                wrapChunk op' $ \isEmpty -> return $ YieldC n lbsC $
                     -- Checking for empty case avoids allocating 'n-1' empty
-                    -- buffers for 'n' chunks inserted right after each other.
+                    -- buffers for 'n' insertChunksH right after each other.
                     if isEmpty 
                       then fill nextStep fpbuf 
                       else fillNew nextStep bufSize
@@ -772,8 +802,8 @@ buildStepToCIOS (AllocationStrategy firstSize bufSize trim) k =
               | chunkSize == 0      = mkCIOS True
               | trim chunkSize size = do
                   bs <- S.create chunkSize $ \pbuf -> copyBytes pbuf op chunkSize
-                  return $ Yield bs (mkCIOS False)
+                  return $ Yield1 bs (mkCIOS False)
               | otherwise            = 
-                  return $ Yield (S.PS fpbuf 0 chunkSize) (mkCIOS False)
+                  return $ Yield1 (S.PS fpbuf 0 chunkSize) (mkCIOS False)
               where
                 chunkSize = op' `minusPtr` op

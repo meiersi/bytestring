@@ -14,7 +14,7 @@
 -- benchmarks on a 32-bit machine it turned out to be the fastest
 -- implementation option.
 --
-module Codec.Bounded.Encoding.Internal.Base16 (
+module Data.ByteString.Lazy.Builder.BasicEncoding.Internal.Base16 (
     EncodingTable
   , upperTable
   , lowerTable
@@ -24,36 +24,41 @@ module Codec.Bounded.Encoding.Internal.Base16 (
   ) where
 
 import Control.Applicative 
+
+import qualified Data.ByteString          as S
+import qualified Data.ByteString.Internal as S
+
 import Foreign
-import qualified Codec.Bounded.Encoding.Internal.Region as R
 
 
 -- Creating the encoding tables
 -------------------------------
 
+-- TODO: Use table from C implementation.
+
 -- | An encoding table for Base16 encoding.
 newtype EncodingTable = EncodingTable (ForeignPtr Word8)
 
-tableFromList :: [Word8] -> IO EncodingTable
-tableFromList = fmap (EncodingTable . fst) . R.fromList
+tableFromList :: [Word8] -> EncodingTable
+tableFromList xs = case S.pack xs of S.PS fp _ _ -> EncodingTable fp
 
 unsafeIndex :: EncodingTable -> Int -> IO Word8
 unsafeIndex (EncodingTable table) = peekElemOff (unsafeForeignPtrToPtr table)
 
 {-# NOINLINE upperAlphabet #-}
 upperAlphabet :: EncodingTable
-upperAlphabet = unsafePerformIO $
+upperAlphabet = 
     tableFromList $ map (fromIntegral . fromEnum) $ ['0'..'9'] ++ ['A'..'F']
 
 {-# NOINLINE lowerAlphabet #-}
 lowerAlphabet :: EncodingTable
-lowerAlphabet = unsafePerformIO $
+lowerAlphabet = 
     tableFromList $ map (fromIntegral . fromEnum) $ ['0'..'9'] ++ ['a'..'f']
 
 base16EncodingTable :: EncodingTable -> IO EncodingTable
 base16EncodingTable alphabet = do
     xs <- sequence $ concat $ [ [ix j, ix k] | j <- [0..15], k <- [0..15] ]
-    tableFromList xs
+    return $ tableFromList xs
   where
     ix = unsafeIndex alphabet
 

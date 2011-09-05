@@ -62,7 +62,7 @@ module Data.ByteString.Lazy.Builder.Extras
 
 import Data.ByteString.Lazy.Builder.Internal
 
-import qualified Data.ByteString.Lazy.Builder.BoundedEncoding as E
+import qualified Data.ByteString.Lazy.Builder.BasicEncoding as E
 
 
 import Foreign

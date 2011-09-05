@@ -19,7 +19,7 @@
 -- The "Codec.Bounded.Encoding.Internal.Test" module provides you with
 -- utilities for testing your encodings thoroughly.
 --
-module Codec.Bounded.Encoding.Internal (
+module Data.ByteString.Lazy.Builder.BasicEncoding.Internal (
   -- * Fixed-size Encodings
     Size
   , FixedEncoding
@@ -581,7 +581,7 @@ encodeEither wLeft wRight =
 --
 -- > showEncoding (char <#> char) ('x','y') = "xy"
 --
--- where 'Data.ByteString.Lazy.Builder.BoundedEncoding.Utf8.char' UTF-8 encodes a 'Char'. 
+-- where 'Data.ByteString.Lazy.Builder.BasicEncoding.Utf8.char' UTF-8 encodes a 'Char'. 
 -- You can combine multiple encodings using '(<#>)' multiple times.
 --
 -- > showEncoding (char <#> char <#> char) ('x',('y','z')) = 'xyz'

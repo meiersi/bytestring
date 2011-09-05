@@ -20,7 +20,7 @@
 #include "MachDeps.h"
 #endif
 
-module Codec.Bounded.Encoding.Internal.UncheckedShifts (
+module Data.ByteString.Lazy.Builder.BasicEncoding.Internal.UncheckedShifts (
     shiftr_w16
   , shiftr_w32
   , shiftr_w64

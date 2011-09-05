@@ -46,18 +46,19 @@ library
                      Data.ByteString.Lazy.Builder.Internal
                      Data.ByteString.Lazy.Builder.Extras
                      -- Data.ByteString.Lazy.Builder.Utf8
-                     Data.ByteString.Lazy.Builder.BoundedEncoding
-                     Data.ByteString.Lazy.Builder.BoundedEncoding.Internal.Floating
-                     -- Data.ByteString.Lazy.Builder.BoundedEncoding.Utf8
-                     Codec.Bounded.Encoding.Internal
+                     Data.ByteString.Lazy.Builder.BasicEncoding
+                     Data.ByteString.Lazy.Builder.BasicEncoding.Internal
+                     -- Data.ByteString.Lazy.Builder.BasicEncoding.Utf8
                      -- Codec.Bounded.Encoding.Internal.Test
 
   other-modules:     
+                     Data.ByteString.Lazy.Builder.BasicEncoding.Internal.Floating
+                     Data.ByteString.Lazy.Builder.BasicEncoding.Internal.UncheckedShifts
                      -- Codec.Bounded.Encoding.Bench
                      -- Codec.Bounded.Encoding.Int
                      -- Codec.Bounded.Encoding.Word
                      -- Codec.Bounded.Encoding.Floating
-                     Codec.Bounded.Encoding.Internal.UncheckedShifts
+                     -- Codec.Bounded.Encoding.Internal.UncheckedShifts
                      -- Codec.Bounded.Encoding.Internal.Region
                      -- Codec.Bounded.Encoding.Internal.Base16
 

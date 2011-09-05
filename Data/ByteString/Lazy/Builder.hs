@@ -240,7 +240,7 @@ module Data.ByteString.Lazy.Builder
 
 import Data.ByteString.Lazy.Builder.Internal
 
-import qualified Data.ByteString.Lazy.Builder.BoundedEncoding as E
+import qualified Data.ByteString.Lazy.Builder.BasicEncoding as E
 
 import qualified Data.ByteString.Lazy.Internal as L
 

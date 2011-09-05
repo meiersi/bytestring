@@ -10,7 +10,7 @@
 --
 -- Conversion of 'Float's and 'Double's to 'Word32's and 'Word64's.
 --
-module Data.ByteString.Lazy.Builder.BoundedEncoding.Internal.Floating
+module Data.ByteString.Lazy.Builder.BasicEncoding.Internal.Floating
     ( 
       coerceFloatToWord32
     , coerceDoubleToWord64

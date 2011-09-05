@@ -78,7 +78,7 @@ import Data.ByteString.Lazy.Internal as L
 import Data.ByteString.Lazy.Builder (Builder)
 
 import qualified Data.ByteString.Lazy.Builder.BoundedEncoding      as E
-import qualified Data.ByteString.Lazy.Builder.BoundedEncoding.Utf8 as E
+import qualified Data.ByteString.Lazy.Builder.BasicEncoding.Utf8 as E
 
 -- | Encode a 'Char' using the UTF-8 encoding.
 --

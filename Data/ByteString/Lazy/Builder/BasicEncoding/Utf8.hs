@@ -9,7 +9,7 @@
 --
 -- Encodings using UTF-8 encoded Unicode characters. 
 --
-module Data.ByteString.Lazy.Builder.BoundedEncoding.Utf8
+module Data.ByteString.Lazy.Builder.BasicEncoding.Utf8
     ( 
       -- * Characters
       char

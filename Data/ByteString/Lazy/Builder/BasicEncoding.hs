@@ -1,6 +1,6 @@
 {-# LANGUAGE CPP, BangPatterns, MonoPatBinds, ScopedTypeVariables #-}
 -- |
--- Module      : Data.ByteString.Lazy.Builder.BoundedEncoding
+-- Module      : Data.ByteString.Lazy.Builder.BasicEncoding
 -- Copyright   : (c) 2010-2011 Simon Meier
 --             . (c) 2010      Jasper van der Jeugt
 -- License     : BSD3-style (see LICENSE)
@@ -56,7 +56,7 @@
 -- The bounded 'Encoding' that combines this escaping with UTF-8 encoding is
 -- the following.
 --
--- > import Data.ByteString.Lazy.Builder.BoundedEncoding.Utf8 (char)
+-- > import Data.ByteString.Lazy.Builder.BasicEncoding.Utf8 (char)
 -- >
 -- > {-# INLINE escapeChar #-}
 -- > escapeUtf8 :: BoundedEncoding Char
@@ -137,7 +137,7 @@
 -- > import Data.ByteString.Lazy.Builder.Extras     -- assume these three
 -- > import Codec.Bounded.Encoding                  -- imports are present
 -- >        ( BoundedEncoding, encodeIf, (<#>), (#.) )
--- > import Data.ByteString.Lazy.Builder.BoundedEncoding.Utf8 (char)  
+-- > import Data.ByteString.Lazy.Builder.BasicEncoding.Utf8 (char)  
 -- > 
 -- > renderString :: String -> Builder
 -- > renderString cs = 
@@ -154,7 +154,7 @@
 -- 'E.Encoding's as two sequential 'poke's. Compared to the first implementation of
 -- 'renderString' this implementation is 1.7x faster.
 --
-module Data.ByteString.Lazy.Builder.BoundedEncoding (
+module Data.ByteString.Lazy.Builder.BasicEncoding (
 
   -- * Fixed-size encodings
     FixedEncoding
@@ -202,7 +202,7 @@ module Data.ByteString.Lazy.Builder.BoundedEncoding (
   -- ** UTF-8 encoding
   --
   -- | UTF-8 encoding of 'Char's and numbers in decimal and hexadecimal formats
-  -- is provided by the "Data.ByteString.Lazy.Builder.BoundedEncoding.Utf8" module.
+  -- is provided by the "Data.ByteString.Lazy.Builder.BasicEncoding.Utf8" module.
 
   -- ** ASCII encoding
   , char8
@@ -293,15 +293,15 @@ import Data.Monoid
 import Data.Char (ord)
 import Control.Monad ((<=<))
 
-import Codec.Bounded.Encoding.Internal
 -- import Codec.Bounded.Encoding.Word
 -- import Codec.Bounded.Encoding.Int
 -- import Codec.Bounded.Encoding.Floating
 
 -- import Codec.Bounded.Encoding.Internal.Test
 -- import Codec.Bounded.Encoding.Bench
-import Codec.Bounded.Encoding.Internal.UncheckedShifts
-import Data.ByteString.Lazy.Builder.BoundedEncoding.Internal.Floating
+import Data.ByteString.Lazy.Builder.BasicEncoding.Internal
+import Data.ByteString.Lazy.Builder.BasicEncoding.Internal.UncheckedShifts
+import Data.ByteString.Lazy.Builder.BasicEncoding.Internal.Floating
 
 import Foreign
 
@@ -1100,4 +1100,6 @@ runCIOSWithLength =
 ------------------------------------------------------------------------------
 
 -- TODO: Port testing infrastructure.
+
+
 

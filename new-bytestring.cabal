@@ -52,6 +52,7 @@ library
                      -- Codec.Bounded.Encoding.Internal.Test
 
   other-modules:     
+                     Data.ByteString.Lazy.Builder.BasicEncoding.Binary
                      Data.ByteString.Lazy.Builder.BasicEncoding.Internal.Floating
                      Data.ByteString.Lazy.Builder.BasicEncoding.Internal.UncheckedShifts
                      -- Codec.Bounded.Encoding.Bench

@@ -222,6 +222,12 @@ module Data.ByteString.Lazy.Builder.BasicEncoding (
   -- , evalEncoding
   -- , showEncoding
 
+  , evalF
+  , evalB
+
+  , showF
+  , showB
+
   ) where
 
 import Data.ByteString.Lazy.Builder.Internal
@@ -231,7 +237,7 @@ import qualified Data.ByteString.Internal      as S
 import qualified Data.ByteString.Lazy.Internal as L
 
 import Data.Monoid
-import Data.Char (ord)
+import Data.Char (chr, ord)
 import Control.Monad ((<=<))
 
 -- import Codec.Bounded.Encoding.Internal.Test
@@ -692,4 +698,25 @@ encodeCharUtf8 f1 f2 f3 f4 c = case ord c of
                x4 = fromIntegral $ (x .&. 0x3F) + 0x80
            in f4 x1 x2 x3 x4
 {-# INLINE encodeCharUtf8 #-}
+
+
+------------------------------------------------------------------------------
+-- Debugging encodings
+------------------------------------------------------------------------------
+
+evalF :: FixedEncoding a -> a -> [Word8]
+evalF fe = S.unpack . S.unsafeCreate (size fe) . runF fe
+
+evalB :: BoundedEncoding a -> a -> [Word8]
+evalB be x = S.unpack $ unsafePerformIO $ 
+    S.createAndTrim (sizeBound be) $ \op -> do
+        op' <- runB be x op
+        return (op' `minusPtr` op)
+
+showF :: FixedEncoding a -> a -> [Char]
+showF fe = map (chr . fromIntegral) . evalF fe
+
+showB :: BoundedEncoding a -> a -> [Char]
+showB be = map (chr . fromIntegral) . evalB be
+
 

@@ -75,6 +75,13 @@ module Data.ByteString.Lazy.Builder.BasicEncoding.ASCII
     , floatHexFixed
     , doubleHexFixed
 
+    -- *** Padded/truncated encodings
+    , wordHexFixedBound
+    , word64HexFixedBound
+
+    , wordDecFixedBound
+    , word64DecFixedBound
+
     ) where
 
 import Data.ByteString.Lazy.Builder.BasicEncoding.Binary
@@ -84,6 +91,7 @@ import Data.ByteString.Lazy.Builder.BasicEncoding.Internal.Base16
 import Data.ByteString.Lazy.Builder.BasicEncoding.Internal.UncheckedShifts
 
 import Data.Char (ord)
+import Control.Monad (unless)
 
 import Foreign
 import Foreign.C.Types
@@ -285,3 +293,104 @@ floatHexFixed = coerceFloatToWord32 >$< word32HexFixed
 {-# INLINE doubleHexFixed #-}
 doubleHexFixed :: FixedEncoding Double
 doubleHexFixed = coerceDoubleToWord64 >$< word64HexFixed
+
+
+-- Padded Encodings
+-------------------
+
+{-# INLINE appsUntilZero #-}
+appsUntilZero :: Num a => (a -> a) -> a -> Int
+appsUntilZero f x0 = 
+    count 0 x0
+  where
+    count !n 0 = n
+    count !n x = count (succ n) (f x)
+        
+
+{-# INLINE genHexFixedBound #-}
+genHexFixedBound :: (Num a, Bits a, Integral a) 
+                 => (a -> Int -> a) -> Char -> a -> FixedEncoding a
+genHexFixedBound shiftr padding0 bound = 
+    fixedEncoding n0 io
+  where
+    n0 = appsUntilZero (`shiftr` 4) bound
+
+    padding = fromIntegral (ord padding0) :: Word8
+
+    io !x0 !op0 = 
+        loop (op0 `plusPtr` n0) x0
+      where
+        loop !op !x = do
+           let !op' = op `plusPtr` (-1)
+           poke op' =<< encode4_as_8 lowerTable (fromIntegral $ x .&. 0xf)
+           let !x' = x `shiftr` 4
+           unless (op' <= op0) $
+             if x' == 0
+               then pad (op' `plusPtr` (-1))
+               else loop op' x'
+
+        pad !op
+          | op < op0  = return ()
+          | otherwise = poke op padding >> pad (op `plusPtr` (-1))
+
+
+{-# INLINE wordHexFixedBound #-}
+wordHexFixedBound :: Char -> Word -> FixedEncoding Word
+wordHexFixedBound = genHexFixedBound shiftr_w
+
+{-# INLINE word64HexFixedBound #-}
+word64HexFixedBound :: Char -> Word64 -> FixedEncoding Word64
+word64HexFixedBound padding bound
+#if WORD_SIZE_IN_BITS < 64
+  | bound <= fromIntegral (maxBound :: Word) =
+      fromIntegral >$< wordHexFixedBound padding (fromIntegral bound)
+  | otherwise = genHexFixedBound shiftr_w64 padding bound
+#else
+    = genHexFixedBound shiftr_w64 padding bound
+#endif
+
+
+-- | Note: Works only for positive numbers.
+{-# INLINE genDecFixedBound #-}
+genDecFixedBound :: (Num a, Bits a, Integral a) 
+                 => Char -> a -> FixedEncoding a
+genDecFixedBound padding0 bound = 
+    fixedEncoding n0 io
+  where
+    n0 = appsUntilZero (`div` 10) bound
+
+    padding = fromIntegral (ord padding0) :: Word8
+
+    io !x0 !op0 = 
+        loop (op0 `plusPtr` n0) x0
+      where
+        loop !op !x = do
+           let !op' = op `plusPtr` (-1)
+               !x'  = x `div` 10
+           poke op' ((fromIntegral $ (x - x' * 10) + 48) :: Word8)
+           unless (op' <= op0) $
+             if x' == 0
+               then pad (op' `plusPtr` (-1))
+               else loop op' x'
+
+        pad !op
+          | op < op0  = return ()
+          | otherwise = poke op padding >> pad (op `plusPtr` (-1))
+
+
+{-# INLINE wordDecFixedBound #-}
+wordDecFixedBound :: Char -> Word -> FixedEncoding Word
+wordDecFixedBound = genDecFixedBound 
+
+{-# INLINE word64DecFixedBound #-}
+word64DecFixedBound :: Char -> Word64 -> FixedEncoding Word64
+word64DecFixedBound padding bound
+#if WORD_SIZE_IN_BITS < 64
+  | bound <= fromIntegral (maxBound :: Word) =
+      fromIntegral >$< wordDecFixedBound padding (fromIntegral bound)
+  | otherwise = genDecFixedBound padding bound
+#else
+    = genDecFixedBound padding bound
+#endif
+
+

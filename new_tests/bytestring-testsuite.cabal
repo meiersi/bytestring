@@ -1,0 +1,45 @@
+name:           bytestring-testsuite
+version:        0.0.1
+build-type:     Simple
+cabal-version:  >= 1.6
+
+Flag portable
+  Description: Compile in cross-platform mode. No platform-specific code or
+               optimizations such as C routines will be used.
+  Default: False
+
+Executable testsuite
+  hs-source-dirs:  suite ../Data/ByteString
+  main-is:         TestSuite.hs
+
+  build-depends:   base == 4.*
+                 , test-framework == 0.4.*
+                 , test-framework-quickcheck2 == 0.2.*
+
+
+  if flag(portable) || os(windows)
+    cpp-options: -DPORTABLE
+
+  ghc-prof-options: -prof -auto-all
+  ghc-options: -O2 -Wall -fhpc -fwarn-tabs
+               -threaded
+               -rtsopts
+               -funbox-strict-fields 
+               -fno-method-sharing
+               -fmax-simplifier-iterations10
+
+  extensions:  CPP, ForeignFunctionInterface
+               UnliftedFFITypes,
+               MagicHash,
+               UnboxedTuples,
+               DeriveDataTypeable
+               ScopedTypeVariables
+               Rank2Types
+               BangPatterns
+               NamedFieldPuns
+
+  c-sources:         ../cbits/fpstring.c
+                     ../cbits/itoa.c
+  include-dirs:      ../include
+  includes:          fpstring.h
+  install-includes:  fpstring.h

@@ -19,6 +19,7 @@ Executable testsuite
                  , QuickCheck                 == 2.4.*
                  , test-framework-hunit       == 0.2.*
                  , HUnit                      == 1.2.*
+                 , byteorder                  == 1.0.*
 
 
   if flag(portable) || os(windows)

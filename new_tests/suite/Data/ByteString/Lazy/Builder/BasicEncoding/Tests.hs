@@ -13,46 +13,108 @@
 module Data.ByteString.Lazy.Builder.BasicEncoding.Tests (tests) where
 
 import           Data.Char (ord)
-
-import           Control.Monad
-
-import qualified Data.ByteString.Lazy.Builder.BasicEncoding      as BE
-
+import           Foreign
+import           System.ByteOrder 
 import           Test.Framework
-import           Test.Framework.Providers.QuickCheck2
-import           Test.Framework.Providers.HUnit
-import           Test.HUnit.Lang (assertFailure)
-import           Test.QuickCheck (Arbitrary(..))
+import           Unsafe.Coerce (unsafeCoerce)
 
+import qualified Data.ByteString.Lazy.Builder.BasicEncoding           as BE
+import           Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils
 
-------------------------------------------------------------------------------
--- Additional testing infrastructure
-------------------------------------------------------------------------------
-
--- | Quickcheck test that includes a check that the property holds on the
--- bounds of a bounded value.
-testBoundedProperty :: forall a. (Arbitrary a, Show a, Bounded a) 
-                    => String -> (a -> Bool) -> Test
-testBoundedProperty name p = testGroup name
-  [ testProperty "arbitrary" p
-  , testCase "bounds" $ do
-      unless (p (minBound :: a)) $ assertFailure "minBound"
-      unless (p (maxBound :: a)) $ assertFailure "maxBound"
-  ]
 
 tests :: [Test]
 tests = 
   [ 
   -- ascii
-    testBoundedProperty "char8"      prop_char8
+    testBoundedF "char8"     char8_list        BE.char8 
+  -- binary
+  , testBoundedF "word8"     bigEndian_list    BE.word8
+  , testBoundedF "int8"      bigEndian_list    BE.int8
+
+  --  big-endian
+  , testBoundedF "int16BE"   bigEndian_list    BE.int16BE
+  , testBoundedF "int32BE"   bigEndian_list    BE.int32BE
+  , testBoundedF "int64BE"   bigEndian_list    BE.int64BE
+                              
+  , testBoundedF "word16BE"  bigEndian_list    BE.word16BE
+  , testBoundedF "word32BE"  bigEndian_list    BE.word32BE
+  , testBoundedF "word64BE"  bigEndian_list    BE.word64BE
+
+  , testF "floatLE"     (float_list  littleEndian_list) BE.floatLE
+  , testF "doubleLE"    (double_list littleEndian_list) BE.doubleLE
+
+  --  little-endian
+  , testBoundedF "int16LE"   littleEndian_list BE.int16LE
+  , testBoundedF "int32LE"   littleEndian_list BE.int32LE
+  , testBoundedF "int64LE"   littleEndian_list BE.int64LE
+                             
+  , testBoundedF "word16LE"  littleEndian_list BE.word16LE
+  , testBoundedF "word32LE"  littleEndian_list BE.word32LE
+  , testBoundedF "word64LE"  littleEndian_list BE.word64LE
+
+  , testF "floatBE"     (float_list  bigEndian_list)   BE.floatBE
+  , testF "doubleBE"    (double_list bigEndian_list)   BE.doubleBE
+
+  --  host dependent
+  , testBoundedF "int16Host"   hostEndian_list  BE.int16Host
+  , testBoundedF "int32Host"   hostEndian_list  BE.int32Host
+  , testBoundedF "int64Host"   hostEndian_list  BE.int64Host
+  , testBoundedF "intHost"     hostEndian_list  BE.intHost
+                              
+  , testBoundedF "word16Host"  hostEndian_list  BE.word16Host
+  , testBoundedF "word32Host"  hostEndian_list  BE.word32Host
+  , testBoundedF "word64Host"  hostEndian_list  BE.word64Host
+  , testBoundedF "wordHost"    hostEndian_list  BE.wordHost
+
+  , testF "floatHost"   (float_list  hostEndian_list)   BE.floatHost
+  , testF "doubleHost"  (double_list hostEndian_list)   BE.doubleHost
   ]
 
--- BasicEncoding
-------------------
+char8_list :: Char -> [Word8]
+char8_list = return . fromIntegral . ord
+
+bigEndian_list :: (Storable a, Bits a, Integral a) => a -> [Word8]
+bigEndian_list = reverse . littleEndian_list
+
+littleEndian_list :: (Storable a, Bits a, Integral a) => a -> [Word8]
+littleEndian_list x = 
+    map (fromIntegral . (x `shiftR`) . (8*)) $ [0..sizeOf x - 1]
+
+hostEndian_list :: (Storable a, Bits a, Integral a) => a -> [Word8]
+hostEndian_list = case byteOrder of
+    LittleEndian -> littleEndian_list
+    BigEndian    -> bigEndian_list
+    _            -> error $ 
+        "bounded-encoding: unsupported byteorder '" ++ show byteOrder ++ "'"
 
 
-prop_char8 :: Char -> Bool
-prop_char8 c = BE.evalF BE.char8 c == [fromIntegral $ ord c]
+float_list :: (Word32 -> [Word8]) -> Float -> [Word8]
+float_list f  = f . coerceFloatToWord32
+
+double_list :: (Word64 -> [Word8]) -> Double -> [Word8]
+double_list f = f . coerceDoubleToWord64
+
+-- Note that the following use of unsafeCoerce is not guaranteed to be 
+-- safe on GHC 7.0 and less. The reason is probably the following ticket:
+--
+--   http://hackage.haskell.org/trac/ghc/ticket/4092
+--
+-- However, that only applies if the value is loaded in a register. We
+-- avoid this by coercing only boxed values and ensuring that they
+-- remain boxed using a NOINLINE pragma.
+-- 
+
+-- | Coerce a 'Float' to a 'Word32'.
+{-# NOINLINE coerceFloatToWord32 #-}
+coerceFloatToWord32 :: Float -> Word32
+coerceFloatToWord32 = unsafeCoerce
+
+-- | Coerce a 'Double' to a 'Word64'.
+{-# NOINLINE coerceDoubleToWord64 #-}
+coerceDoubleToWord64 :: Double -> Word64
+coerceDoubleToWord64 = unsafeCoerce
+
+
 
 {-
 import Data.Bits

@@ -30,7 +30,7 @@ rm -Rf $DIR
 mkdir -p $DIR
 
 EXCLUDES='Main
-Data.ByteString.Lazy.Builder.BasicEncoding'
+Data.ByteString.Lazy.Builder.BasicEncoding.Tests'
 
 EXCL=""
 

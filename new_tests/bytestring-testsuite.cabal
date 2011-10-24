@@ -30,7 +30,8 @@ Executable testsuite
                -threaded
                -rtsopts
                -funbox-strict-fields 
-               -fno-method-sharing
+               -- Does not work on GHC 7.2.1
+               -- -fno-method-sharing
                -fmax-simplifier-iterations10
 
   extensions:  CPP, ForeignFunctionInterface

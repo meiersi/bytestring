@@ -221,6 +221,7 @@ liftIOB :: BoundedEncoding a -> BoundedEncoding (IO a)
 liftIOB (BE l io) = BE l (\xWrapped op -> do x <- xWrapped; io x op)
 
 
+{-
 sizeHexPadded :: Char -> Size -> FixedEncoding Size
 sizeHexPadded = undefined
 
@@ -230,7 +231,6 @@ sizeDecPadded = undefined
 sizeVarInt :: Size -> FixedEncoding Size
 sizeVarInt = undefined
 
-{-
 encodeChunked
     :: Size                           -- ^ Minimal free-size
     -> Size                           -- ^ Maximal chunk-size
@@ -273,7 +273,6 @@ byteStringPrefixB n =
         copyBytes op (unsafeForeignPtrToPtr fp `plusPtr` off) s
         touchForeignPtr fp
         return $! op `plusPtr` s
--}
 
 
 {-# INLINE listPrefixB #-}
@@ -300,6 +299,7 @@ sqrtIntMaxBound = 46340
 
 listPrefixBErr msg x = error $ "listPrefixB: " ++ msg ++ " too high (" ++ 
                                show x ++ " > " ++ show sqrtIntMaxBound ++ ")"
+-}
 
 
 

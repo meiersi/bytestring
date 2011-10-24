@@ -12,9 +12,9 @@ Executable testsuite
   hs-source-dirs:  suite ..
   main-is:         TestSuite.hs
 
-  build-depends:   base == 4.*
+  build-depends:   base                       == 4.*
                  , ghc-prim
-                 , test-framework == 0.4.*
+                 , test-framework             == 0.4.*
                  , test-framework-quickcheck2 == 0.2.*
                  , QuickCheck                 == 2.4.*
                  , test-framework-hunit       == 0.2.*

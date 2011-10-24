@@ -22,8 +22,8 @@ import           Test.Framework
 import           Test.Framework.Providers.QuickCheck2
 import           Test.Framework.Providers.HUnit
 import           Test.HUnit.Lang (assertFailure)
-import           Test.QuickCheck (Arbitrary(..), oneof, choose, listOf, elements)
--- import           Test.QuickCheck.Property (printTestCase)
+import           Test.QuickCheck (Arbitrary(..))
+
 
 ------------------------------------------------------------------------------
 -- Additional testing infrastructure
@@ -45,7 +45,6 @@ tests =
   [ 
   -- ascii
     testBoundedProperty "char8"      prop_char8
-    -- testBoundedProperty "char8"     $ prop_char8        BE.char8
   ]
 
 -- BasicEncoding

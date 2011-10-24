@@ -9,12 +9,16 @@ Flag portable
   Default: False
 
 Executable testsuite
-  hs-source-dirs:  suite ../Data/ByteString
+  hs-source-dirs:  suite ..
   main-is:         TestSuite.hs
 
   build-depends:   base == 4.*
+                 , ghc-prim
                  , test-framework == 0.4.*
                  , test-framework-quickcheck2 == 0.2.*
+                 , QuickCheck                 == 2.4.*
+                 , test-framework-hunit       == 0.2.*
+                 , HUnit                      == 1.2.*
 
 
   if flag(portable) || os(windows)

@@ -1,12 +1,14 @@
 #!/bin/sh
 
+# thx @ snap team for this script and testuite setup :-)
+
 set -e
 
 if [ -z "$DEBUG" ]; then
     export DEBUG=testsuite
 fi
 
-SUITE=./cabal-dev/bin/testsuite
+SUITE=./dist/build/testsuite/testsuite
 
 rm -f *.tix
 
@@ -20,7 +22,7 @@ EOF
     exit;
 fi
 
-./dist/build/testsuite/testsuite -j4 -a1000 $*
+$SUITE -j4 -a1000 $*
 
 DIR=dist/hpc
 
@@ -28,18 +30,7 @@ rm -Rf $DIR
 mkdir -p $DIR
 
 EXCLUDES='Main
-Data.Concurrent.HashMap.Internal
-Data.Concurrent.HashMap.Tests
-Paths_snap_server
-Snap.Internal.Http.Parser.Tests
-Snap.Internal.Http.Server.Tests
-Snap.Internal.Http.Types.Tests
-Snap.Internal.Iteratee.Tests
-Text.Snap.Templates.Tests
-Snap.Test.Common
-Test.Blackbox
-Test.Common.Rot13
-Test.Common.TestHandler'
+Data.ByteString.Lazy.Builder.BasicEncoding'
 
 EXCL=""
 

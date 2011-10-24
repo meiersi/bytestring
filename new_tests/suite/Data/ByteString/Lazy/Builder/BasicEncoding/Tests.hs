@@ -12,9 +12,48 @@
 
 module Data.ByteString.Lazy.Builder.BasicEncoding.Tests (tests) where
 
-import           Test.Framework.Providers.QuickCheck2
+import           Data.Char (ord)
 
-tests = [ testProperty "arbitrary" (\x -> x == (1::Int)) ]
+import           Control.Monad
+
+import qualified Data.ByteString.Lazy.Builder.BasicEncoding      as BE
+
+import           Test.Framework
+import           Test.Framework.Providers.QuickCheck2
+import           Test.Framework.Providers.HUnit
+import           Test.HUnit.Lang (assertFailure)
+import           Test.QuickCheck (Arbitrary(..), oneof, choose, listOf, elements)
+-- import           Test.QuickCheck.Property (printTestCase)
+
+------------------------------------------------------------------------------
+-- Additional testing infrastructure
+------------------------------------------------------------------------------
+
+-- | Quickcheck test that includes a check that the property holds on the
+-- bounds of a bounded value.
+testBoundedProperty :: forall a. (Arbitrary a, Show a, Bounded a) 
+                    => String -> (a -> Bool) -> Test
+testBoundedProperty name p = testGroup name
+  [ testProperty "arbitrary" p
+  , testCase "bounds" $ do
+      unless (p (minBound :: a)) $ assertFailure "minBound"
+      unless (p (maxBound :: a)) $ assertFailure "maxBound"
+  ]
+
+tests :: [Test]
+tests = 
+  [ 
+  -- ascii
+    testBoundedProperty "char8"      prop_char8
+    -- testBoundedProperty "char8"     $ prop_char8        BE.char8
+  ]
+
+-- BasicEncoding
+------------------
+
+
+prop_char8 :: Char -> Bool
+prop_char8 c = BE.evalF BE.char8 c == [fromIntegral $ ord c]
 
 {-
 import Data.Bits
@@ -57,20 +96,6 @@ import Unsafe.Coerce (unsafeCoerce)
 main :: IO ()
 main = Test.Framework.defaultMain $ return $ testAll
 
-------------------------------------------------------------------------------
--- Additional testing infrastructure
-------------------------------------------------------------------------------
-
--- | Quickcheck test that includes a check that the property holds on the
--- bounds of a bounded value.
-testBoundedProperty :: forall a. (Arbitrary a, Show a, Bounded a) 
-                    => String -> (a -> Bool) -> Test
-testBoundedProperty name p = testGroup name
-  [ testProperty "arbitrary" p
-  , testCase "bounds" $ do
-      unless (p (minBound :: a)) $ assertFailure "minBound"
-      unless (p (maxBound :: a)) $ assertFailure "maxBound"
-  ]
 
 ------------------------------------------------------------------------------
 -- Test-Cases

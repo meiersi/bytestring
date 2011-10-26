@@ -22,7 +22,7 @@ EOF
     exit;
 fi
 
-$SUITE -j4 -a1000 $*
+$SUITE -j4 -a1000 +RTS -N4 -RTS $*
 
 DIR=dist/hpc
 

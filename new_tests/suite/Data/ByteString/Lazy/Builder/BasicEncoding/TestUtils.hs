@@ -15,6 +15,8 @@ module Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils (
     testF
   , testBoundedF
 
+  , testFixedBoundF
+
   -- * Testing 'BoundedEncoding's
   , testB
   , testBoundedB
@@ -33,6 +35,7 @@ module Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils (
 import           Control.Monad
 
 import           Data.ByteString.Lazy.Builder.BasicEncoding
+import           Data.Char (chr)
 
 import           Foreign
 
@@ -56,6 +59,15 @@ testBoundedProperty name p = testGroup name
       unless (p (maxBound :: a)) $ assertFailure "maxBound"
   ]
 
+-- | Quote a 'String' nicely.
+quote :: String -> String
+quote cs = '`' : cs ++ "'"
+
+
+-- | Quote a @[Word8]@ list as as 'String'.
+quoteWord8s :: [Word8] -> String
+quoteWord8s = quote . map (chr . fromIntegral)
+
 
 -- FixedEncoding
 ----------------
@@ -67,8 +79,19 @@ testF :: (Arbitrary a, Show a)
       -> FixedEncoding a 
       -> Test
 testF name ref fe = 
-    testProperty name $ \x -> evalF fe x == ref x
-
+    testProperty name prop
+  where
+    prop x
+      | y == y'   = True
+      | otherwise = error $ unlines $
+          [ "testF: results disagree for " ++ quote (show x)
+          , " fixed encoding: " ++ show y ++ " " ++ quoteWord8s y
+          , " reference:      " ++ show y'++ " " ++ quoteWord8s y'
+          ]
+      where
+        y  = evalF fe x
+        y' = ref x
+      
 -- | Test a 'FixedEncoding' of a bounded value against a reference implementation
 -- and ensure that the bounds are always included as testcases.
 testBoundedF :: (Arbitrary a, Bounded a, Show a)
@@ -78,6 +101,28 @@ testBoundedF :: (Arbitrary a, Bounded a, Show a)
              -> Test
 testBoundedF name ref fe = 
     testBoundedProperty name $ \x -> evalF fe x == ref x
+
+-- FixedEncoding derived from a bound on a given value.
+
+testFixedBoundF :: (Arbitrary a, Show a, Integral a)
+                => String
+                -> (a -> a -> [Word8]) 
+                -> (a -> FixedEncoding a) 
+                -> Test
+testFixedBoundF name ref bfe = 
+    testProperty name prop
+  where
+    prop (b, x0) 
+      | y == y'   = True
+      | otherwise = error $ unlines $
+          [ "testF: results disagree for " ++ quote (show (b, x))
+          , " fixed encoding: " ++ show y ++ " " ++ quoteWord8s y
+          , " reference:      " ++ show y'++ " " ++ quoteWord8s y'
+          ]
+      where
+        x  = x0 `mod` (b + 1)
+        y  = evalF (bfe b) x
+        y' = ref b x
 
 
 -- BoundedEncoding

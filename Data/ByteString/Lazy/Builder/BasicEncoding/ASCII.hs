@@ -307,7 +307,7 @@ genHexFixedBound :: (Num a, Bits a, Integral a)
 genHexFixedBound shiftr padding0 bound = 
     fixedEncoding n0 io
   where
-    n0 = appsUntilZero (`shiftr` 4) bound
+    n0 = max 1 $ appsUntilZero (`shiftr` 4) bound
 
     padding = fromIntegral (ord padding0) :: Word8
 
@@ -354,7 +354,7 @@ genDecFixedBound :: (Num a, Bits a, Integral a)
 genDecFixedBound padding0 bound = 
     fixedEncoding n0 io
   where
-    n0 = appsUntilZero (`div` 10) bound
+    n0 = max 1 $ appsUntilZero (`div` 10) bound
 
     padding = fromIntegral (ord padding0) :: Word8
 

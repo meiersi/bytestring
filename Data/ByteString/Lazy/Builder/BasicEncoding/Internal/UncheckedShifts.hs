@@ -25,6 +25,8 @@ module Data.ByteString.Lazy.Builder.BasicEncoding.Internal.UncheckedShifts (
   , shiftr_w32
   , shiftr_w64
   , shiftr_w
+
+  , caseWordSize_32_64
   ) where
 
 
@@ -88,4 +90,18 @@ shiftr_w16 = shiftR
 shiftr_w32 = shiftR
 shiftr_w64 = shiftR
 #endif
+
+
+-- | Select an implementation depending on the bit-size of 'Word's.
+-- Currently, it produces a runtime failure if the bitsize is different.
+-- This is detected by the testsuite.
+{-# INLINE caseWordSize_32_64 #-}
+caseWordSize_32_64 :: a -- Value to use for 32-bit 'Word's
+                   -> a -- Value to use for 64-bit 'Word's
+                   -> a
+caseWordSize_32_64 f32 f64 = case bitSize (undefined :: Word) of
+    32 -> f32
+    64 -> f64
+    s  -> error $ "caseWordSize_32_64: unsupported Word bit-size " ++ show s
+  
 

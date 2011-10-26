@@ -143,11 +143,9 @@ int64Dec = boundedEncoding 20 $ c_long_long_int_dec . fromIntegral
 -- | Decimal encoding of an 'Int'.
 {-# INLINE intDec #-}
 intDec :: BoundedEncoding Int
-#if WORD_SIZE_IN_BITS < 64
-intDec = fromIntegral >$< int32Dec
-#else
-intDec = fromIntegral >$< int64Dec
-#endif
+intDec = caseWordSize_32_64
+    (fromIntegral >$< int32Dec)
+    (fromIntegral >$< int64Dec)
 
 
 -- Unsigned integers
@@ -186,11 +184,9 @@ word64Dec = boundedEncoding 20 $ c_long_long_uint_dec . fromIntegral
 -- | Decimal encoding of a 'Word'.
 {-# INLINE wordDec #-}
 wordDec :: BoundedEncoding Word
-#if WORD_SIZE_IN_BITS < 64
-wordDec = fromIntegral >$< word32Dec
-#else
-wordDec = fromIntegral >$< word64Dec
-#endif
+wordDec = caseWordSize_32_64 
+    (fromIntegral >$< word32Dec)
+    (fromIntegral >$< word64Dec)
 
 ------------------------------------------------------------------------------
 -- Hexadecimal Encoding
@@ -228,11 +224,9 @@ word64Hex = boundedEncoding 16 $ c_long_long_uint_hex . fromIntegral
 
 {-# INLINE wordHex #-}
 wordHex :: BoundedEncoding Word
-#if WORD_SIZE_IN_BITS < 64
-wordHex = fromIntegral >$< word32Hex
-#else
-wordHex = fromIntegral >$< word64Hex
-#endif
+wordHex = caseWordSize_32_64
+    (fromIntegral >$< word32Hex)
+    (fromIntegral >$< word64Hex)
 
 
 -- fixed width; leading zeroes
@@ -340,6 +334,8 @@ wordHexFixedBound = genHexFixedBound shiftr_w
 
 {-# INLINE word64HexFixedBound #-}
 word64HexFixedBound :: Char -> Word64 -> FixedEncoding Word64
+word64HexFixedBound = genHexFixedBound shiftr_w64
+{- TODO: Cleanup
 word64HexFixedBound padding bound
 #if WORD_SIZE_IN_BITS < 64
   | bound <= fromIntegral (maxBound :: Word) =
@@ -348,6 +344,7 @@ word64HexFixedBound padding bound
 #else
     = genHexFixedBound shiftr_w64 padding bound
 #endif
+-}
 
 
 -- | Note: Works only for positive numbers.
@@ -384,6 +381,8 @@ wordDecFixedBound = genDecFixedBound
 
 {-# INLINE word64DecFixedBound #-}
 word64DecFixedBound :: Char -> Word64 -> FixedEncoding Word64
+word64DecFixedBound = genDecFixedBound 
+{- TODO: Cleanup
 word64DecFixedBound padding bound
 #if WORD_SIZE_IN_BITS < 64
   | bound <= fromIntegral (maxBound :: Word) =
@@ -392,5 +391,6 @@ word64DecFixedBound padding bound
 #else
     = genDecFixedBound padding bound
 #endif
+-}
 
 

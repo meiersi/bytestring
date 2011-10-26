@@ -11,9 +11,13 @@
 -- 
 module Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils (
 
+  -- * Testing 'FixedEncoding's
     testF
   , testBoundedF
-  -- , testB
+
+  -- * Testing 'BoundedEncoding's
+  , testB
+  , testBoundedB
   {-
     EncodingFailure
   , evalEncoding
@@ -38,6 +42,23 @@ import           Test.Framework.Providers.HUnit
 import           Test.HUnit.Lang (assertFailure)
 import           Test.QuickCheck (Arbitrary(..))
 
+-- Helper functions
+-------------------
+
+-- | Quickcheck test that includes a check that the property holds on the
+-- bounds of a bounded value.
+testBoundedProperty :: forall a. (Arbitrary a, Show a, Bounded a) 
+                    => String -> (a -> Bool) -> Test
+testBoundedProperty name p = testGroup name
+  [ testProperty "arbitrary" p
+  , testCase "bounds" $ do
+      unless (p (minBound :: a)) $ assertFailure "minBound"
+      unless (p (maxBound :: a)) $ assertFailure "maxBound"
+  ]
+
+
+-- FixedEncoding
+----------------
 
 -- | Test a 'FixedEncoding' against a reference implementation.
 testF :: (Arbitrary a, Show a)
@@ -59,17 +80,27 @@ testBoundedF name ref fe =
     testBoundedProperty name $ \x -> evalF fe x == ref x
 
 
--- | Quickcheck test that includes a check that the property holds on the
--- bounds of a bounded value.
-testBoundedProperty :: forall a. (Arbitrary a, Show a, Bounded a) 
-                    => String -> (a -> Bool) -> Test
-testBoundedProperty name p = testGroup name
-  [ testProperty "arbitrary" p
-  , testCase "bounds" $ do
-      unless (p (minBound :: a)) $ assertFailure "minBound"
-      unless (p (maxBound :: a)) $ assertFailure "maxBound"
-  ]
+-- BoundedEncoding
+------------------
 
+-- | Test a 'BoundedEncoding' against a reference implementation.
+testB :: (Arbitrary a, Show a)
+      => String 
+      -> (a -> [Word8]) 
+      -> BoundedEncoding a 
+      -> Test
+testB name ref fe = 
+    testProperty name $ \x -> evalB fe x == ref x
+
+-- | Test a 'BoundedEncoding' of a bounded value against a reference implementation
+-- and ensure that the bounds are always included as testcases.
+testBoundedB :: (Arbitrary a, Bounded a, Show a)
+             => String 
+             -> (a -> [Word8]) 
+             -> BoundedEncoding a 
+             -> Test
+testBoundedB name ref fe = 
+    testBoundedProperty name $ \x -> evalB fe x == ref x
 
 
 -----------------------------------------------------------------------------

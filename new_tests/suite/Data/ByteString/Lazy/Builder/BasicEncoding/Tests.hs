@@ -13,6 +13,7 @@
 module Data.ByteString.Lazy.Builder.BasicEncoding.Tests (tests) where
 
 import           Data.Char (ord)
+import           Numeric (showHex)
 import           Foreign
 import           System.ByteOrder 
 import           Test.Framework
@@ -23,12 +24,16 @@ import           Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils
 
 
 tests :: [Test]
-tests = 
-  [ 
-  -- ascii
-    testBoundedF "char8"     char8_list        BE.char8 
-  -- binary
-  , testBoundedF "word8"     bigEndian_list    BE.word8
+tests = concat [testsBinary, testsASCII, testsChar8, testsUtf8]
+
+
+------------------------------------------------------------------------------
+-- Binary
+------------------------------------------------------------------------------
+
+testsBinary :: [Test]
+testsBinary =
+  [ testBoundedF "word8"     bigEndian_list    BE.word8
   , testBoundedF "int8"      bigEndian_list    BE.int8
 
   --  big-endian
@@ -69,9 +74,6 @@ tests =
   , testF "floatHost"   (float_list  hostEndian_list)   BE.floatHost
   , testF "doubleHost"  (double_list hostEndian_list)   BE.doubleHost
   ]
-
-char8_list :: Char -> [Word8]
-char8_list = return . fromIntegral . ord
 
 bigEndian_list :: (Storable a, Bits a, Integral a) => a -> [Word8]
 bigEndian_list = reverse . littleEndian_list
@@ -115,6 +117,113 @@ coerceDoubleToWord64 :: Double -> Word64
 coerceDoubleToWord64 = unsafeCoerce
 
 
+------------------------------------------------------------------------------
+-- Latin-1  aka  Char8
+------------------------------------------------------------------------------
+
+testsChar8 :: [Test]
+testsChar8 = 
+  [ testBoundedF "char8"     char8_list        BE.char8  ]
+
+char8_list :: Char -> [Word8]
+char8_list = return . fromIntegral . ord
+
+
+------------------------------------------------------------------------------
+-- ASCII
+------------------------------------------------------------------------------
+
+testsASCII :: [Test]
+testsASCII = 
+  [ testBoundedF "charASCII" charASCII_list BE.charASCII
+
+  , testBoundedB "int8Dec"   dec_list BE.int8Dec
+  , testBoundedB "int16Dec"  dec_list BE.int16Dec
+  , testBoundedB "int32Dec"  dec_list BE.int32Dec
+  , testBoundedB "int64Dec"  dec_list BE.int64Dec
+  , testBoundedB "intDec"    dec_list BE.intDec
+
+  , testBoundedB "word8Dec"  dec_list BE.word8Dec
+  , testBoundedB "word16Dec" dec_list BE.word16Dec
+  , testBoundedB "word32Dec" dec_list BE.word32Dec
+  , testBoundedB "word64Dec" dec_list BE.word64Dec
+  , testBoundedB "wordDec"   dec_list BE.wordDec
+
+  , testBoundedB "word8Hex"  hex_list BE.word8Hex
+  , testBoundedB "word16Hex" hex_list BE.word16Hex
+  , testBoundedB "word32Hex" hex_list BE.word32Hex
+  , testBoundedB "word64Hex" hex_list BE.word64Hex
+  , testBoundedB "wordHex"   hex_list BE.wordHex
+
+  , testBoundedF "word8HexFixed"  hexFixed_list BE.word8HexFixed
+  , testBoundedF "word16HexFixed" hexFixed_list BE.word16HexFixed
+  , testBoundedF "word32HexFixed" hexFixed_list BE.word32HexFixed
+  , testBoundedF "word64HexFixed" hexFixed_list BE.word64HexFixed
+  -- TODO:
+  -- , testProperty "floatHexFixed"  $ hexFixed_list BE.word64HexFixed
+  -- , testProperty "doubleHexFixed" $ hexFixed_list BE.word64HexFixed
+  ]
+
+encodeASCII :: String -> [Word8]
+encodeASCII = 
+    map (encode . ord)
+  where
+    encode c 
+      | c < 0x7f  = fromIntegral c
+      | otherwise = error $ "encodeASCII: non-ASCII codepoint " ++ show c
+    
+encodeForcedASCII :: String -> [Word8]
+encodeForcedASCII = map ((.&. 0x7f) . fromIntegral . ord)
+
+charASCII_list :: Char -> [Word8]
+charASCII_list = encodeForcedASCII . return
+
+dec_list :: Show a =>  a -> [Word8]
+dec_list = encodeASCII . show
+
+hex_list :: (Integral a, Show a) => a -> [Word8]
+hex_list = encodeASCII . (\x -> showHex x "")
+
+hexFixed_list :: (Storable a, Integral a, Show a) => a -> [Word8]
+hexFixed_list x =
+   encodeASCII $ pad (2 * sizeOf x) $ showHex x ""
+ where
+   pad n cs = replicate (n - length cs) '0' ++ cs
+
+
+------------------------------------------------------------------------------
+-- UTF-8
+------------------------------------------------------------------------------
+
+testsUtf8 :: [Test]
+testsUtf8 = 
+  [ testBoundedB "charUtf8"  charUtf8_list  BE.charUtf8 ]
+
+-- | Encode a Haskell String to a list of Word8 values, in UTF8 format.
+--
+-- Copied from 'utf8-string-0.3.6' to make tests self-contained. 
+-- Copyright (c) 2007, Galois Inc. All rights reserved.
+--
+charUtf8_list :: Char -> [Word8]
+charUtf8_list =
+    map fromIntegral . encode . ord
+  where
+    encode oc
+      | oc <= 0x7f       = [oc]
+
+      | oc <= 0x7ff      = [ 0xc0 + (oc `shiftR` 6)
+                           , 0x80 + oc .&. 0x3f
+                           ]
+
+      | oc <= 0xffff     = [ 0xe0 + (oc `shiftR` 12)
+                           , 0x80 + ((oc `shiftR` 6) .&. 0x3f)
+                           , 0x80 + oc .&. 0x3f
+                           ]
+      | otherwise        = [ 0xf0 + (oc `shiftR` 18)
+                           , 0x80 + ((oc `shiftR` 12) .&. 0x3f)
+                           , 0x80 + ((oc `shiftR` 6) .&. 0x3f)
+                           , 0x80 + oc .&. 0x3f
+                           ]
 
 {-
 import Data.Bits

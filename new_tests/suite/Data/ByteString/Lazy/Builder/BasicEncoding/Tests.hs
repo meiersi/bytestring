@@ -175,6 +175,12 @@ testsASCII =
 
   , testFixedBoundF "word64DecFixedBound" 
       (genDecFixedBound_list 'x') (BE.word64DecFixedBound 'x')
+
+  , testFixedBoundF "wordHexFixedBound" 
+      (genHexFixedBound_list 'x') (BE.wordHexFixedBound 'x')
+
+  , testFixedBoundF "word64HexFixedBound" 
+      (genHexFixedBound_list 'x') (BE.word64HexFixedBound 'x')
   ]
 
 encodeASCII :: String -> [Word8]
@@ -230,9 +236,21 @@ genDecFixedBound_list :: (Show a, Integral a)
 genDecFixedBound_list padChar bound = 
     encodeASCII . pad . show
   where
-    n | bound == 0 = 0
-      | otherwise  = 1 + floor (log (fromIntegral bound) / log (10 :: Double))
+    n      = length $ show bound
     pad cs = replicate (n - length cs) padChar ++ cs
+
+-- | PRE: positive bound and value.
+genHexFixedBound_list :: (Show a, Integral a)
+                      => Char    -- ^ Padding character.
+                      -> a       -- ^ Max value to be encoded.
+                      -> a       -- ^ Value to encode.
+                      -> [Word8]
+genHexFixedBound_list padChar bound = 
+    encodeASCII . pad . (`showHex` "")
+  where
+    n      = length $ (`showHex` "") bound
+    pad cs = replicate (n - length cs) padChar ++ cs
+
 
 ------------------------------------------------------------------------------
 -- UTF-8

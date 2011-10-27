@@ -335,17 +335,6 @@ wordHexFixedBound = genHexFixedBound shiftr_w
 {-# INLINE word64HexFixedBound #-}
 word64HexFixedBound :: Char -> Word64 -> FixedEncoding Word64
 word64HexFixedBound = genHexFixedBound shiftr_w64
-{- TODO: Cleanup
-word64HexFixedBound padding bound
-#if WORD_SIZE_IN_BITS < 64
-  | bound <= fromIntegral (maxBound :: Word) =
-      fromIntegral >$< wordHexFixedBound padding (fromIntegral bound)
-  | otherwise = genHexFixedBound shiftr_w64 padding bound
-#else
-    = genHexFixedBound shiftr_w64 padding bound
-#endif
--}
-
 
 -- | Note: Works only for positive numbers.
 {-# INLINE genDecFixedBound #-}
@@ -382,15 +371,4 @@ wordDecFixedBound = genDecFixedBound
 {-# INLINE word64DecFixedBound #-}
 word64DecFixedBound :: Char -> Word64 -> FixedEncoding Word64
 word64DecFixedBound = genDecFixedBound 
-{- TODO: Cleanup
-word64DecFixedBound padding bound
-#if WORD_SIZE_IN_BITS < 64
-  | bound <= fromIntegral (maxBound :: Word) =
-      fromIntegral >$< wordDecFixedBound padding (fromIntegral bound)
-  | otherwise = genDecFixedBound padding bound
-#else
-    = genDecFixedBound padding bound
-#endif
--}
-
 

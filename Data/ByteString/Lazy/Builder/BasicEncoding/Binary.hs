@@ -57,7 +57,8 @@ module Data.ByteString.Lazy.Builder.BasicEncoding.Binary (
   , int64VarSigned
   , intVarSigned
 
-  , intVarFixed
+  , wordVarFixed
+  , word64VarFixed
 
   -- *** Non-portable, host-dependent
   , intHost
@@ -417,9 +418,9 @@ int64Var = fromIntegral >$< word64Var
 intVar :: BoundedEncoding Int
 intVar = fromIntegral >$< wordVar
 
-
+{-# INLINE zigZag #-}
 zigZag :: (Storable a, Bits a) => a -> a
-zigZag x = (x `shift` 1) `xor` (x `shift` (1 - 8 * sizeOf x))
+zigZag x = (x `shiftL` 1) `xor` (x `shiftR` (8 * sizeOf x - 1))
 
 {-# INLINE int8VarSigned #-}
 int8VarSigned :: BoundedEncoding Int8
@@ -454,26 +455,40 @@ appsUntilZero f x0 =
     count !n x = count (succ n) (f x)
         
 
-{-# INLINE wordVarFixed #-}
-wordVarFixed :: Word -> FixedEncoding Word
-wordVarFixed bound = 
+{-# INLINE genericVarFixed #-}
+genericVarFixed :: (Bits b, Num a, Integral b) 
+                => (b -> a -> b) -> b -> FixedEncoding b
+genericVarFixed shiftRight bound = 
     fixedEncoding n0 io
   where
-    n0 = appsUntilZero (`shiftr_w` 7) bound
+    n0 = max 1 $ appsUntilZero (`shiftRight` 7) bound
 
     io !x0 !op 
-      | x0 > bound = error $ "genericVarFixed: value " ++ show x0 ++ 
-                             " > bound " ++ show bound
+      | x0 > bound = error err
       | otherwise  = loop 0 x0
       where
+        err = "genericVarFixed: value " ++ show x0 ++ " > bound " ++ show bound
         loop !n !x
-          | n0 <= n   = do poke8 (x .&. 0x7f)
-          | otherwise = do poke8 ((x .&. 0x7f) .|. 0x80)
-                           loop (n + 1) (x `shiftr_w` 7)
+          | n0 <= n + 1 = do poke8 (x .&. 0x7f)
+          | otherwise   = do poke8 ((x .&. 0x7f) .|. 0x80)
+                             loop (n + 1) (x `shiftRight` 7)
           where
             poke8 = pokeElemOff op n . fromIntegral
 
-{-# INLINE intVarFixed #-}
-intVarFixed :: Size -> FixedEncoding Size
-intVarFixed bound = fromIntegral >$< wordVarFixed (fromIntegral bound)
+{-# INLINE wordVarFixed #-}
+wordVarFixed :: Word -> FixedEncoding Word
+wordVarFixed = genericVarFixed shiftr_w
+
+{-# INLINE word64VarFixed #-}
+word64VarFixed :: Word64 -> FixedEncoding Word64
+word64VarFixed = genericVarFixed shiftr_w64
+
+
+-- Somehow this function doesn't really make sense, as the bound must be
+-- greater when interpreted as an unsigned integer. These conversions and
+-- decisions should be left to the user.
+--
+--{-# INLINE intVarFixed #-}
+--intVarFixed :: Size -> FixedEncoding Size
+--intVarFixed bound = fromIntegral >$< wordVarFixed (fromIntegral bound)
 

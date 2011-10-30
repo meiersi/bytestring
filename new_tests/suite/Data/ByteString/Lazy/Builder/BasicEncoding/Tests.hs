@@ -101,6 +101,10 @@ testsBinary =
     , prop_zigZag_parseable  "int64VarSigned"  unZigZagInt64 BE.int64VarSigned
     , prop_zigZag_parseable  "intVarSigned"    unZigZagInt   BE.intVarSigned
     ]
+
+  , testFixedBoundF "wordVarFixed"   wordVarFixed_list    BE.wordVarFixed
+  , testFixedBoundF "word64VarFixed" word64VarFixed_list  BE.word64VarFixed
+
   ]
 
 bigEndian_list :: (Storable a, Bits a, Integral a) => a -> [Word8]
@@ -229,6 +233,27 @@ prop_zigZag_parseable :: (Arbitrary t, Bits b, Show t, Eq t)
 prop_zigZag_parseable name unZig be = 
   compareImpls name (\x -> (x, [])) (first unZig . parseVar . BE.evalB be)
    
+-- | Variable length encoding to a fixed number of bytes (pad / truncate).
+genVarFixed_list :: (Ord a, Num a, Bits a, Integral a) 
+                 => Int 
+                 -> a -> [Word8]
+genVarFixed_list n x
+  | n <= 1    = sevenBits            : []
+  | otherwise = (sevenBits .|. 0x80) : genVarFixed_list (n - 1) (x `shiftR` 7)
+  where
+    sevenBits = fromIntegral x .&. 0x7f
+
+wordVarFixed_list :: Word -> Word -> [Word8]
+wordVarFixed_list bound = genVarFixed_list (length $ genVar_list bound)
+
+word64VarFixed_list :: Word64 -> Word64 -> [Word8]
+word64VarFixed_list bound = genVarFixed_list (length $ genVar_list bound)
+
+-- Somehow this function doesn't really make sense, as the bound must be
+-- greater when interpreted as an unsigned integer.
+--
+-- intVarFixed_list :: Int -> Int -> [Word8]
+-- intVarFixed_list bound = wordVarFixed_list (fromIntegral bound) . fromIntegral
 
 
 ------------------------------------------------------------------------------

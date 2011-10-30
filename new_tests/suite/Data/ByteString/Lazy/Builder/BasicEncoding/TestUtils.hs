@@ -122,7 +122,8 @@ testFixedBoundF name ref bfe =
           , " reference:      " ++ show y'++ " " ++ quoteWord8s y'
           ]
       where
-        x  = x0 `mod` (b + 1)
+        x  | b == 0    = 0
+           | otherwise = x0 `mod` b
         y  = evalF (bfe b) x
         y' = ref b x
 

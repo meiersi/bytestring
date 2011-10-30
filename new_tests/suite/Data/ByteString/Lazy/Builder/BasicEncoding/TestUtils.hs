@@ -17,6 +17,8 @@ module Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils (
 
   , testFixedBoundF
 
+  , compareImpls
+
   -- * Testing 'BoundedEncoding's
   , testB
   , testBoundedB
@@ -145,8 +147,32 @@ testBoundedB :: (Arbitrary a, Bounded a, Show a)
              -> BoundedEncoding a 
              -> Test
 testBoundedB name ref fe = 
-    testBoundedProperty name $ \x -> evalB fe x == ref x
+    testBoundedProperty name check
+  where
+    check x 
+      | y == y'   = True
+      | otherwise = error $ unlines $
+          [ "testBoundedB: results disagree for " ++ quote (show x)
+          , " fixed encoding: " ++ show y ++ " " ++ quoteWord8s y
+          , " reference:      " ++ show y'++ " " ++ quoteWord8s y'
+          ]
+      where
+        y  = evalB fe x
+        y' = ref x
 
+compareImpls name f1 f2 = 
+    testProperty name check
+  where
+    check x 
+      | y1 == y2  = True
+      | otherwise = error $ unlines $
+          [ "testBoundedB: results disagree for " ++ quote (show x)
+          , " f1: " ++ show y1
+          , " f2: " ++ show y2
+          ]
+      where
+        y1 = f1 x
+        y2 = f2 x
 
 -----------------------------------------------------------------------------
 

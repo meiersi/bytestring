@@ -12,11 +12,13 @@
 
 module Data.ByteString.Lazy.Builder.BasicEncoding.Tests (tests) where
 
+import           Control.Arrow (first)
 import           Data.Char (ord)
 import           Numeric (showHex)
 import           Foreign
 import           System.ByteOrder 
 import           Test.Framework
+import           Test.QuickCheck (Arbitrary)
 import           Unsafe.Coerce (unsafeCoerce)
 
 import qualified Data.ByteString.Lazy.Builder.BasicEncoding           as BE
@@ -73,6 +75,32 @@ testsBinary =
 
   , testF "floatHost"   (float_list  hostEndian_list)   BE.floatHost
   , testF "doubleHost"  (double_list hostEndian_list)   BE.doubleHost
+
+  , testBoundedB "word8Var"     genVar_list  BE.word8Var
+  , testBoundedB "word16Var"    genVar_list  BE.word16Var
+  , testBoundedB "word32Var"    genVar_list  BE.word32Var
+  , testBoundedB "word64Var"    genVar_list  BE.word64Var
+  , testBoundedB "wordVar"      genVar_list  BE.wordVar
+
+  , testBoundedB "int8Var"     int8Var_list   BE.int8Var
+  , testBoundedB "int16Var"    int16Var_list  BE.int16Var
+  , testBoundedB "int32Var"    int32Var_list  BE.int32Var
+  , testBoundedB "int64Var"    int64Var_list  BE.int64Var
+  , testBoundedB "intVar"      intVar_list    BE.intVar
+
+  , testBoundedB "int8VarSigned"     (int8Var_list  . zigZag)  BE.int8VarSigned
+  , testBoundedB "int16VarSigned"    (int16Var_list . zigZag)  BE.int16VarSigned
+  , testBoundedB "int32VarSigned"    (int32Var_list . zigZag)  BE.int32VarSigned
+  , testBoundedB "int64VarSigned"    (int64Var_list . zigZag)  BE.int64VarSigned
+  , testBoundedB "intVarSigned"      (intVar_list   . zigZag)  BE.intVarSigned
+
+  , testGroup "parseable" 
+    [ prop_zigZag_parseable  "int8VarSigned"   unZigZagInt8  BE.int8VarSigned
+    , prop_zigZag_parseable  "int16VarSigned"  unZigZagInt16 BE.int16VarSigned
+    , prop_zigZag_parseable  "int32VarSigned"  unZigZagInt32 BE.int32VarSigned
+    , prop_zigZag_parseable  "int64VarSigned"  unZigZagInt64 BE.int64VarSigned
+    , prop_zigZag_parseable  "intVarSigned"    unZigZagInt   BE.intVarSigned
+    ]
   ]
 
 bigEndian_list :: (Storable a, Bits a, Integral a) => a -> [Word8]
@@ -117,6 +145,90 @@ coerceFloatToWord32 = (.&. maxBound) . unsafeCoerce
 {-# NOINLINE coerceDoubleToWord64 #-}
 coerceDoubleToWord64 :: Double -> Word64
 coerceDoubleToWord64 = (.&. maxBound) . unsafeCoerce
+
+
+-- Variable length encodings
+----------------------------
+
+-- | Variable length encoding.
+genVar_list :: (Ord a, Num a, Bits a, Integral a) => a -> [Word8]
+genVar_list x
+  | x <= 0x7f = sevenBits            : []
+  | otherwise = (sevenBits .|. 0x80) : genVar_list (x `shiftR` 7)
+  where
+    sevenBits = fromIntegral x .&. 0x7f
+
+int8Var_list :: Int8 -> [Word8]
+int8Var_list  = genVar_list . (fromIntegral :: Int8 -> Word8)
+
+int16Var_list :: Int16 -> [Word8]
+int16Var_list = genVar_list . (fromIntegral :: Int16 -> Word16)
+
+int32Var_list :: Int32 -> [Word8]
+int32Var_list = genVar_list . (fromIntegral :: Int32 -> Word32)
+
+int64Var_list :: Int64 -> [Word8]
+int64Var_list = genVar_list . (fromIntegral :: Int64 -> Word64)
+
+intVar_list :: Int -> [Word8]
+intVar_list = genVar_list . (fromIntegral :: Int -> Word)
+
+-- | Parse a variable length encoding
+parseVar :: (Num a, Bits a) => [Word8] -> (a, [Word8])
+parseVar = 
+    go 
+  where
+    go []    = error "parseVar: unterminated variable length int"
+    go (w:ws) 
+      | w .&. 0x80 == 0 = (fromIntegral w, ws)
+      | otherwise       = first add (go ws)
+      where
+        add x = (x `shiftL` 7) .|. (fromIntegral w .&. 0x7f)
+
+
+-- | The so-called \"zig-zag\" encoding from Google's protocol buffers.
+-- It maps integers of small magnitude to naturals of small
+-- magnitude by encoding negative integers as odd naturals and positive
+-- integers as even naturals.
+--
+-- For example: @0 -> 0,  -1 -> 1, 1 -> 2, -2 -> 3, 2 -> 4, ...@
+--
+-- PRE: 'a' must be a signed integer type.
+zigZag :: (Storable a, Bits a) => a -> a
+zigZag x = (x `shiftL` 1) `xor` (x `shiftR` (8 * sizeOf x - 1))
+
+
+-- | Reversing the zigZag encoding.
+--
+-- PRE: 'a' must be an unsigned integer type.
+--
+-- forall x. fromIntegral x == 
+--           unZigZag ((fromIntegral :: IntX -> WordX) (zigZag x))
+--
+unZigZag :: (Storable a, Bits a) => a -> a
+unZigZag x = (x `shiftR` 1) `xor` negate (x .&. 1)
+
+unZigZagInt8 :: Int8 -> Int8
+unZigZagInt8 = (fromIntegral :: Word8 -> Int8) . unZigZag . fromIntegral
+
+unZigZagInt16 :: Int16 -> Int16
+unZigZagInt16 = (fromIntegral :: Word16 -> Int16) . unZigZag . fromIntegral
+
+unZigZagInt32 :: Int32 -> Int32
+unZigZagInt32 = (fromIntegral :: Word32 -> Int32) . unZigZag . fromIntegral
+
+unZigZagInt64 :: Int64 -> Int64
+unZigZagInt64 = (fromIntegral :: Word64 -> Int64) . unZigZag . fromIntegral
+
+unZigZagInt :: Int -> Int
+unZigZagInt = (fromIntegral :: Word -> Int) . unZigZag . fromIntegral
+
+-- | Check that the 'intVarSigned' encodings are parseable.
+prop_zigZag_parseable :: (Arbitrary t, Bits b, Show t, Eq t) 
+    => String -> (b -> t) -> BE.BoundedEncoding t -> Test
+prop_zigZag_parseable name unZig be = 
+  compareImpls name (\x -> (x, [])) (first unZig . parseVar . BE.evalB be)
+   
 
 
 ------------------------------------------------------------------------------

@@ -229,9 +229,10 @@ fillWithBuildStep step fDone fFull fChunk !br = do
 -- The 'Builder' monoid
 ------------------------------------------------------------------------------
 
--- | A 'Builder' denotes a stream of bytes that can be efficiently converted to
--- a sequence of byte arrays. 'Builder's can be concatenated with /O(1)/ cost
--- using 'mappend'. The zero-length 'Builder' is denoted by 'mempty'.
+-- | 'Builder's denote sequences of bytes. 
+-- They are 'Monoid's where
+--   'mempty' is the zero-length sequence and
+--   'mappend' is concatenation, which runs in /O(1)/.
 newtype Builder = Builder (forall r. BuildStep r -> BuildStep r)
 
 -- | Construct a 'Builder'. In contrast to 'BuildStep's, 'Builder's are
@@ -631,22 +632,27 @@ lazyByteStringInsert =
 
 -- | Create a 'Builder' denoting the same sequence of bytes as a strict
 -- 'S.ByteString'.
---
--- The 'Builder' copies short 'S.ByteString's and inserts long 'S.ByteString's
--- directly. This way the 'Builder' ensures that chunks are large on average,
--- which is important for the efficiency of consumers of the generated chunks.
--- See the "Data.ByteString.Lazy.Builder.Extras" module, if you need more
--- control over chunk sizes.
+-- The 'Builder' inserts large 'S.ByteString's directly, but copies small ones
+-- to ensure that the generated chunks are large on average.
 --
 {-# INLINE byteString #-}
 byteString :: S.ByteString -> Builder
 byteString = byteStringThreshold maximalCopySize
 
--- | Chunk-wise application of 'byteString' to a lazy 'L.ByteString'.
+-- | Create a 'Builder' denoting the same sequence of bytes as a lazy
+-- 'S.ByteString'.
+-- The 'Builder' inserts large chunks of the lazy 'L.ByteString' directly, 
+-- but copies small ones to ensure that the generated chunks are large on
+-- average.
 --
 {-# INLINE lazyByteString #-}
 lazyByteString :: L.ByteString -> Builder
 lazyByteString = lazyByteStringThreshold maximalCopySize
+-- FIXME: also insert the small chunk for [large,small,large] directly.
+-- Perhaps it makes even sense to concatenate the small chunks in
+-- [large,small,small,small,large] and insert them directly afterwards to avoid
+-- unnecessary buffer spilling. Hmm, but that uncontrollably increases latency
+-- => no good!
 
 -- | The maximal size of a 'S.ByteString' that is copied. 
 -- @2 * 'L.smallChunkSize'@ to guarantee that on average a chunk is of
@@ -725,6 +731,24 @@ safeStrategy firstSize bufSize =
 -- This reduces the allocation and trimming overhead, as all generated
 -- 'L.ByteString's fit into the first allocated buffer and chances are better
 -- that the buffer doesn't have to be trimmed.
+--
+-- Internally, 'Builder's are buffer-filling functions. 
+--
+-- and record the generated chunks as a lazy
+-- 'L.ByteString'. 
+--
+-- Execution works such that a buffer is allocated and the 'Builder' is told to
+-- fill it. Once the 'Builder' returns, the buffer is converted to a chunk of
+-- the lazy 'L.ByteString' as follows. If less than half of the buffer is filled,
+-- then the filled part is copied to a new chunk of the right size. Otherwise,
+-- the buffer is converted directly to a chunk. This scheme guarantees that
+-- at least half of the reserved memory is used for live data. 
+--
+-- The first allocated buffer is of size 'L.smallChunkSize' too keep the
+-- allocation overhead small for short output. The following buffers are of
+-- size 'L.defaultChunkSize' to ensure that the average chunk size is large.
+-- These numbers have worked well in practice. See 'toLazyByteStringWith', if
+-- you need more control over buffer allocation.
 --
 {-# INLINE toLazyByteStringWith #-}
 toLazyByteStringWith 

@@ -12,10 +12,11 @@
 module Data.ByteString.Lazy.Builder.BasicEncoding.ASCII
     ( 
      
+     -- *** ASCII
      charASCII
 
-      -- *** Decimal numbers
-      -- | Decimal encoding of numbers using UTF-8 encoded characters.
+      -- **** Decimal numbers
+      -- | Decimal encoding of numbers using ASCII encoded characters.
     , int8Dec
     , int16Dec
     , int32Dec
@@ -29,7 +30,7 @@ module Data.ByteString.Lazy.Builder.BasicEncoding.ASCII
     , wordDec
 
     {-
-    -- These are the function currently provided by Bryan O'Sullivans
+    -- These are the functions currently provided by Bryan O'Sullivans
     -- double-conversion library.
     -- 
     -- , float
@@ -38,13 +39,13 @@ module Data.ByteString.Lazy.Builder.BasicEncoding.ASCII
     -- , doubleWith
     -}
 
-      -- *** Hexadecimal numbers
+      -- **** Hexadecimal numbers
       
       -- | Encoding positive integers as hexadecimal numbers using lower-case
-      -- characters that are UTF-8 encoded. The shortest
-      -- possible representation is used. For example,
+      -- ASCII characters. The shortest possible representation is used. For
+      -- example,
       --
-      -- > showEncoding word16Hex 0x0a10 = "a10"
+      -- > showB word16Hex 0x0a10 = "a10"
       --
       -- Note that there is no support for using upper-case characters. Please
       -- contact the maintainer if your application cannot work without
@@ -56,13 +57,12 @@ module Data.ByteString.Lazy.Builder.BasicEncoding.ASCII
     , word64Hex
     , wordHex
 
-      -- *** Fixed-width hexadecimal numbers
+      -- **** Fixed-width hexadecimal numbers
       --
-      -- | Encoding the bytes of fixed-width positive integers as hexadecimal
-      -- numbers using lower-case characters that are UTF-8 encoded. For
-      -- example,
+      -- | Encoding the bytes of fixed-width types as hexadecimal
+      -- numbers using lower-case ASCII characters. For example,
       --
-      -- > showEncoding word16HexFixed 0x0a10 = "0a10"
+      -- > showF word16HexFixed 0x0a10 = "0a10"
       --
     , int8HexFixed
     , int16HexFixed
@@ -74,13 +74,6 @@ module Data.ByteString.Lazy.Builder.BasicEncoding.ASCII
     , word64HexFixed
     , floatHexFixed
     , doubleHexFixed
-
-    -- *** Padded/truncated encodings
-    , wordHexFixedBound
-    , word64HexFixedBound
-
-    , wordDecFixedBound
-    , word64DecFixedBound
 
     ) where
 
@@ -206,22 +199,27 @@ encodeWordHex :: forall a. (Storable a, Integral a) => BoundedEncoding a
 encodeWordHex = 
     boundedEncoding (2 * sizeOf (undefined :: a)) $ c_uint_hex  . fromIntegral
 
+-- | Hexadecimal encoding of a 'Word8'.
 {-# INLINE word8Hex #-}
 word8Hex :: BoundedEncoding Word8
 word8Hex = encodeWordHex
 
+-- | Hexadecimal encoding of a 'Word16'.
 {-# INLINE word16Hex #-}
 word16Hex :: BoundedEncoding Word16
 word16Hex = encodeWordHex
 
+-- | Hexadecimal encoding of a 'Word32'.
 {-# INLINE word32Hex #-}
 word32Hex :: BoundedEncoding Word32
 word32Hex = encodeWordHex
 
+-- | Hexadecimal encoding of a 'Word64'.
 {-# INLINE word64Hex #-}
 word64Hex :: BoundedEncoding Word64
 word64Hex = boundedEncoding 16 $ c_long_long_uint_hex . fromIntegral
 
+-- | Hexadecimal encoding of a 'Word'.
 {-# INLINE wordHex #-}
 wordHex :: BoundedEncoding Word
 wordHex = caseWordSize_32_64
@@ -288,87 +286,4 @@ floatHexFixed = coerceFloatToWord32 >$< word32HexFixed
 doubleHexFixed :: FixedEncoding Double
 doubleHexFixed = coerceDoubleToWord64 >$< word64HexFixed
 
-
--- Padded Encodings
--------------------
-
-{-# INLINE appsUntilZero #-}
-appsUntilZero :: Num a => (a -> a) -> a -> Int
-appsUntilZero f x0 = 
-    count 0 x0
-  where
-    count !n 0 = n
-    count !n x = count (succ n) (f x)
-        
-
-{-# INLINE genHexFixedBound #-}
-genHexFixedBound :: (Num a, Bits a, Integral a) 
-                 => (a -> Int -> a) -> Char -> a -> FixedEncoding a
-genHexFixedBound shiftr padding0 bound = 
-    fixedEncoding n0 io
-  where
-    n0 = max 1 $ appsUntilZero (`shiftr` 4) bound
-
-    padding = fromIntegral (ord padding0) :: Word8
-
-    io !x0 !op0 = 
-        loop (op0 `plusPtr` n0) x0
-      where
-        loop !op !x = do
-           let !op' = op `plusPtr` (-1)
-           poke op' =<< encode4_as_8 lowerTable (fromIntegral $ x .&. 0xf)
-           let !x' = x `shiftr` 4
-           unless (op' <= op0) $
-             if x' == 0
-               then pad (op' `plusPtr` (-1))
-               else loop op' x'
-
-        pad !op
-          | op < op0  = return ()
-          | otherwise = poke op padding >> pad (op `plusPtr` (-1))
-
-
-{-# INLINE wordHexFixedBound #-}
-wordHexFixedBound :: Char -> Word -> FixedEncoding Word
-wordHexFixedBound = genHexFixedBound shiftr_w
-
-{-# INLINE word64HexFixedBound #-}
-word64HexFixedBound :: Char -> Word64 -> FixedEncoding Word64
-word64HexFixedBound = genHexFixedBound shiftr_w64
-
--- | Note: Works only for positive numbers.
-{-# INLINE genDecFixedBound #-}
-genDecFixedBound :: (Num a, Bits a, Integral a) 
-                 => Char -> a -> FixedEncoding a
-genDecFixedBound padding0 bound = 
-    fixedEncoding n0 io
-  where
-    n0 = max 1 $ appsUntilZero (`div` 10) bound
-
-    padding = fromIntegral (ord padding0) :: Word8
-
-    io !x0 !op0 = 
-        loop (op0 `plusPtr` n0) x0
-      where
-        loop !op !x = do
-           let !op' = op `plusPtr` (-1)
-               !x'  = x `div` 10
-           poke op' ((fromIntegral $ (x - x' * 10) + 48) :: Word8)
-           unless (op' <= op0) $
-             if x' == 0
-               then pad (op' `plusPtr` (-1))
-               else loop op' x'
-
-        pad !op
-          | op < op0  = return ()
-          | otherwise = poke op padding >> pad (op `plusPtr` (-1))
-
-
-{-# INLINE wordDecFixedBound #-}
-wordDecFixedBound :: Char -> Word -> FixedEncoding Word
-wordDecFixedBound = genDecFixedBound 
-
-{-# INLINE word64DecFixedBound #-}
-word64DecFixedBound :: Char -> Word64 -> FixedEncoding Word64
-word64DecFixedBound = genDecFixedBound 
 

@@ -1020,7 +1020,7 @@ notElem w cs = not (elem w cs)
 filter :: (Word8 -> Bool) -> ByteString -> ByteString
 filter p = 
     B.toLazyByteString . 
-    E.encodeLazyByteStringWithB (E.ifB p (E.toB E.word8) E.emptyB)
+    E.encodeLazyByteStringWithB (E.ifB p (E.fromF E.word8) E.emptyB)
 {-# INLINE filter #-}
 
 {-

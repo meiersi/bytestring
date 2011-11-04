@@ -1,199 +1,182 @@
-{-# LANGUAGE BangPatterns, MonoPatBinds #-}
------------------------------------------------------------------------------
--- | Copyright : (c) 2010 Jasper Van der Jeugt 
---               (c) 2010 - 2011 Simon Meier
--- License     : BSD3-style (see LICENSE)
---   
--- Maintainer  : Simon Meier <iridcode@gmail.com>
--- Stability   : experimental
--- Portability : tested on GHC only
---
--- TODO: Define the notion of a /chunk/.
---
--- The 'Builder' type provides a representation of a stream of bytes
--- (i.e, a possibly infinite sequence of bytes) which is efficient in
--- the following sense:
---
---   1. The stream of bytes represented by a 'Builder' can be accessed as a
---      lazy 'L.ByteString' whose chunks are large on average.
---
---   2. Concatenating two 'Builder's is in /O(1)/.
---
---   3. Encoding values of standard Haskell types like 'Int32' or 'Char' as a
---      sequence of bytes represented as a 'Builder' is efficient in terms of
---      CPU cycles spent.
---
--- Property (1) guarantees that processing the resulting lazy 'L.ByteString'
--- chunk-wise is efficient, as the work on the chunk boundaries can be
--- amortized by a significant amount of actual work spent on the chunk content.
--- For example, when writing the resulting lazy 'L.ByteString' to a file or to a
--- network socket, the large chunk size guarantees that the cost of a system
--- call is distributed over enough bytes being written. Property (2)
--- guarantees that 'Builder's can be assembled efficiently from smaller
--- 'Builder's. This makes 'Builder's well-suited for declaratively describing a
--- stream of bytes. Property (2) is also is a significant difference to strict
--- and lazy bytestrings, whose concatenation is in /O(n)/. Property (3)
--- guarantees that creating the primitive 'Builder's, from which we assemble
--- our 'Builder's of interest, is efficent in terms of wall time.
---
--- Typically, 'Builder's are used to encode application internal data as a
--- sequence of bytes in an external format like JSON, HTML, or a HTTP response.
--- As a simple example, we'll show how to encode the following representation
--- of mixed-data tables as a Comma-Separated-Values (CSV) file. (Note that the
--- whole example is distributed with the source of this library.)
---
--- > data Cell = StringC String
--- >           | IntC Int
--- >           deriving( Eq, Ord, Show )
--- > 
--- > type Row   = [Cell]
--- > type Table = [Row]
---
--- We use the following imports and abbreviate 'mappend' to simplify reading.
---
--- > import qualified Data.ByteString.Lazy         as L
--- > import           Data.ByteString.Lazy.Builder
--- > import           Data.Monoid
--- > import           Data.Foldable                (foldMap)
--- > import           Data.List                    (intersperse)
--- > 
--- > infixr 4 <>
--- > (<>) :: Monoid m => m -> m -> m
--- > (<>) = mappend
---
--- CSV is a character-based representation of tables. For maximal modularity,
--- we'd first render 'Table's as 'String's and then encode this 'String' to a
--- file using some fixed character encoding. However, this sacrifices performance
--- due to the intermediate 'String' representation being built and thrown away
--- right afterwards. We get rid of this intermediate 'String' representation by
--- fixing the character encoding to UTF-8 and using 'Builder's to convert
--- 'Table's directly to UTF-8 encoded CSV tables represented as lazy
--- 'L.ByteString's.
---
--- > encodeUtf8CSV :: Table -> L.ByteString
--- > encodeUtf8CSV = toLazyByteString . renderTable
--- > 
--- > renderTable :: Table -> Builder
--- > renderTable rs = mconcat [renderRow r <> charUtf8 '\n' | r <- rs]
--- >            
--- > renderRow :: Row -> Builder
--- > renderRow []     = mempty
--- > renderRow (c:cs) = 
--- >     renderCell c <> mconcat [ charUtf8 ',' <> renderCell c' | c' <- cs ]
--- > 
--- > renderCell :: Cell -> Builder
--- > renderCell (StringC cs) = renderString cs
--- > renderCell (IntC i)     = stringUtf8 $ show i
--- > 
--- > renderString :: String -> Builder
--- > renderString cs = charUtf8 '"' <> foldMap escape cs <> charUtf8 '"'
--- >   where
--- >     escape '\\' = charUtf8 '\\' <> charUtf8 '\\'
--- >     escape '\"' = charUtf8 '\\' <> charUtf8 '\"'
--- >     escape c    = charUtf8 c
---
--- We use our UTF-8 CSV encoding function on the following table. /Note that/
--- /Haddock currently doesn't handle the Unicode lambda-character and the/
--- /o-umlaut character in the last string "<lambda>-w<o-umlaut>rld". They are/
--- /present in the source, but not output by Haddock./
---
--- > strings :: [String]
--- > strings =  ["hello", "\"1\"", "λ-wörld"]
--- > 
--- > table :: Table
--- > table = [map StringC strings, map IntC [-3..3]]
---
--- The expression @encodeUtf8CSV table@ results in the following lazy
--- 'L.ByteString'.
---
--- > Chunk "\"hello\",\"\\\"1\\\"\",\"\206\187-w\195\182rld\"\n-3,-2,-1,0,1,2,3\n" Empty
---
--- We can clearly see that we are converting to a /binary/ format. The \'λ\'
--- (lambda-character) and \'ö\' (o-umlaut) characters, which have a Unicode
--- codepoint above 127, are expanded to their corresponding UTF-8 multi-byte
--- representation.
---
--- We use the criterion library to benchmark the efficiency of our encoding
--- function on the following table.
---
--- > import Criterion.Main     -- add this import to the ones above
--- >
--- > maxiTable :: Table
--- > maxiTable = take 1000 $ cycle table
--- >
--- > main :: IO ()
--- > main = defaultMain
--- >   [ bench "encodeUtf8CSV maxiTable (original)" $ 
--- >       whnf (L.length . encodeUtf8CSV) maxiTable
--- >   ]
---
--- On a Core2 Duo 2.20GHz on a 32-bit Linux, the above code takes 1ms to
--- generate the 22'500 bytes long lazy 'L.ByteString'. Looking again at
--- the definitions above, we see that we took care to avoid intermediate
--- data structures, as otherwise we would sacrifice performance.
--- For example, the following (arguably simpler) definition of 'renderRow' is
--- about 20% slower.
---
--- > renderRow :: Row -> Builder
--- > renderRow  = mconcat . intersperse (charUtf8 ',') . map renderCell
---
--- Similarly, using /O(n)/ concatentations like '(++)' should be avoided. The
--- following definition of 'renderString' is also about 20% slower.
---
--- > renderString :: String -> Builder
--- > renderString cs = charUtf8 $ "\"" ++ concatMap escape cs ++ "\"" 
--- >   where
--- >     escape '\\' = "\\"
--- >     escape '\"' = "\\\""
--- >     escape c    = return c
---
--- Apart from removing intermediate data-structures, 'Builder's can be
--- optimized further by exploiting knowledge about their implementation.
--- Internally, 'Builder's are buffer-fill operations that are
--- given a continuation buffer-fill operation and a buffer-range to be filled.
--- A 'Builder' first checks if the buffer-range is large enough. If that's
--- the case, the 'Builder' writes the sequences of bytes to the buffer and
--- calls its continuation.  Otherwise, it returns a signal that it requires a
--- new buffer together with a continuation to be called on this new buffer.
--- Ignoring the rare case of a full buffer-range, the execution cost of a
--- 'Builder' consists of three parts: 
---
---   1. The time taken to read the parameters; i.e., the buffer-fill
---      operation to call after the 'Builder' is done and the buffer-range to
---      fill. 
---
---   2. The time taken to check for the size of the buffer-range.
---
---   3. The time taken for the actual encoding.
---
--- We can reduce cost (1) by ensuring that fewer buffer-fill function calls are
--- required. We can reduce cost (2) by fusing buffer-size checks of sequential
--- writes. For example, when escaping a 'String' using 'renderString', it would
--- be sufficient to check before encoding a character that at least 8 bytes are
--- free. We can reduce cost (3) by implementing better primitive 'Builder's.
--- For example, 'renderCell' builds an intermediate list containing the decimal
--- representation of an 'Int'. Implementing a direct decimal encoding of 'Int's
--- to memory would be more efficient, as it requires fewer buffer-size checks
--- and less allocation. It is also a planned extension of this library.
---
--- The first two cost reductions are supported for user code through functions
--- in "Data.ByteString.Lazy.Builder.Extras". There, we continue the above example
--- and drop the generation time to 0.8ms by implementing 'renderString' more
--- cleverly. The third reduction requires meddling with the internals of
--- 'Builder's and is not recomended in code outside of this library. However,
--- patches to this library are very welcome. 
---
------------------------------------------------------------------------------
+{-# LANGUAGE CPP, BangPatterns, MonoPatBinds #-}
+{-# OPTIONS_GHC -fno-warn-unused-imports #-}
+{- | Copyright   : (c) 2010 Jasper Van der Jeugt 
+                   (c) 2010 - 2011 Simon Meier
+     License     : BSD3-style (see LICENSE)
+       
+     Maintainer  : Simon Meier <iridcode@gmail.com>
+     Stability   : experimental
+     Portability : tested on GHC only
+
+'Builder's are used to efficiently construct sequences of bytes from
+  smaller parts.
+Typically, 
+  such a construction is part of the implementation of an /encoding/, i.e.,
+  a function for converting Haskell values to sequences of bytes. 
+Examples of encodings are the generation of the sequence of bytes
+  representing a HTML document to be sent in a HTTP response by a 
+  web application or the serialization of a Haskell value using
+  a fixed binary format.
+
+For an /efficient implementation of an encoding/,
+  it is important that (a) little time is spent on converting
+  the Haskell values to the resulting sequence of bytes /and/
+  (b) that the representation of the resulting sequence
+  is such that it can be consumed efficiently.
+'Builder's support (a) by providing an /O(1)/ concatentation operation
+  and efficient implementations of basic encodings for 'Char's, 'Int's, 
+  and other standard Haskell values.
+They support (b) by providing their result as a lazy 'L.ByteString',
+  which is internally just a linked list of pointers to /chunks/
+  of consecutive raw memory.
+Lazy 'L.ByteString's can be efficiently consumed by functions that
+  write them to a file or send them over a network socket.
+Note that each chunk boundary incurs expensive extra work (e.g., a system call)
+  that must be amortized over the work spent on consuming the chunk body.
+'Builder's therefore take special care to ensure that the 
+  average chunk size is large enough.
+The precise meaning of large enough is application dependent.
+The current implementation is tuned 
+  for an average chunk size between 4kb and 32kb,
+  which should suit most applications.
+
+As a simple example of an encoding implementation, 
+  we show how to efficiently convert the following representation of mixed-data
+  tables to an UTF-8 encoded Comma-Separated-Values (CSV) table.
+
+>data Cell = StringC String
+>          | IntC Int
+>          deriving( Eq, Ord, Show )
+>
+>type Row   = [Cell]
+>type Table = [Row]
+
+We use the following imports and abbreviate 'mappend' to simplify reading.
+
+@
+import qualified "Data.ByteString.Lazy"         as L
+import           "Data.ByteString.Lazy.Builder"
+import           Data.Monoid
+import           Data.Foldable                ('foldMap')
+import           Data.List                    ('intersperse')
+
+infixr 4 \<\>
+(\<\>) :: 'Monoid' m => m -> m -> m
+(\<\>) = 'mappend'
+@
+
+CSV is a character-based representation of tables. For maximal modularity,
+we could first render 'Table's as 'String's and then encode this 'String'
+using some Unicode character encoding. However, this sacrifices performance
+due to the intermediate 'String' representation being built and thrown away
+right afterwards. We get rid of this intermediate 'String' representation by
+fixing the character encoding to UTF-8 and using 'Builder's to convert
+'Table's directly to UTF-8 encoded CSV tables represented as lazy
+'L.ByteString's.
+
+@
+encodeUtf8CSV :: Table -> L.ByteString
+encodeUtf8CSV = 'toLazyByteString' . renderTable
+
+renderTable :: Table -> Builder
+renderTable rs = 'mconcat' [renderRow r \<\> 'charUtf8' \'\\n\' | r <- rs]
+           
+renderRow :: Row -> Builder
+renderRow []     = 'mempty'
+renderRow (c:cs) = 
+    renderCell c \<\> mconcat [ charUtf8 \',\' \<\> renderCell c\' | c\' <- cs ]
+
+renderCell :: Cell -> Builder
+renderCell (StringC cs) = renderString cs
+renderCell (IntC i)     = 'stringUtf8' $ show i
+
+renderString :: String -> Builder
+renderString cs = charUtf8 \'\"\' \<\> foldMap escape cs \<\> charUtf8 \'\"\'
+  where
+    escape \'\\\\\' = charUtf8 \'\\\\\' \<\> charUtf8 \'\\\\\'
+    escape \'\\\"\' = charUtf8 \'\\\\\' \<\> charUtf8 \'\\\"\'
+    escape c    = charUtf8 c
+@
+
+We demonstrate our UTF-8 CSV encoding function on the following table. 
+
+@
+strings :: [String]
+strings =  [\"hello\", \"\\\"1\\\"\", \"&#955;-w&#246;rld\"]
+
+table :: Table
+table = [map StringC strings, map IntC [-3..3]]
+@
+
+The expression @encodeUtf8CSV table@ results in the following lazy
+'L.ByteString'.
+
+>Chunk "\"hello\",\"\\\"1\\\"\",\"\206\187-w\195\182rld\"\n-3,-2,-1,0,1,2,3\n" Empty
+
+We can clearly see that we are converting to a /binary/ format. The \'&#955;\'
+and \'&#246;\' characters, which have a Unicode codepoint above 127, are
+expanded to their corresponding UTF-8 multi-byte representation.
+
+We use the @criterion@ library (<http://hackage.haskell.org/package/criterion>)
+  to benchmark the efficiency of our encoding function on the following table.
+
+>import Criterion.Main     -- add this import to the ones above
+>
+>maxiTable :: Table
+>maxiTable = take 1000 $ cycle table
+>
+>main :: IO ()
+>main = defaultMain
+>  [ bench "encodeUtf8CSV maxiTable (original)" $ 
+>      whnf (L.length . encodeUtf8CSV) maxiTable
+>  ]
+
+On a Core2 Duo 2.20GHz on a 32-bit Linux, 
+  the above code takes 1ms to generate the 22'500 bytes long lazy 'L.ByteString'. 
+Looking again at the definitions above, 
+  we see that we took care to avoid intermediate data structures, 
+  as otherwise we would sacrifice performance.
+For example, 
+  the following (arguably simpler) definition of 'renderRow' is about 20% slower.
+
+>renderRow :: Row -> Builder
+>renderRow  = mconcat . intersperse (charUtf8 ',') . map renderCell
+
+Similarly, using /O(n)/ concatentations like '++' or the equivalent 'S.concat'
+  operations on strict and lazy 'L.ByteString's should be avoided. 
+The following definition of 'renderString' is also about 20% slower.
+
+>renderString :: String -> Builder
+>renderString cs = charUtf8 $ "\"" ++ concatMap escape cs ++ "\"" 
+>  where
+>    escape '\\' = "\\"
+>    escape '\"' = "\\\""
+>    escape c    = return c
+
+Apart from removing intermediate data-structures, 
+  encodings can be optimized further by exploiting knowledge about the
+  implementation of 'Builder's.
+See the modules "Data.ByteString.Lazy.Builder.Extras" and
+  "Data.ByteString.Lazy.Builder.BasicEncoding" for further information.
+-}
+
+
 module Data.ByteString.Lazy.Builder
     ( 
       -- * The Builder type
       Builder
-      -- | Converting a list to a 'Builder' often works by converting each
-      -- element and concatenating the resulting 'Builder's. The higher-order
-      -- function abstracting this pattern is 'foldMap' from the
-      -- "Data.Foldable" module.
 
       -- * Executing Builders
+      -- | Internally, 'Builder's are buffer-filling functions. They are
+      -- executed by a /driver/ that provides them with an actual buffer to
+      -- fill. Once called with a buffer, a 'Builder' fills it and returns a
+      -- signal to the driver telling it that it is either done, has filled the
+      -- current buffer, or wants to directly insert a reference to a chunk of
+      -- memory. In the last two cases, the 'Builder' also returns a
+      -- continutation 'Builder' that the driver can call to fill the next
+      -- buffer. Here, we provide the two drivers that satisfy almost all use
+      -- cases. See "Data.ByteString.Lazy.Builder.Extras", for information
+      -- about fine-tuning them.
     , toLazyByteString
     , hPutBuilder
 
@@ -228,48 +211,76 @@ module Data.ByteString.Lazy.Builder
 
     , floatLE
     , doubleLE
+    
+    -- ** Character encodings
 
-    -- ** UTF-8 encoding
-    -- | Use the "Data.ByteString.Lazy.Builder.Utf8" module.
+    -- *** ASCII
+    -- | The ASCII encoding is a 7-bit encoding. The implementation provided
+    -- here works by truncating the Unicode codepoint to 7-bits, prefixing it
+    -- with a leading 0, and encoding the resulting 8-bits as a single byte.
+    -- For the codepoints 0-127 this corresponds the the ASCII encoding. In
+    -- "Data.ByteString.Lazy.Builder.ASCII", we also provide efficient
+    -- implementations of ASCII-based encodings of numbers (e.g., decimal and
+    -- hexadecimal encodings).
+    , charASCII
+    , stringASCII
 
-    -- ** ASCII encoding
-    -- | Use the "Data.ByteString.Lazy.Builder.Extras#ASCII" module.
-      
+    -- *** ISO/IEC 8859-1 (Char8)
+    -- | The ISO/IEC 8859-1 encoding is an 8-bit encoding often known as Latin-1.
+    -- The /Char8/ encoding implemented here works by truncating the Unicode codepoint
+    -- to 8-bits and encoding them as a single byte. For the codepoints 0-255 this corresponds
+    -- to the ISO/IEC 8859-1 encoding. Note that you can also use
+    -- the functions from "Data.ByteString.Lazy.Builder.ASCII", as the ASCII encoding
+    -- and ISO/IEC 8859-1 are equivalent on the codepoints 0-127.
+    , char8
+    , string8
+
+    -- *** UTF-8
+    -- | The UTF-8 encoding can encode /all/ Unicode codepoints. We recommend
+    -- using it always for encoding 'Char's and 'String's unless an application
+    -- really requires another encoding. Note that you can also use the
+    -- functions from "Data.ByteString.Lazy.Builder.ASCII" for UTF-8 encoding,
+    -- as the ASCII encoding is equivalent to the UTF-8 encoding on the Unicode
+    -- codepoints 0-127.
+    , charUtf8
+    , stringUtf8
+
       
     ) where
 
-import Data.ByteString.Lazy.Builder.Internal
-
+import           Data.ByteString.Lazy.Builder.Internal
 import qualified Data.ByteString.Lazy.Builder.BasicEncoding as E
-
 import qualified Data.ByteString.Lazy.Internal as L
 
-import System.IO (Handle)
+import           System.IO 
+import           Foreign
 
-import Foreign
+-- HADDOCK only imports
+import qualified Data.ByteString               as S (concat)
+import           Data.Monoid
+import           Data.Foldable                      (foldMap)
+import           Data.List                          (intersperse)
 
 
--- | Execute a 'Builder' and record the generated chunks as a lazy
--- 'L.ByteString'. 
---
--- Execution works such that a buffer is allocated and the 'Builder' is told to
--- fill it. Once the 'Builder' returns, the buffer is converted to a chunk of
--- the lazy 'L.ByteString' as follows. If less than half of the buffer is filled,
--- then the filled part is copied to a new chunk of the right size. Otherwise,
--- the buffer is converted directly to a chunk. This scheme guarantees that
--- at least half of the reserved memory is used for live data. 
---
--- The first allocated buffer is of size 'L.smallChunkSize' too keep the
--- allocation overhead small for short output. The following buffers are of
--- size 'L.defaultChunkSize' to ensure that the average chunk size is large.
--- These numbers have worked well in practice. See 'toLazyByteStringWith', if
--- you need more control over buffer allocation.
+-- | Execute a 'Builder' and return the generated chunks as a lazy 'L.ByteString'.
+-- The work is performed lazy, i.e., only when a chunk of the lazy 'L.ByteString'
+-- is forced.
 toLazyByteString :: Builder -> L.ByteString
 toLazyByteString = toLazyByteStringWith
     (safeStrategy L.smallChunkSize L.defaultChunkSize) L.Empty
 
--- | Output a 'Builder' to the specified handle.
--- /TODO: Exploit buffer, if there is one./
+-- | Output a 'Builder' to a 'Handle'.
+-- The 'Builder' is executed directly on the buffer of the 'Handle'. If the
+-- buffer is too small (or not present), then it is replaced with a large
+-- enough buffer. 
+--
+-- It is recommended that the 'Handle' is set to binary and
+-- 'BlockBuffering' mode. See 'hSetBinaryMode' and 'hSetBuffering'.
+--
+-- This function is more efficient than @hPut . 'toLazyByteString'@ because in
+-- many cases no buffer allocation has to be done. Moreover, the results of
+-- several executions of short 'Builder's are concatenated in the 'Handle's
+-- buffer, therefore avoiding unnecessary buffer flushes.
 hPutBuilder :: Handle -> Builder -> IO ()
 hPutBuilder h = hPut h . putBuilder
 
@@ -278,7 +289,7 @@ hPutBuilder h = hPut h . putBuilder
 -- Binary encodings
 ------------------------------------------------------------------------------
 
--- | Encode a single unsigned byte as-is.
+-- | Encode a single signed byte as-is.
 --
 {-# INLINE int8 #-}
 int8 :: Int8 -> Builder
@@ -291,22 +302,21 @@ word8 :: Word8 -> Builder
 word8 = E.encodeWithF E.word8
 
 
-
 ------------------------------------------------------------------------------
 -- Binary little-endian encodings
 ------------------------------------------------------------------------------
 
--- | Encode a 'Int16' in little endian format.
+-- | Encode an 'Int16' in little endian format.
 {-# INLINE int16LE #-}
 int16LE :: Int16 -> Builder
 int16LE = E.encodeWithF E.int16LE
 
--- | Encode a 'Int32' in little endian format.
+-- | Encode an 'Int32' in little endian format.
 {-# INLINE int32LE #-}
 int32LE :: Int32 -> Builder
 int32LE = E.encodeWithF E.int32LE
 
--- | Encode a 'Int64' in little endian format.
+-- | Encode an 'Int64' in little endian format.
 {-# INLINE int64LE #-}
 int64LE :: Int64 -> Builder
 int64LE = E.encodeWithF E.int64LE
@@ -341,17 +351,17 @@ doubleLE = E.encodeWithF E.doubleLE
 -- Binary big-endian encodings
 ------------------------------------------------------------------------------
 
--- | Encode a 'Int16' in big endian format.
+-- | Encode an 'Int16' in big endian format.
 {-# INLINE int16BE #-}
 int16BE :: Int16 -> Builder
 int16BE = E.encodeWithF E.int16BE
 
--- | Encode a 'Int32' in big endian format.
+-- | Encode an 'Int32' in big endian format.
 {-# INLINE int32BE #-}
 int32BE :: Int32 -> Builder
 int32BE = E.encodeWithF E.int32BE
 
--- | Encode a 'Int64' in big endian format.
+-- | Encode an 'Int64' in big endian format.
 {-# INLINE int64BE #-}
 int64BE :: Int64 -> Builder
 int64BE = E.encodeWithF E.int64BE
@@ -380,3 +390,46 @@ floatBE = E.encodeWithF E.floatBE
 {-# INLINE doubleBE #-}
 doubleBE :: Double -> Builder
 doubleBE = E.encodeWithF E.doubleBE
+
+------------------------------------------------------------------------------
+-- ASCII encoding
+------------------------------------------------------------------------------
+
+-- | ASCII encode a 'Char'.
+{-# INLINE charASCII #-}
+charASCII :: Char -> Builder
+charASCII = E.encodeWithF E.charASCII
+
+-- | ASCII encode a 'String'.
+{-# INLINE stringASCII #-}
+stringASCII :: String -> Builder
+stringASCII = E.encodeListWithF E.charASCII
+
+------------------------------------------------------------------------------
+-- ISO/IEC 8859-1 encoding
+------------------------------------------------------------------------------
+
+-- | Char8 encode a 'Char'.
+{-# INLINE char8 #-}
+char8 :: Char -> Builder
+char8 = E.encodeWithF E.char8
+
+-- | Char8 encode a 'String'.
+{-# INLINE string8 #-}
+string8 :: String -> Builder
+string8 = E.encodeListWithF E.char8
+
+------------------------------------------------------------------------------
+-- UTF-8 encoding
+------------------------------------------------------------------------------
+
+-- | UTF-8 encode a 'Char'.
+{-# INLINE charUtf8 #-}
+charUtf8 :: Char -> Builder
+charUtf8 = E.encodeWithB E.charUtf8
+
+-- | UTF-8 encode a 'String'.
+{-# INLINE stringUtf8 #-}
+stringUtf8 :: String -> Builder
+stringUtf8 = E.encodeListWithB E.charUtf8
+

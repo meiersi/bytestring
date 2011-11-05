@@ -21,12 +21,15 @@ import           Test.Framework
 import           Test.QuickCheck (Arbitrary)
 import           Unsafe.Coerce (unsafeCoerce)
 
+import qualified Data.ByteString.Lazy                                 as L
 import qualified Data.ByteString.Lazy.Builder.BasicEncoding           as BE
+import           Data.ByteString.Lazy.Builder
+import           Data.ByteString.Lazy.Builder.Extras
 import           Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils
 
 
 tests :: [Test]
-tests = concat [testsBinary, testsASCII, testsChar8, testsUtf8]
+tests = concat [testsBinary, testsASCII, testsChar8, testsUtf8, testsChunked]
 
 
 ------------------------------------------------------------------------------
@@ -102,8 +105,8 @@ testsBinary =
     , prop_zigZag_parseable  "intVarSigned"    unZigZagInt   BE.intVarSigned
     ]
 
-  , testFixedBoundF "wordVarFixed"   wordVarFixed_list    BE.wordVarFixed
-  , testFixedBoundF "word64VarFixed" word64VarFixed_list  BE.word64VarFixed
+  , testFixedBoundF "wordVarFixedBound"   wordVarFixedBound_list    BE.wordVarFixedBound
+  , testFixedBoundF "word64VarFixedBound" word64VarFixedBound_list  BE.word64VarFixedBound
 
   ]
 
@@ -234,26 +237,26 @@ prop_zigZag_parseable name unZig be =
   compareImpls name (\x -> (x, [])) (first unZig . parseVar . BE.evalB be)
    
 -- | Variable length encoding to a fixed number of bytes (pad / truncate).
-genVarFixed_list :: (Ord a, Num a, Bits a, Integral a) 
+genVarFixedBound_list :: (Ord a, Num a, Bits a, Integral a) 
                  => Int 
                  -> a -> [Word8]
-genVarFixed_list n x
+genVarFixedBound_list n x
   | n <= 1    = sevenBits            : []
-  | otherwise = (sevenBits .|. 0x80) : genVarFixed_list (n - 1) (x `shiftR` 7)
+  | otherwise = (sevenBits .|. 0x80) : genVarFixedBound_list (n - 1) (x `shiftR` 7)
   where
     sevenBits = fromIntegral x .&. 0x7f
 
-wordVarFixed_list :: Word -> Word -> [Word8]
-wordVarFixed_list bound = genVarFixed_list (length $ genVar_list bound)
+wordVarFixedBound_list :: Word -> Word -> [Word8]
+wordVarFixedBound_list bound = genVarFixedBound_list (length $ genVar_list bound)
 
-word64VarFixed_list :: Word64 -> Word64 -> [Word8]
-word64VarFixed_list bound = genVarFixed_list (length $ genVar_list bound)
+word64VarFixedBound_list :: Word64 -> Word64 -> [Word8]
+word64VarFixedBound_list bound = genVarFixedBound_list (length $ genVar_list bound)
 
 -- Somehow this function doesn't really make sense, as the bound must be
 -- greater when interpreted as an unsigned integer.
 --
--- intVarFixed_list :: Int -> Int -> [Word8]
--- intVarFixed_list bound = wordVarFixed_list (fromIntegral bound) . fromIntegral
+-- intVarFixedBound_list :: Int -> Int -> [Word8]
+-- intVarFixedBound_list bound = wordVarFixedBound_list (fromIntegral bound) . fromIntegral
 
 
 ------------------------------------------------------------------------------
@@ -427,5 +430,38 @@ charUtf8_list =
 ------------------------------------------------------------------------------
 -- Creating Builders from basic encodings
 ------------------------------------------------------------------------------
+
+testsChunked :: [Test]
+testsChunked =
+  [ test_encodeChunked ]
+
+test_encodeChunked :: Test
+test_encodeChunked = 
+    compareImpls "encodeChunked . stringUtf8" 
+        (runBuilder id) (parseChunks . runBuilder encodeVar)
+  where
+    encodeVar = BE.encodeChunked 16 BE.word64VarFixedBound BE.emptyB
+
+    runBuilder f cs = 
+        L.unpack $ toLazyByteStringWith strategy L.empty $ f $ stringUtf8 cs
+      where
+        bufSize      = length cs `div` 5
+        firstBufSize = bufSize `div` 3
+        strategy     = safeStrategy firstBufSize bufSize
+
+    parseChunks ws
+      | chunkLen == 0 && null ws' = []
+      | chunkLen == 0             = error $ "trailing bytes: " ++ show ws
+      | chunkLen <= length ws'    = chunk ++ parseChunks rest
+      | otherwise                 = error $ "too few bytes: " ++ show ws
+      where
+        (chunkLen, ws') = parseVar ws
+        (chunk, rest)   = splitAt chunkLen ws'
+
+        
+         
+
+
+
 
 

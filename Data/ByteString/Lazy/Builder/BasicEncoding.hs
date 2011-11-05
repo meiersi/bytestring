@@ -369,8 +369,8 @@ module Data.ByteString.Lazy.Builder.BasicEncoding (
   -- | The ISO/IEC 8859-1 encoding is an 8-bit encoding often known as Latin-1.
   -- The /Char8/ encoding implemented here works by truncating the Unicode
   -- codepoint to 8-bits and encoding them as a single byte. For the codepoints
- -- 0-255 this corresponds to the ISO/IEC 8859-1 encoding. Note that the
- -- Char8 encoding is equivalent to the ASCII encoding on the Unicode
+  -- 0-255 this corresponds to the ISO/IEC 8859-1 encoding. Note that the
+  -- Char8 encoding is equivalent to the ASCII encoding on the Unicode
   -- codepoints 0-127. Hence, functions such as 'intDec' can also be used for
   -- encoding 'Int's as a decimal number with Char8 encoded characters.
   , char8
@@ -383,6 +383,14 @@ module Data.ByteString.Lazy.Builder.BasicEncoding (
   , charUtf8
 
   -- * Chunked / size-prefixed encodings
+{- |
+Some encodings like ASN.1 BER <http://en.wikipedia.org/wiki/Basic_Encoding_Rules>
+or Google's protocol buffers <http://code.google.com/p/protobuf/> require
+encoded data to be prefixed with its length. The simple method to achieve this
+is to encode the data first into a separate buffer, compute the length of the
+encoded data, write it to the current output buffer, and append the separate
+buffers. The drawback of this method is that it requires a ...
+-}
   , withSizeFB
   , withSizeBB
   , encodeWithSize

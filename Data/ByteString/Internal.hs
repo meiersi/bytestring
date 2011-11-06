@@ -384,19 +384,19 @@ memset p w s = c_memset p (fromIntegral w) s
 -- Uses our C code
 --
 
-foreign import ccall unsafe "static fpstring.h fps_reverse" c_reverse
+foreign import ccall unsafe "static fpstring.h new_fps_reverse" c_reverse
     :: Ptr Word8 -> Ptr Word8 -> CULong -> IO ()
 
-foreign import ccall unsafe "static fpstring.h fps_intersperse" c_intersperse
+foreign import ccall unsafe "static fpstring.h new_fps_intersperse" c_intersperse
     :: Ptr Word8 -> Ptr Word8 -> CULong -> Word8 -> IO ()
 
-foreign import ccall unsafe "static fpstring.h fps_maximum" c_maximum
+foreign import ccall unsafe "static fpstring.h new_fps_maximum" c_maximum
     :: Ptr Word8 -> CULong -> IO Word8
 
-foreign import ccall unsafe "static fpstring.h fps_minimum" c_minimum
+foreign import ccall unsafe "static fpstring.h new_fps_minimum" c_minimum
     :: Ptr Word8 -> CULong -> IO Word8
 
-foreign import ccall unsafe "static fpstring.h fps_count" c_count
+foreign import ccall unsafe "static fpstring.h new_fps_count" c_count
     :: Ptr Word8 -> CULong -> Word8 -> IO CULong
 
 -- ---------------------------------------------------------------------

@@ -32,7 +32,7 @@
 #include "fpstring.h"
 
 /* copy a string in reverse */
-void fps_reverse(unsigned char *q, unsigned char *p, unsigned long n) {
+void new_fps_reverse(unsigned char *q, unsigned char *p, unsigned long n) {
     p += n-1;
     while (n-- != 0)
         *q++ = *p--;
@@ -40,7 +40,7 @@ void fps_reverse(unsigned char *q, unsigned char *p, unsigned long n) {
 
 /* duplicate a string, interspersing the character through the elements
    of the duplicated string */
-void fps_intersperse(unsigned char *q,
+void new_fps_intersperse(unsigned char *q,
                      unsigned char *p,
                      unsigned long n,
                      unsigned char c) {
@@ -55,7 +55,7 @@ void fps_intersperse(unsigned char *q,
 }
 
 /* find maximum char in a packed string */
-unsigned char fps_maximum(unsigned char *p, unsigned long len) {
+unsigned char new_fps_maximum(unsigned char *p, unsigned long len) {
     unsigned char *q, c = *p;
     for (q = p; q < p + len; q++)
         if (*q > c)
@@ -64,7 +64,7 @@ unsigned char fps_maximum(unsigned char *p, unsigned long len) {
 }
 
 /* find minimum char in a packed string */
-unsigned char fps_minimum(unsigned char *p, unsigned long  len) {
+unsigned char new_fps_minimum(unsigned char *p, unsigned long  len) {
     unsigned char *q, c = *p;
     for (q = p; q < p + len; q++)
         if (*q < c)
@@ -73,7 +73,7 @@ unsigned char fps_minimum(unsigned char *p, unsigned long  len) {
 }
 
 /* count the number of occurences of a char in a string */
-unsigned long fps_count(unsigned char *p, unsigned long len, unsigned char w) {
+unsigned long new_fps_count(unsigned char *p, unsigned long len, unsigned char w) {
     unsigned long c;
     for (c = 0; len-- != 0; ++p)
         if (*p == w)

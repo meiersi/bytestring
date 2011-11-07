@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP, BangPatterns, MonoPatBinds, ScopedTypeVariables #-}
+{-# OPTIONS_HADDOCK hide #-}
 {-# OPTIONS_GHC -fno-warn-unused-imports #-}
 {- |
 Module      : Data.ByteString.Lazy.Builder.BasicEncoding

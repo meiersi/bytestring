@@ -33,7 +33,7 @@ import           Test.QuickCheck (Arbitrary)
 
 
 tests :: [Test]
-tests = concat [testsBinary, testsASCII, testsChar8, testsUtf8, testsChunked]
+tests = concat [testsBinary, testsASCII, testsChar8, testsUtf8, testsEncodingToBuilder]
 
 
 ------------------------------------------------------------------------------
@@ -409,9 +409,12 @@ charUtf8_list =
 -- Creating Builders from basic encodings
 ------------------------------------------------------------------------------
 
-testsChunked :: [Test]
-testsChunked =
-  [ test_encodeChunked ]
+testsEncodingToBuilder :: [Test]
+testsEncodingToBuilder =
+  [ test_encodeChunked 
+  , test_encodeUnfoldrF
+  , test_encodeUnfoldrB
+  ]
 
 test_encodeChunked :: Test
 test_encodeChunked = 
@@ -439,6 +442,29 @@ test_encodeChunked =
         (chunk, rest)   = splitAt chunkLen ws'
 
         
+test_encodeUnfoldrF :: Test
+test_encodeUnfoldrF =
+    compareImpls "encodeUnfoldrF word8" id encode
+  where
+    encode = 
+        L.unpack . toLazyByteString . BE.encodeUnfoldrWithF BE.word8 go
+      where
+        go []     = Nothing
+        go (w:ws) = Just (w, ws)
+        
+
+test_encodeUnfoldrB :: Test
+test_encodeUnfoldrB =
+    compareImpls "encodeUnfoldrB charUtf8" (concatMap charUtf8_list) encode
+  where
+    encode = 
+        L.unpack . toLazyByteString . BE.encodeUnfoldrWithB BE.charUtf8 go
+      where
+        go []     = Nothing
+        go (c:cs) = Just (c, cs)
+        
+
+    
          
 
 

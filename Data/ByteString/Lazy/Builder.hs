@@ -176,7 +176,7 @@ module Data.ByteString.Lazy.Builder
       -- cases. See "Data.ByteString.Lazy.Builder.Extras", for information
       -- about fine-tuning them.
     , toLazyByteString
-    , hPutBuilder
+    -- , hPutBuilder
 
       -- * Creating Builders
 
@@ -267,6 +267,9 @@ toLazyByteString :: Builder -> L.ByteString
 toLazyByteString = toLazyByteStringWith
     (safeStrategy L.smallChunkSize L.defaultChunkSize) L.Empty
 
+{- Not yet stable enough. 
+   See note on 'hPut' in Data.ByteString.Lazy.Builder.Internal
+
 -- | Output a 'Builder' to a 'Handle'.
 -- The 'Builder' is executed directly on the buffer of the 'Handle'. If the
 -- buffer is too small (or not present), then it is replaced with a large
@@ -281,6 +284,7 @@ toLazyByteString = toLazyByteStringWith
 -- buffer, therefore avoiding unnecessary buffer flushes.
 hPutBuilder :: Handle -> Builder -> IO ()
 hPutBuilder h = hPut h . putBuilder
+-}
 
 
 ------------------------------------------------------------------------------

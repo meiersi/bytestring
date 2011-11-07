@@ -94,7 +94,7 @@ module Data.ByteString.Lazy.Builder.Internal (
   , Put
   , put
   , runPut
-  , hPut
+  -- , hPut
 
   -- ** Streams of chunks interleaved with IO
   , ChunkIOStream(..)
@@ -122,14 +122,17 @@ import qualified Data.ByteString               as S
 import qualified Data.ByteString.Internal      as S
 import qualified Data.ByteString.Lazy.Internal as L
 
+{-
 import GHC.IO.Buffer (Buffer(..), newByteBuffer)
 import GHC.IO.Handle.Internals (wantWritableHandle, flushWriteBuffer)
 import GHC.IO.Handle.Types (Handle__, haByteBuffer) 
 import GHC.IORef
 
+import System.IO (Handle)
+-}
+
 import Foreign
 
-import System.IO (Handle)
 
 
 type LazyByteStringC = L.ByteString -> L.ByteString
@@ -144,6 +147,9 @@ data BufferRange = BufferRange {-# UNPACK #-} !(Ptr Word8)  -- First byte of ran
 -- Build signals
 ------------------------------------------------------------------------------
 
+-- | 'BuildStep's may assume that they are called at most once. However,
+-- they must not execute any function that may rise an async. exception,
+-- as this would invalidate the code of 'hPut' below.
 type BuildStep a = BufferRange -> IO (BuildSignal a)
 
 -- | 'BuildSignal's abstract signals to the caller of a 'BuildStep'. There are
@@ -401,6 +407,18 @@ putLiftIO io = put $ \k br -> io >>= (`k` br)
 -- Executing a Put directly on a buffered Handle
 ------------------------------------------------------------------------------
 
+{- 
+2011/11/07: Simon Meier
+
+The code below would be really nice to have. However, in my tests I was
+experiencing very spurious hangs and I guess it is due to some
+misunderstanding of the implicit protocol of how to write to a Handle.
+
+This has to be clarified first before using this code in production.
+-}
+
+{-
+
 -- | Run a 'Put' action redirecting the produced output to a 'Handle'.
 --
 -- The output is buffered using the 'Handle's associated buffer. If this
@@ -467,25 +485,31 @@ hPut h b =
                 op    = pBuf `plusPtr` bufR buf
 
                 {-# INLINE updateBufR #-}
-                updateBufR op' next = do
+                updateBufR op' = do
                     let !off' = op' `minusPtr` pBuf
                         !buf' = buf {bufR = off'}
                     writeIORef refBuf buf'
-                    return next
 
-                doneH op' x = updateBufR op' $ return x
+                doneH op' x = do
+                    updateBufR op' 
+                    return $ return x
 
-                fullH op' minSize nextStep = updateBufR op' $
+                fullH op' minSize nextStep = do
+                    updateBufR op' 
+                    return $ fillHandle minSize nextStep
                     -- 'fillHandle' will flush the buffer (provided there is
                     -- really less than 'minSize' space left) before executing
                     -- the 'nextStep'.
-                    fillHandle minSize nextStep
 
-                insertChunksH op' _ lbsC nextStep = updateBufR op' $ do
-                    L.foldrChunks (\c rest -> S.hPut h c >> rest) (return ()) 
-                                  (lbsC L.Empty)
-                    fillHandle 1 nextStep
+                insertChunksH op' _ lbsC nextStep = do
+                    updateBufR op' 
+                    return $ do
+                        L.foldrChunks (\c rest -> S.hPut h c >> rest) (return ()) 
+                                      (lbsC L.Empty)
+                        fillHandle 1 nextStep
 
+
+-}
 
 ------------------------------------------------------------------------------
 -- ByteString insertion / controlling chunk boundaries

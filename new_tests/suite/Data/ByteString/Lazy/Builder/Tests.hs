@@ -15,10 +15,8 @@ module Data.ByteString.Lazy.Builder.Tests (tests) where
 
 
 import           Control.Applicative
-import           Control.Monad
 import           Control.Monad.State 
 import           Control.Monad.Writer
-import           Control.Exception (evaluate)
 
 import           Foreign
 
@@ -39,8 +37,11 @@ import           Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils
 
 import           Numeric (readHex)
 
+{-
+import           Control.Exception (evaluate)
 import           System.IO
 import           System.Directory
+-}
 
 import           Test.Framework
 import           Test.Framework.Providers.QuickCheck2
@@ -52,7 +53,7 @@ import           Test.QuickCheck.Property (printTestCase)
 tests :: [Test]
 tests = 
   [ testBuilderRecipe
-  , testHandlePutBuilder 
+  -- , testHandlePutBuilder 
   , testPut
   ] ++
   testsEncodingToBuilder ++
@@ -83,6 +84,7 @@ testBuilderRecipe =
           , "diff  : " ++ show (dropWhile (uncurry (==)) $ zip x1 x2)
           ]
 
+{-
 testHandlePutBuilder :: Test
 testHandlePutBuilder = 
     testProperty "hPutBuilder" testRecipe 
@@ -118,6 +120,7 @@ testHandlePutBuilder =
             success = lbs == lbsRef
         unless success (error msg)
         return success
+-}
 
 
 -- Recipes with which to test the builder functions
@@ -442,8 +445,7 @@ testPut = testGroup "Put monad"
     putInt i    = putBuilder (integerDec i) >> return i
     minusInt i  = (-) <$> putInt i
     run p       = toLazyByteString $ fromPut (do i <- p; _ <- putInt i; return ())
-    eqPut :: Put Integer -> Put Integer -> (L.ByteString, L.ByteString)
-    eqPut p1 p2 = (run p1, run p1)
+    eqPut p1 p2 = (run p1, run p2)
 
     testLaw name f = compareImpls name (fst . f) (snd . f)
 

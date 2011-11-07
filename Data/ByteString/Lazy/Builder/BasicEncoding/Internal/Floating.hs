@@ -41,8 +41,8 @@ fromFloat :: forall w f. (Storable w, Storable f, RealFloat f) => f -> w
 fromFloat x
   | isIEEE x && sizeOf (undefined :: f) == sizeOf (undefined :: w) =
       unsafePerformIO $ alloca $ \buf -> do
-	poke (castPtr buf) x
-	peek buf
+        poke (castPtr buf) x
+        peek buf
   | otherwise = error 
       "Coded.Bounded.Encoding.Floating: missing support for encoding floating point numbers on your platform!"
 

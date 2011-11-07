@@ -1,23 +1,18 @@
 {-# LANGUAGE ScopedTypeVariables, CPP, ForeignFunctionInterface #-}
--- | Copyright   : (c) 2010 Jasper Van der Jeugt 
---               (c) 2010 - 2011 Simon Meier
+-- | Copyright : (c) 2010 - 2011 Simon Meier
 -- License     : BSD3-style (see LICENSE)
 -- 
 -- Maintainer  : Simon Meier <iridcode@gmail.com>
 -- Stability   : experimental
 -- Portability : tested on GHC only
 --
--- Creating 'Builder's using UTF-8 encoded Unicode characters. 
+-- Constructing 'Builder's using ASCII-based encodings.
 --
-module Data.ByteString.Lazy.Builder.Utf8
+module Data.ByteString.Lazy.Builder.ASCII
     ( 
-      -- * Characters
-      char
-    , string
-
       -- * Decimal numbers
-      -- | Decimal encoding of numbers using UTF-8 encoded characters.
-    , int8Dec
+      -- | Decimal encoding of numbers using ASCII encoded characters.
+      int8Dec
     , int16Dec
     , int32Dec
     , int64Dec
@@ -36,13 +31,14 @@ module Data.ByteString.Lazy.Builder.Utf8
       -- * Hexadecimal numbers
       
       -- | Encoding positive integers as hexadecimal numbers using lower-case
-      -- characters that are UTF-8 encoded. The shortest
+      -- ASCII characters. The shortest
       -- possible representation is used. For example,
       --
-      -- > showEncoding word16Hex 0x0a10 = "a10"
+      -- >>> toLazyByteString (word16Hex 0x0a10)
+      -- Chunk "a10" Empty
       --
       -- Note that there is no support for using upper-case characters. Please
-      -- contact the maintainer if your application cannot work without
+      -- contact the maintainer, if your application cannot work without
       -- hexadecimal encodings that use upper-case characters.
       --
     , word8Hex
@@ -77,21 +73,17 @@ import Data.ByteString.Lazy.Internal as L
 
 import Data.ByteString.Lazy.Builder (Builder)
 
-import qualified Data.ByteString.Lazy.Builder.BoundedEncoding      as E
-import qualified Data.ByteString.Lazy.Builder.BasicEncoding.Utf8 as E
+import qualified Data.ByteString.Lazy.Builder.BasicEncoding     as E
 
--- | Encode a 'Char' using the UTF-8 encoding.
---
-{-# INLINE char #-}
-char :: Char -> Builder
-char = E.encodeWithB E.char
+------------------------------------------------------------------------------
+-- Decimal Encoding
+------------------------------------------------------------------------------
 
--- | Encode a 'String' using the UTF-8 encoding.
---
-{-# INLINE string #-}
-string :: String -> Builder
-string = E.encodeListWith E.char
 
+-- | Encode a 'String' using 'E.charASCII'.
+{-# INLINE stringASCII #-}
+stringASCII :: String -> Builder
+stringASCII = E.encodeListWithF E.charASCII
 
 ------------------------------------------------------------------------------
 -- Decimal Encoding
@@ -128,7 +120,7 @@ intDec = E.encodeWithB E.intDec
 -- | /Currently slow./ Decimal encoding of an 'Integer' using the ASCII digits.
 {-# INLINE integerDec #-}
 integerDec :: Integer -> Builder
-integerDec = string . show
+integerDec =  stringASCII . show
 
 
 -- Unsigned integers
@@ -165,15 +157,15 @@ wordDec = E.encodeWithB E.wordDec
 
 -- TODO: Use Bryan O'Sullivan's double-conversion package to speed it up.
 
--- | /Currently slow./ Decimal encoding of an IEEE 'Float' using ASCII digits and characters.
+-- | /Currently slow./ Decimal encoding of an IEEE 'Float'.
 {-# INLINE floatDec #-}
 floatDec :: Float -> Builder
-floatDec = string . show
+floatDec = stringASCII . show
 
--- | /Currently slow./ Decimal encoding of an IEEE 'Double' using ASCII digits and characters.
+-- | /Currently slow./ Decimal encoding of an IEEE 'Double'.
 {-# INLINE doubleDec #-}
 doubleDec :: Double -> Builder
-doubleDec = string . show
+doubleDec = stringASCII . show
 
 
 ------------------------------------------------------------------------------
@@ -183,27 +175,27 @@ doubleDec = string . show
 -- without lead
 ---------------
 
--- | Shortest hexadecimal encoding of a 'Word8' using ASCII digits and lower-case characters.
+-- | Shortest hexadecimal encoding of a 'Word8' using lower-case characters.
 {-# INLINE word8Hex #-}
 word8Hex :: Word8 -> Builder
 word8Hex = E.encodeWithB E.word8Hex
 
--- | Shortest hexadecimal encoding of a 'Word16' using ASCII digits and lower-case characters.
+-- | Shortest hexadecimal encoding of a 'Word16' using lower-case characters.
 {-# INLINE word16Hex #-}
 word16Hex :: Word16 -> Builder
 word16Hex = E.encodeWithB E.word16Hex
 
--- | Shortest hexadecimal encoding of a 'Word32' using ASCII digits and lower-case characters.
+-- | Shortest hexadecimal encoding of a 'Word32' using lower-case characters.
 {-# INLINE word32Hex #-}
 word32Hex :: Word32 -> Builder
 word32Hex = E.encodeWithB E.word32Hex
 
--- | Shortest hexadecimal encoding of a 'Word64' using ASCII digits and lower-case characters.
+-- | Shortest hexadecimal encoding of a 'Word64' using lower-case characters.
 {-# INLINE word64Hex #-}
 word64Hex :: Word64 -> Builder
 word64Hex = E.encodeWithB E.word64Hex
 
--- | Shortest hexadecimal encoding of a 'Word' using ASCII digits and lower-case characters.
+-- | Shortest hexadecimal encoding of a 'Word' using lower-case characters.
 {-# INLINE wordHex #-}
 wordHex :: Word -> Builder
 wordHex = E.encodeWithB E.wordHex
@@ -215,59 +207,59 @@ wordHex = E.encodeWithB E.wordHex
 -- | Encode a 'Int8' using 2 nibbles (hexadecimal digits).
 {-# INLINE int8HexFixed #-}
 int8HexFixed :: Int8 -> Builder
-int8HexFixed = E.encodeWithB E.int8HexFixed
+int8HexFixed = E.encodeWithF E.int8HexFixed
 
 -- | Encode a 'Int16' using 4 nibbles.
 {-# INLINE int16HexFixed #-}
 int16HexFixed :: Int16 -> Builder
-int16HexFixed = E.encodeWithB E.int16HexFixed
+int16HexFixed = E.encodeWithF E.int16HexFixed
 
 -- | Encode a 'Int32' using 8 nibbles.
 {-# INLINE int32HexFixed #-}
 int32HexFixed :: Int32 -> Builder
-int32HexFixed = E.encodeWithB E.int32HexFixed
+int32HexFixed = E.encodeWithF E.int32HexFixed
 
 -- | Encode a 'Int64' using 16 nibbles.
 {-# INLINE int64HexFixed #-}
 int64HexFixed :: Int64 -> Builder
-int64HexFixed = E.encodeWithB E.int64HexFixed
+int64HexFixed = E.encodeWithF E.int64HexFixed
 
 -- | Encode a 'Word8' using 2 nibbles (hexadecimal digits).
 {-# INLINE word8HexFixed #-}
 word8HexFixed :: Word8 -> Builder
-word8HexFixed = E.encodeWithB E.word8HexFixed
+word8HexFixed = E.encodeWithF E.word8HexFixed
 
 -- | Encode a 'Word16' using 4 nibbles.
 {-# INLINE word16HexFixed #-}
 word16HexFixed :: Word16 -> Builder
-word16HexFixed = E.encodeWithB E.word16HexFixed
+word16HexFixed = E.encodeWithF E.word16HexFixed
 
 -- | Encode a 'Word32' using 8 nibbles.
 {-# INLINE word32HexFixed #-}
 word32HexFixed :: Word32 -> Builder
-word32HexFixed = E.encodeWithB E.word32HexFixed
+word32HexFixed = E.encodeWithF E.word32HexFixed
 
 -- | Encode a 'Word64' using 16 nibbles.
 {-# INLINE word64HexFixed #-}
 word64HexFixed :: Word64 -> Builder
-word64HexFixed = E.encodeWithB E.word64HexFixed
+word64HexFixed = E.encodeWithF E.word64HexFixed
 
 -- | Encode an IEEE 'Float' using 8 nibbles.
 {-# INLINE floatHexFixed #-}
 floatHexFixed :: Float -> Builder
-floatHexFixed = E.encodeWithB E.floatHexFixed
+floatHexFixed = E.encodeWithF E.floatHexFixed
 
 -- | Encode an IEEE 'Double' using 16 nibbles.
 {-# INLINE doubleHexFixed #-}
 doubleHexFixed :: Double -> Builder
-doubleHexFixed = E.encodeWithB E.doubleHexFixed
+doubleHexFixed = E.encodeWithF E.doubleHexFixed
 
 -- | Encode each byte of a 'S.ByteString' using its fixed-width hex encoding.
 {-# INLINE byteStringHexFixed #-}
 byteStringHexFixed :: S.ByteString -> Builder
-byteStringHexFixed = E.encodeByteStringWith E.word8HexFixed
+byteStringHexFixed = E.encodeByteStringWithF E.word8HexFixed
 
 -- | Encode each byte of a lazy 'L.ByteString' using its fixed-width hex encoding.
 {-# INLINE lazyByteStringHexFixed #-}
 lazyByteStringHexFixed :: L.ByteString -> Builder
-lazyByteStringHexFixed = E.encodeLazyByteStringWith E.word8HexFixed
+lazyByteStringHexFixed = E.encodeLazyByteStringWithF E.word8HexFixed

@@ -45,19 +45,16 @@ library
                      Data.ByteString.Lazy.Builder
                      Data.ByteString.Lazy.Builder.Internal
                      Data.ByteString.Lazy.Builder.Extras
-                     -- Data.ByteString.Lazy.Builder.Utf8
-                     Data.ByteString.Lazy.Builder.BasicEncoding
-                     Data.ByteString.Lazy.Builder.BasicEncoding.Internal
-                     -- Codec.Bounded.Encoding.Internal.Test
+                     Data.ByteString.Lazy.Builder.ASCII
 
   other-modules:     
+                     Data.ByteString.Lazy.Builder.BasicEncoding
                      Data.ByteString.Lazy.Builder.BasicEncoding.Binary
                      Data.ByteString.Lazy.Builder.BasicEncoding.ASCII
+                     Data.ByteString.Lazy.Builder.BasicEncoding.Internal
                      Data.ByteString.Lazy.Builder.BasicEncoding.Internal.Floating
                      Data.ByteString.Lazy.Builder.BasicEncoding.Internal.UncheckedShifts
                      Data.ByteString.Lazy.Builder.BasicEncoding.Internal.Base16
-                     -- Codec.Bounded.Encoding.Bench
-                     -- Codec.Bounded.Encoding.Internal.Region
 
   extensions:        CPP, ForeignFunctionInterface
 

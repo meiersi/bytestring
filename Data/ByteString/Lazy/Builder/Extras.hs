@@ -47,16 +47,6 @@ module Data.ByteString.Lazy.Builder.Extras
     , floatHost
     , doubleHost
 
-    -- * ASCII encoding
-    -- | #ASCII#The /Char8/ encoding encodes each 'Char' as its Unicode codepoint
-    -- modulo 256. For codepoints below 128, the Char8 encoding is equal to the
-    -- ASCII encoding. It is useful for implementing binary protocols that use
-    -- ASCII or Latin1 characters. Use the functions in
-    -- "Data.ByteString.Lazy.Builder.Utf8" for efficiently encoding primitive
-    -- Haskell values.
-    , char8
-    , string8
-   
     ) where
 
 

@@ -154,10 +154,8 @@ The following definition of 'renderString' is also about 20% slower.
 >    escape c    = return c
 
 Apart from removing intermediate data-structures, 
-  encodings can be optimized further by exploiting knowledge about the
-  implementation of 'Builder's.
-See the modules "Data.ByteString.Lazy.Builder.Extras" and
-  "Data.ByteString.Lazy.Builder.BasicEncoding" for further information.
+  encodings can be optimized further by fine-tuning their execution
+  parameters using the functions in "Data.ByteString.Lazy.Builder.Extras".
 -}
 
 

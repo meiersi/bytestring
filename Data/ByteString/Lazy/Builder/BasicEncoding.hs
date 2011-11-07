@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP, BangPatterns, MonoPatBinds, ScopedTypeVariables #-}
+{-# OPTIONS_GHC -fno-warn-unused-imports #-}
 {- |
 Module      : Data.ByteString.Lazy.Builder.BasicEncoding
 Copyright   : (c) 2010-2011 Simon Meier
@@ -429,7 +430,7 @@ import qualified Data.ByteString.Internal      as S
 import qualified Data.ByteString.Lazy.Internal as L
 
 import           Data.Monoid
-import           Data.List (unfoldr)
+import           Data.List (unfoldr)  -- HADDOCK ONLY
 import           Data.Char (chr, ord)
 import           Control.Monad ((<=<), unless)
 

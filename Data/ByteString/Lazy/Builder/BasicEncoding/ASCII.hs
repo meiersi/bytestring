@@ -84,7 +84,6 @@ import Data.ByteString.Lazy.Builder.BasicEncoding.Internal.Base16
 import Data.ByteString.Lazy.Builder.BasicEncoding.Internal.UncheckedShifts
 
 import Data.Char (ord)
-import Control.Monad (unless)
 
 import Foreign
 import Foreign.C.Types

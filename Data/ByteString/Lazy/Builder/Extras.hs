@@ -60,19 +60,6 @@ import Foreign
 
 
 ------------------------------------------------------------------------------
--- Char8 encoding
-------------------------------------------------------------------------------
-
--- | Encode a 'Char' using the Char8 encoding.
-char8 :: Char -> Builder
-char8 = E.encodeWithF E.char8
-
--- | Encode a 'String' using the Char8 encoding.
-string8 :: String -> Builder
-string8 = E.encodeListWithF E.char8
-
-
-------------------------------------------------------------------------------
 -- Host-specific encodings
 ------------------------------------------------------------------------------
 

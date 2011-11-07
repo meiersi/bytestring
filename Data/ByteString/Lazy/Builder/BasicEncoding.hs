@@ -394,7 +394,7 @@ buffers. The drawback of this method is that it requires a ...
 -}
   , withSizeFB
   , withSizeBB
-  , encodeWithSize
+  -- , encodeWithSize
 
   , encodeChunked
 
@@ -747,6 +747,7 @@ putChunked minFree0 mkBeforeFE afterBE p =
                   lazyByteStringC n lbsC         `mappend`
                   encodeWithB afterBE nU
   
+{-
 
 -- | /Heavy inlining./ Prefix a 'Builder' with the size of the
 -- sequence of bytes that it denotes.
@@ -865,6 +866,7 @@ runCIOSWithLength =
     go !l lbsC (Yield1 bs io)      = 
         io >>= go (l + fromIntegral (S.length bs)) (lbsC . L.Chunk bs)
 
+-}
 
 ----------------------------------------------------------------------
 -- Padded versions of encodings for streamed prefixing of output sizes

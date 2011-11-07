@@ -13,12 +13,14 @@
 
 module Data.ByteString.Lazy.Builder.Tests (tests) where
 
-import Data.Monoid
-import Data.Foldable (asum, foldMap)
+import           Data.Monoid
+import           Data.Foldable (asum, foldMap)
 
-import Control.Applicative
+import           Control.Applicative
+import           Control.Monad
+import           Control.Exception (evaluate)
 
-import Foreign
+import           Foreign
 
 import qualified Data.DList      as D
 
@@ -28,19 +30,23 @@ import qualified Data.ByteString.Lazy as L
 import           Data.ByteString.Lazy.Builder
 import           Data.ByteString.Lazy.Builder.Extras
 import           Data.ByteString.Lazy.Builder.ASCII
+import qualified Data.ByteString.Lazy.Builder.Internal           as BI
 import qualified Data.ByteString.Lazy.Builder.BasicEncoding      as E
 import           Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils
 
-import Test.Framework
-import Test.Framework.Providers.QuickCheck2
--- import Test.Framework.Providers.HUnit
--- import Test.HUnit.Lang (assertFailure)
-import Test.QuickCheck (Arbitrary(..), oneof, choose, listOf, elements)
-import Test.QuickCheck.Property (printTestCase)
+import           System.IO
+import           System.Directory
+
+import           Test.Framework
+import           Test.Framework.Providers.QuickCheck2
+import           Test.QuickCheck
+                   ( Arbitrary(..), oneof, choose, listOf, elements )
+import           Test.QuickCheck.Property (morallyDubiousIOProperty)
+import           Test.QuickCheck.Property (printTestCase)
 
 
 tests :: [Test]
-tests = [testBuilderRecipe]
+tests = [testBuilderRecipe, testHandlePutBuilder]
 
 ------------------------------------------------------------------------------
 -- Testing chunk-handling.
@@ -63,6 +69,43 @@ testBuilderRecipe =
           , "diff  : " ++ show (dropWhile (uncurry (==)) $ zip x1 x2)
           ]
 
+testHandlePutBuilder :: Test
+testHandlePutBuilder = 
+    testProperty "builder recipe" testRecipe 
+  where
+    testRecipe :: (String, String, String, [Action]) -> Bool
+    testRecipe args@(before, between, after, actions) = unsafePerformIO $ do
+        tempDir <- getTemporaryDirectory
+        (tempFile, tempH) <- openTempFile tempDir "TestBuilder"
+        -- switch to UTF-8 encoding
+        hSetEncoding tempH utf8
+        -- output recipe with intermediate direct writing to handle
+        let b = foldMap buildAction actions
+        hPutStr tempH before
+        hPutBuilder tempH b
+        hPutStr tempH between
+        hPutBuilder tempH b
+        hPutStr tempH after
+        hClose tempH
+        -- read file
+        lbs <- L.readFile tempFile
+        evaluate (L.length $ lbs)
+        removeFile tempFile
+        -- compare to pure builder implementation
+        let lbsRef = toLazyByteString $ mconcat 
+              [stringUtf8 before, b, stringUtf8 between, b, stringUtf8 after]
+        -- report
+        let msg = unlines 
+              [ "task:     " ++ show args
+              , "via file: " ++ show lbs
+              , "direct :  " ++ show lbsRef
+              -- , "diff  : " ++ show (dropWhile (uncurry (==)) $ zip x1 x2)
+              ]
+            success = lbs == lbsRef
+        unless success (error msg)
+        return success
+
+
 -- Recipes with which to test the builder functions
 ---------------------------------------------------
 
@@ -82,6 +125,7 @@ data Action =
      | FDec Float
      | DDec Double
      | Flush
+     | EnsureFree Word
      deriving( Eq, Ord, Show )
 
 data Strategy = Safe | Untrimmed
@@ -94,44 +138,47 @@ renderRecipe :: Recipe -> [Word8]
 renderRecipe (Recipe _ _ _ cont as) =
     D.toList $ foldMap renderAction as `mappend` renderLBS cont
   where
-    renderAction (SBS Hex bs)  = foldMap hexWord8 $ S.unpack bs
-    renderAction (SBS _ bs)    = D.fromList $ S.unpack bs
-    renderAction (LBS Hex lbs) = foldMap hexWord8 $ L.unpack lbs
-    renderAction (LBS _ lbs)   = renderLBS lbs
-    renderAction (W8 w)        = return w
-    renderAction (W8S ws)      = D.fromList ws
-    renderAction Flush         = mempty
-    renderAction (IDec i)      = D.fromList $ encodeASCII $ show i
-    renderAction (FDec f)      = D.fromList $ encodeASCII $ show f
-    renderAction (DDec d)      = D.fromList $ encodeASCII $ show d
+    renderAction (SBS Hex bs)   = foldMap hexWord8 $ S.unpack bs
+    renderAction (SBS _ bs)     = D.fromList $ S.unpack bs
+    renderAction (LBS Hex lbs)  = foldMap hexWord8 $ L.unpack lbs
+    renderAction (LBS _ lbs)    = renderLBS lbs
+    renderAction (W8 w)         = return w
+    renderAction (W8S ws)       = D.fromList ws
+    renderAction Flush          = mempty
+    renderAction (EnsureFree _) = mempty
+    renderAction (IDec i)       = D.fromList $ encodeASCII $ show i
+    renderAction (FDec f)       = D.fromList $ encodeASCII $ show f
+    renderAction (DDec d)       = D.fromList $ encodeASCII $ show d
 
     renderLBS = D.fromList . L.unpack
     hexWord8  = D.fromList . wordHexFixed_list
 
+buildAction :: Action -> Builder
+buildAction (SBS Hex bs)            = byteStringHexFixed bs
+buildAction (SBS Copy bs)           = byteStringCopy bs
+buildAction (SBS Insert bs)         = byteStringInsert bs
+buildAction (SBS (Threshold i) bs)  = byteStringThreshold i bs
+buildAction (LBS Hex lbs)           = lazyByteStringHexFixed lbs
+buildAction (LBS Copy lbs)          = lazyByteStringCopy lbs
+buildAction (LBS Insert lbs)        = lazyByteStringInsert lbs
+buildAction (LBS (Threshold i) lbs) = lazyByteStringThreshold i lbs
+buildAction (W8 w)                  = word8 w
+buildAction (W8S ws)                = E.encodeListWithF E.word8 ws
+buildAction (IDec i)                = integerDec i
+buildAction (FDec f)                = floatDec f
+buildAction (DDec d)                = doubleDec d
+buildAction Flush                   = flush
+buildAction (EnsureFree minFree)    = ensureFree $ fromIntegral minFree
 
 buildRecipe :: Recipe -> [Word8]
 buildRecipe (Recipe how firstSize otherSize cont as) =
     L.unpack $ toLBS $ foldMap buildAction as
   where
-    buildAction (SBS Hex bs)            = byteStringHexFixed bs
-    buildAction (SBS Copy bs)           = byteStringCopy bs
-    buildAction (SBS Insert bs)         = byteStringInsert bs
-    buildAction (SBS (Threshold i) bs)  = byteStringThreshold i bs
-    buildAction (LBS Hex lbs)           = lazyByteStringHexFixed lbs
-    buildAction (LBS Copy lbs)          = lazyByteStringCopy lbs
-    buildAction (LBS Insert lbs)        = lazyByteStringInsert lbs
-    buildAction (LBS (Threshold i) lbs) = lazyByteStringThreshold i lbs
-    buildAction (W8 w)                  = word8 w
-    buildAction (W8S ws)                = E.encodeListWithF E.word8 ws
-    buildAction (IDec i)                = integerDec i
-    buildAction (FDec f)                = floatDec f
-    buildAction (DDec d)                = doubleDec d
-    buildAction Flush                   = flush
-
     toLBS = toLazyByteStringWith (strategy how firstSize otherSize) cont
       where
         strategy Safe      = safeStrategy
         strategy Untrimmed = untrimmedStrategy
+
 
 
 -- 'Arbitary' instances
@@ -166,6 +213,8 @@ instance Arbitrary Action where
       , W8  <$> arbitrary
       , W8S <$> listOf arbitrary
       , pure Flush
+      , (EnsureFree . (`mod` 0xffff)) <$> arbitrary 
+        -- never request more than 64kb, free space
       , IDec <$> arbitrary
       , FDec <$> arbitrary
       , DDec <$> arbitrary
@@ -206,4 +255,24 @@ instance Arbitrary Recipe where
       , (\x -> Recipe x b c d e) <$> shrink a
       ] 
 
+------------------------------------------------------------------------------
+-- Testing the Driver <-> Builder protocol
+------------------------------------------------------------------------------
 
+-- | Ensure that there are at least 'n' free bytes for the following 'Builder'.
+{-# INLINE ensureFree #-}
+ensureFree :: Int -> Builder
+ensureFree minFree =
+    BI.builder step
+  where
+    step k br@(BI.BufferRange op ope)
+      | ope `minusPtr` op < minFree = return $ BI.bufferFull minFree op k
+      | otherwise                   = k br
+      where
+        next br'@(BI.BufferRange op' ope')
+          |  free < minFree = 
+              error $ "ensureFree: requested " ++ show minFree ++ " bytes, " ++
+                      "but got only " ++ show free ++ " bytes"
+          | otherwise = k br'
+          where
+            free = ope' `minusPtr` op'

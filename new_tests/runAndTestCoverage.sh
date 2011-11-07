@@ -27,9 +27,7 @@ DIR=./cabal-dev/hpc
 rm -Rf $DIR
 mkdir -p $DIR
 
-EXCLUDES='Main
-Data.ByteString.Lazy.Builder.BasicEncoding.Tests
-Data.ByteString.Lazy.Builder.Tests'
+EXCLUDES='Main'
 
 EXCL=""
 

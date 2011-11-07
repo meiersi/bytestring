@@ -141,38 +141,44 @@ main = defaultMain testsChunked
 
 testsChunked :: [Test]
 testsChunked =
-  [ test_encodeChunked ]
+  [ testProperty "encodeChunked [base-128, variable-length] . stringUtf8" $ \cs ->
+        (testBuilder id cs) == 
+        (parseChunks parseVar $ testBuilder encodeVar cs)
 
-test_encodeChunked :: Test
-test_encodeChunked = 
-   testProperty "encodeChunked . stringUtf8" $ \cs ->
-        (testBuilder id cs) == (parseChunks parseVar $ testBuilder encodeVar cs)
+  , testProperty "encodeChunked [hex] . stringUtf8" $ \cs ->
+        (testBuilder id cs) == 
+        (parseChunks parseHexLen $ testBuilder encodeHex cs)
 
-encodeVar :: Builder -> Builder
-encodeVar = 
-    (`mappend` BE.encodeWithF BE.word8 0)
-  . (BE.encodeChunked 1 BE.word64VarFixedBound BE.emptyB)
+  , testProperty "encodeWithSize [hex] . stringUtf8" $ \cs ->
+        (testBuilder id cs) == 
+        (parseSizePrefix parseHexLen $ testBuilder prefixHexSize cs)
 
-encodeHex :: Builder -> Builder
-encodeHex = 
-    (`mappend` BE.encodeWithF (hexLen 0) 0) 
-  . (BE.encodeChunked 1 hexLen BE.emptyB)
-
-hexLen :: Word64 -> BE.FixedEncoding Word64
-hexLen bound = 
-  (\x -> (x, ' ')) BE.>$< (BE.word64HexFixedBound '0' bound BE.>*< BE.char8)
-
-prefixHexSize :: Builder -> Builder
-prefixHexSize =
-    encodeWithSize 4080 hexLen
+  ]
 
 testBuilder f cs = 
-    -- toLazyByteStringWith strategy L.empty $ f $ stringUtf8 cs
-    toLazyByteString $ f $ stringUtf8 cs
+    toLazyByteStringWith strategy $ f $ stringUtf8 cs
   where
     bufSize      = length cs `div` 5
     firstBufSize = bufSize `div` 3
     strategy     = safeStrategy firstBufSize bufSize
+
+-- | Chunked encoding using base-128, variable-length encoding for the
+-- chunk-size.
+encodeVar :: Builder -> Builder
+encodeVar = 
+    (`mappend` BE.encodeWithF BE.word8 0)
+  . (BE.encodeChunked 5 BE.word64VarFixedBound BE.emptyB)
+
+-- | Chunked encoding using 0-padded, space-terminated hexadecimal numbers
+-- for encoding the chunk-size.
+encodeHex :: Builder -> Builder
+encodeHex = 
+    (`mappend` BE.encodeWithF (hexLen 0) 0) 
+  . (BE.encodeChunked 7 hexLen BE.emptyB)
+
+hexLen :: Word64 -> BE.FixedEncoding Word64
+hexLen bound = 
+  (\x -> (x, ' ')) BE.>$< (BE.word64HexFixedBound '0' bound BE.>*< BE.char8)
 
 parseHexLen :: [Word8] -> (Int, [Word8])
 parseHexLen ws = case span (/= 32) ws of
@@ -195,7 +201,19 @@ parseChunks parseLen =
         (chunk, rest)   = splitAt chunkLen ws'
 
 
+prefixHexSize :: Builder -> Builder
+prefixHexSize = encodeWithSize 4080 hexLen
 
+parseSizePrefix :: ([Word8] -> (Int, [Word8])) -> L.ByteString -> L.ByteString
+parseSizePrefix parseLen =
+    L.pack . go . L.unpack
+  where
+    go ws
+      | len <= length ws'    = payload ++ rest
+      | otherwise            = error $ "too few bytes: " ++ show ws
+      where
+        (len, ws')      = parseLen ws
+        (payload, rest) = splitAt len ws'
 
 str = concat $ replicate 500 "Hello woorld!1! "
         

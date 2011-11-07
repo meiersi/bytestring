@@ -14,7 +14,7 @@ module Data.ByteString.Lazy.Builder.BasicEncoding.Tests (tests) where
 
 import           Control.Arrow (first)
 
-import           Data.Char (ord)
+import           Data.Char (ord, chr)
 import           Data.Monoid 
 import qualified Data.ByteString.Lazy                                 as L
 import qualified Data.ByteString.Lazy.Builder.BasicEncoding           as BE
@@ -22,18 +22,19 @@ import           Data.ByteString.Lazy.Builder
 import           Data.ByteString.Lazy.Builder.Extras
 import           Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils
 
-import           Numeric (showHex)
+import           Numeric (showHex, readHex)
 
 import           Foreign
 import           Unsafe.Coerce (unsafeCoerce)
 
 import           System.ByteOrder 
 import           Test.Framework
+import           Test.Framework.Providers.QuickCheck2 (testProperty)
 import           Test.QuickCheck (Arbitrary)
 
 
 tests :: [Test]
-tests = concat [testsBinary, testsASCII, testsChar8, testsUtf8, testsEncodingToBuilder]
+tests = concat [testsBinary, testsASCII, testsChar8, testsUtf8 ]
 
 
 ------------------------------------------------------------------------------
@@ -183,18 +184,6 @@ int64Var_list = genVar_list . (fromIntegral :: Int64 -> Word64)
 
 intVar_list :: Int -> [Word8]
 intVar_list = genVar_list . (fromIntegral :: Int -> Word)
-
--- | Parse a variable length encoding
-parseVar :: (Num a, Bits a) => [Word8] -> (a, [Word8])
-parseVar = 
-    go 
-  where
-    go []    = error "parseVar: unterminated variable length int"
-    go (w:ws) 
-      | w .&. 0x80 == 0 = (fromIntegral w, ws)
-      | otherwise       = first add (go ws)
-      where
-        add x = (x `shiftL` 7) .|. (fromIntegral w .&. 0x7f)
 
 
 -- | The so-called \"zig-zag\" encoding from Google's protocol buffers.
@@ -377,97 +366,4 @@ genHexFixedBound_list padChar bound =
 testsUtf8 :: [Test]
 testsUtf8 = 
   [ testBoundedB "charUtf8"  charUtf8_list  BE.charUtf8 ]
-
--- | Encode a Haskell String to a list of Word8 values, in UTF8 format.
---
--- Copied from 'utf8-string-0.3.6' to make tests self-contained. 
--- Copyright (c) 2007, Galois Inc. All rights reserved.
---
-charUtf8_list :: Char -> [Word8]
-charUtf8_list =
-    map fromIntegral . encode . ord
-  where
-    encode oc
-      | oc <= 0x7f       = [oc]
-
-      | oc <= 0x7ff      = [ 0xc0 + (oc `shiftR` 6)
-                           , 0x80 + oc .&. 0x3f
-                           ]
-
-      | oc <= 0xffff     = [ 0xe0 + (oc `shiftR` 12)
-                           , 0x80 + ((oc `shiftR` 6) .&. 0x3f)
-                           , 0x80 + oc .&. 0x3f
-                           ]
-      | otherwise        = [ 0xf0 + (oc `shiftR` 18)
-                           , 0x80 + ((oc `shiftR` 12) .&. 0x3f)
-                           , 0x80 + ((oc `shiftR` 6) .&. 0x3f)
-                           , 0x80 + oc .&. 0x3f
-                           ]
-
-
-------------------------------------------------------------------------------
--- Creating Builders from basic encodings
-------------------------------------------------------------------------------
-
-testsEncodingToBuilder :: [Test]
-testsEncodingToBuilder =
-  [ test_encodeChunked 
-  , test_encodeUnfoldrF
-  , test_encodeUnfoldrB
-  ]
-
-test_encodeChunked :: Test
-test_encodeChunked = 
-    compareImpls "encodeChunked . stringUtf8" 
-        (runBuilder id) (parseChunks . runBuilder encodeVar)
-  where
-    encodeVar = 
-      (`mappend` BE.encodeWithF BE.word8 0) .
-      BE.encodeChunked 16 BE.word64VarFixedBound BE.emptyB
-
-    runBuilder f cs = 
-        L.unpack $ toLazyByteStringWith strategy L.empty $ f $ stringUtf8 cs
-      where
-        bufSize      = length cs `div` 5
-        firstBufSize = bufSize `div` 3
-        strategy     = safeStrategy firstBufSize bufSize
-
-    parseChunks ws
-      | chunkLen == 0 && null ws' = []
-      | chunkLen == 0             = error $ "trailing bytes: " ++ show ws
-      | chunkLen <= length ws'    = chunk ++ parseChunks rest
-      | otherwise                 = error $ "too few bytes: " ++ show ws
-      where
-        (chunkLen, ws') = parseVar ws
-        (chunk, rest)   = splitAt chunkLen ws'
-
-        
-test_encodeUnfoldrF :: Test
-test_encodeUnfoldrF =
-    compareImpls "encodeUnfoldrF word8" id encode
-  where
-    encode = 
-        L.unpack . toLazyByteString . BE.encodeUnfoldrWithF BE.word8 go
-      where
-        go []     = Nothing
-        go (w:ws) = Just (w, ws)
-        
-
-test_encodeUnfoldrB :: Test
-test_encodeUnfoldrB =
-    compareImpls "encodeUnfoldrB charUtf8" (concatMap charUtf8_list) encode
-  where
-    encode = 
-        L.unpack . toLazyByteString . BE.encodeUnfoldrWithB BE.charUtf8 go
-      where
-        go []     = Nothing
-        go (c:cs) = Just (c, cs)
-        
-
-    
-         
-
-
-
-
 

@@ -66,6 +66,7 @@ module Data.ByteString.Lazy.Builder.Internal (
   , empty
   , append
   , flush
+  , ensureFree
 
   , byteStringCopy
   , byteStringInsert
@@ -497,6 +498,16 @@ hPut h b =
 
 -- Raw memory
 -------------
+
+-- | Ensure that there are at least 'n' free bytes for the following 'Builder'.
+{-# INLINE ensureFree #-}
+ensureFree :: Int -> Builder
+ensureFree minFree =
+    builder step
+  where
+    step k br@(BufferRange op ope)
+      | ope `minusPtr` op < minFree = return $ bufferFull minFree op k
+      | otherwise                   = k br
 
 -- | Copy the bytes from a 'BufferRange' into the output stream.
 {-# INLINE bytesCopyStep #-}

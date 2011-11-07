@@ -394,7 +394,7 @@ buffers. The drawback of this method is that it requires a ...
 -}
   , withSizeFB
   , withSizeBB
-  -- , encodeWithSize
+  , encodeWithSize
 
   , encodeChunked
 
@@ -687,8 +687,14 @@ putChunked
 putChunked minFree0 mkBeforeFE afterBE p =
     put encodingStep
   where
-    minFree :: Int
-    minFree = fromIntegral $ max 1 minFree0   -- sanitize and convert to Int
+    minFree, reservedAfter, maxReserved, minBufferSize :: Int
+    minFree       = fromIntegral $ max 1 minFree0   -- sanitize and convert to Int
+
+    -- reserved space must be computed for maximum buffer size to cover for all
+    -- sizes of the actually returned buffer.
+    reservedAfter = I.sizeBound afterBE
+    maxReserved   = I.size (mkBeforeFE maxBound) + reservedAfter
+    minBufferSize = minFree + maxReserved
 
     encodingStep k = 
         fill (runPut p)
@@ -702,9 +708,6 @@ putChunked minFree0 mkBeforeFE afterBE p =
             outRemaining   = ope `minusPtr` op
             beforeFE       = mkBeforeFE $ fromIntegral outRemaining
             reservedBefore = I.size beforeFE
-            reservedAfter  = I.sizeBound afterBE
-            reserved       = reservedBefore + reservedAfter
-            minBufferSize  = minFree + reserved
            
             opInner        = op  `plusPtr` reservedBefore
             opeInner       = ope `plusPtr` (-reservedAfter)
@@ -727,7 +730,7 @@ putChunked minFree0 mkBeforeFE afterBE p =
             fullH opInner' minSize nextInnerStep = do
                 op' <- wrapChunk opInner' 
                 return $! bufferFull 
-                  (max minBufferSize (minSize + reserved))
+                  (max minBufferSize (minSize + maxReserved))
                   op'
                   (fill nextInnerStep)  
 
@@ -747,7 +750,6 @@ putChunked minFree0 mkBeforeFE afterBE p =
                   lazyByteStringC n lbsC         `mappend`
                   encodeWithB afterBE nU
   
-{-
 
 -- | /Heavy inlining./ Prefix a 'Builder' with the size of the
 -- sequence of bytes that it denotes.
@@ -761,84 +763,87 @@ putChunked minFree0 mkBeforeFE afterBE p =
 -- the method falls back to encoding the data to a separate lazy bytestring,
 -- computing the size, and encoding the size before inserting the chunks of
 -- the separate lazy bytestring.
---
--- Note that the generated chunks might hold on to a lot of unused memory. If
--- you need to hold on to the generated chunks, then you should copy their
--- content.
 {-# INLINE encodeWithSize #-}
 encodeWithSize
-    :: (Word64 -> FixedEncoding Word64)   
+    :: 
+       Word
+    -- ^ Inner buffer-size.
+    -> (Word64 -> FixedEncoding Word64)   
     -- ^ Given a bound on the maximal size to encode, this function must return
     -- a fixed-size encoding for all smaller sizes.
     -> Builder
     -- ^ 'Put' to prefix with the length of its sequence of bytes.
     -> Builder
-encodeWithSize mkSizeFE = 
-    fromPut . putWithSize mkSizeFE . putBuilder
+encodeWithSize innerBufSize mkSizeFE = 
+    fromPut . putWithSize innerBufSize mkSizeFE . putBuilder
 
 -- | Prefix a 'Put' with the size of its written data.
 {-# INLINE putWithSize #-}
 putWithSize 
     :: forall a.
-       (Word64 -> FixedEncoding Word64)   
+       Word
+    -- ^ Buffer-size for inner driver.
+    -> (Word64 -> FixedEncoding Word64)   
     -- ^ Encoding the size for the fallback case.
     -> Put a
     -- ^ 'Put' to prefix with the length of its sequence of bytes.
     -> Put a
-putWithSize mkSizeFE innerP =
+putWithSize innerBufSize mkSizeFE innerP =
     put $ encodingStep
   where
-    -- | The minimal free-size must be at least the small chunk-size to ensure
-    -- that the slow-mode inserts large enough chunks.
-    minFree = L.smallChunkSize
+    -- | The minimal free size is such that we can encode any size.
+    minFree = I.size $ mkSizeFE maxBound
 
     encodingStep :: (forall r. (a -> BuildStep r) -> BuildStep r)
     encodingStep k = 
         fill (runPut innerP)
       where
         fill :: BuildStep a -> BufferRange -> IO (BuildSignal r)
-        fill innerStep !br@(BufferRange op ope)
-          | outRemaining < minBufferSize = 
-              return $! bufferFull minBufferSize op (fill innerStep)
+        fill innerStep !(BufferRange op ope)
+          | outRemaining < minFree = 
+              return $! bufferFull minFree op (fill innerStep)
           | otherwise = do
               fillWithBuildStep innerStep doneH fullH insertChunksH brInner
           where
-            outRemaining  = ope `minusPtr` op
-            sizeFE        = mkSizeFE $ fromIntegral outRemaining
-            reserved      = I.size sizeFE
-            minBufferSize = minFree + reserved
+            outRemaining   = ope `minusPtr` op
+            sizeFE         = mkSizeFE $ fromIntegral outRemaining
+            reservedBefore = I.size sizeFE
+            reservedAfter  = minFree - reservedBefore
            
-            opInner       = op  `plusPtr` reserved
-            brInner       = BufferRange opInner ope
+            -- leave enough free space such that all sizes can be encodded.
+            startInner    = op  `plusPtr` reservedBefore
+            opeInner      = ope `plusPtr` (negate reservedAfter)
+            brInner       = BufferRange startInner opeInner
 
             fastPrefixSize :: Ptr Word8 -> IO (Ptr Word8)
             fastPrefixSize !opInner'
               | innerSize == 0 = do runB (toB $ mkSizeFE 0) 0         op
-              | otherwise      = do runB (toB $ sizeFE)     innerSize op
+              | otherwise      = do runF (sizeFE)           innerSize op
+                                    return opInner'
               where
-                innerSize = fromIntegral $ opInner' `minusPtr` opInner
+                innerSize = fromIntegral $ opInner' `minusPtr` startInner
 
             slowPrefixSize :: Ptr Word8 -> Builder -> BuildStep a -> IO (BuildSignal r)
-            slowPrefixSize opInner' replaySignal nextStep = do
-                (x, lbsC, l) <- toLBS $ runBuilderWith bInner nextStep
-                let lU = fromIntegral l
-                -- TODO: We could get rid of one more chunk-boundary
-                -- when encoding large messages by reserving space for the 
-                -- size and modifying the returned bytestring afterwards.
-                runBuilderWith (encodeWithF (mkSizeFE lU) lU `mappend` 
-                                -- inserting the continuation is crucial to
-                                -- avoid quadratic runtime when nesting
-                                -- 'encodeWithSize'.
-                                lazyByteStringC l lbsC)
-                               (k x) br
+            slowPrefixSize opInner' bInner nextStep = do
+                (x, lbsC, lenAfter) <- toLBS $ runBuilderWith bInner nextStep
+
+                let curBufLen   = opInner' `minusPtr` startInner
+                    lenAll      = fromIntegral lenAfter + fromIntegral curBufLen
+                    sizeFE'     = mkSizeFE lenAll
+                    startInner' = op `plusPtr` I.size sizeFE'
+                -- move data in current buffer out of the way, if required
+                unless (startInner == startInner') $ 
+                    moveBytes startInner' startInner curBufLen
+                runF sizeFE' lenAll op
+                -- TODO: If we were to change the CIOS definition such that it also
+                -- returns the last buffer for writing, we could also fill the
+                -- last buffer with 'k' and return the signal, once it is
+                -- filled, therefore avoiding unfilled space.
+                return $ insertChunks 
+                    (startInner' `plusPtr` curBufLen) lenAfter lbsC (k x)
               where
-                toLBS  = runCIOSWithLength <=< buildStepToCIOSUntrimmed
-                -- Note that there's no 'unsafePerformIO' involved at this
-                -- level. This is crucial to ensure a total ordering of all
-                -- actions and, therefore, the execution of the 'bytesCopy'
-                -- builder before returning a signal to the driver.
-                bInner = bytesCopy (BufferRange opInner opInner') `mappend` 
-                         replaySignal
+                toLBS = runCIOSWithLength <=< 
+                    buildStepToCIOSUntrimmedWith (fromIntegral innerBufSize)
 
             doneH :: Ptr Word8 -> a -> IO (BuildSignal r)
             doneH opInner' x = do
@@ -866,7 +871,12 @@ runCIOSWithLength =
     go !l lbsC (Yield1 bs io)      = 
         io >>= go (l + fromIntegral (S.length bs)) (lbsC . L.Chunk bs)
 
--}
+-- | Run a 'BuildStep' using the untrimmed strategy.
+buildStepToCIOSUntrimmedWith :: Int -> BuildStep a -> IO (ChunkIOStream a)
+buildStepToCIOSUntrimmedWith bufSize =
+    buildStepToCIOS (untrimmedStrategy bufSize bufSize)
+                    (return . Finished)
+
 
 ----------------------------------------------------------------------
 -- Padded versions of encodings for streamed prefixing of output sizes

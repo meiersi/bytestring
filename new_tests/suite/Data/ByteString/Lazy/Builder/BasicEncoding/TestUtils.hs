@@ -39,8 +39,13 @@ module Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils (
   , dec_list
   , hex_list
   , wordHexFixed_list
+
+  , charUtf8_list
+
+  , parseVar
   ) where
 
+import           Control.Arrow (first)
 import           Control.Monad
 
 import           Data.ByteString.Lazy.Builder.BasicEncoding
@@ -374,3 +379,44 @@ wordHexFixed_list x =
    encodeASCII $ pad (2 * sizeOf x) $ showHex x ""
  where
    pad n cs = replicate (n - length cs) '0' ++ cs
+
+
+-- | Parse a variable length encoding
+parseVar :: (Num a, Bits a) => [Word8] -> (a, [Word8])
+parseVar = 
+    go 
+  where
+    go []    = error "parseVar: unterminated variable length int"
+    go (w:ws) 
+      | w .&. 0x80 == 0 = (fromIntegral w, ws)
+      | otherwise       = first add (go ws)
+      where
+        add x = (x `shiftL` 7) .|. (fromIntegral w .&. 0x7f)
+
+
+-- | Encode a Haskell String to a list of Word8 values, in UTF8 format.
+--
+-- Copied from 'utf8-string-0.3.6' to make tests self-contained. 
+-- Copyright (c) 2007, Galois Inc. All rights reserved.
+--
+charUtf8_list :: Char -> [Word8]
+charUtf8_list =
+    map fromIntegral . encode . ord
+  where
+    encode oc
+      | oc <= 0x7f       = [oc]
+
+      | oc <= 0x7ff      = [ 0xc0 + (oc `shiftR` 6)
+                           , 0x80 + oc .&. 0x3f
+                           ]
+
+      | oc <= 0xffff     = [ 0xe0 + (oc `shiftR` 12)
+                           , 0x80 + ((oc `shiftR` 6) .&. 0x3f)
+                           , 0x80 + oc .&. 0x3f
+                           ]
+      | otherwise        = [ 0xf0 + (oc `shiftR` 18)
+                           , 0x80 + ((oc `shiftR` 12) .&. 0x3f)
+                           , 0x80 + ((oc `shiftR` 6) .&. 0x3f)
+                           , 0x80 + oc .&. 0x3f
+                           ]
+

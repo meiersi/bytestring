@@ -32,12 +32,21 @@ module Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils (
   , cmpEncodingErr
   -}
 
+  -- * Encoding reference implementations
+  , encodeASCII
+  , encodeForcedASCII
+  , charASCII_list
+  , dec_list
+  , hex_list
+  , wordHexFixed_list
   ) where
 
 import           Control.Monad
 
 import           Data.ByteString.Lazy.Builder.BasicEncoding
-import           Data.Char (chr)
+import           Data.Char (chr, ord)
+
+import           Numeric (showHex)
 
 import           Foreign
 
@@ -332,3 +341,36 @@ cmpEncodingErr f w = maybe True (error . show) . cmpEncoding f w
 
 
 -}
+
+------------------------------------------------------------------------------
+-- Encoding reference implementations
+------------------------------------------------------------------------------
+
+-- | Encode a 'String' of only ASCII characters using the ASCII encoding.
+encodeASCII :: String -> [Word8]
+encodeASCII = 
+    map encode
+  where
+    encode c 
+      | c < '\x7f' = fromIntegral $ ord c
+      | otherwise  = error $ "encodeASCII: non-ASCII character '" ++ [c] ++ "'"
+    
+-- | Encode an arbitrary 'String' by truncating its characters to the least
+-- significant 7-bits.
+encodeForcedASCII :: String -> [Word8]
+encodeForcedASCII = map ((.&. 0x7f) . fromIntegral . ord)
+
+charASCII_list :: Char -> [Word8]
+charASCII_list = encodeForcedASCII . return
+
+dec_list :: Show a =>  a -> [Word8]
+dec_list = encodeASCII . show
+
+hex_list :: (Integral a, Show a) => a -> [Word8]
+hex_list = encodeASCII . (\x -> showHex x "")
+
+wordHexFixed_list :: (Storable a, Integral a, Show a) => a -> [Word8]
+wordHexFixed_list x =
+   encodeASCII $ pad (2 * sizeOf x) $ showHex x ""
+ where
+   pad n cs = replicate (n - length cs) '0' ++ cs

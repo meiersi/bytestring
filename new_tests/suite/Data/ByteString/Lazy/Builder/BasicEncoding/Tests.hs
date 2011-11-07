@@ -13,19 +13,23 @@
 module Data.ByteString.Lazy.Builder.BasicEncoding.Tests (tests) where
 
 import           Control.Arrow (first)
-import           Data.Char (ord)
-import           Numeric (showHex)
-import           Foreign
-import           System.ByteOrder 
-import           Test.Framework
-import           Test.QuickCheck (Arbitrary)
-import           Unsafe.Coerce (unsafeCoerce)
 
+import           Data.Char (ord)
+import           Data.Monoid 
 import qualified Data.ByteString.Lazy                                 as L
 import qualified Data.ByteString.Lazy.Builder.BasicEncoding           as BE
 import           Data.ByteString.Lazy.Builder
 import           Data.ByteString.Lazy.Builder.Extras
 import           Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils
+
+import           Numeric (showHex)
+
+import           Foreign
+import           Unsafe.Coerce (unsafeCoerce)
+
+import           System.ByteOrder 
+import           Test.Framework
+import           Test.QuickCheck (Arbitrary)
 
 
 tests :: [Test]
@@ -323,32 +327,6 @@ testsASCII =
       (genHexFixedBound_list 'x') (BE.word64HexFixedBound 'x')
   ]
 
-encodeASCII :: String -> [Word8]
-encodeASCII = 
-    map (encode . ord)
-  where
-    encode c 
-      | c < 0x7f  = fromIntegral c
-      | otherwise = error $ "encodeASCII: non-ASCII codepoint " ++ show c
-    
-encodeForcedASCII :: String -> [Word8]
-encodeForcedASCII = map ((.&. 0x7f) . fromIntegral . ord)
-
-charASCII_list :: Char -> [Word8]
-charASCII_list = encodeForcedASCII . return
-
-dec_list :: Show a =>  a -> [Word8]
-dec_list = encodeASCII . show
-
-hex_list :: (Integral a, Show a) => a -> [Word8]
-hex_list = encodeASCII . (\x -> showHex x "")
-
-wordHexFixed_list :: (Storable a, Integral a, Show a) => a -> [Word8]
-wordHexFixed_list x =
-   encodeASCII $ pad (2 * sizeOf x) $ showHex x ""
- where
-   pad n cs = replicate (n - length cs) '0' ++ cs
-
 int8HexFixed_list :: Int8 -> [Word8]
 int8HexFixed_list  = wordHexFixed_list . (fromIntegral :: Int8  -> Word8 )
 
@@ -440,7 +418,9 @@ test_encodeChunked =
     compareImpls "encodeChunked . stringUtf8" 
         (runBuilder id) (parseChunks . runBuilder encodeVar)
   where
-    encodeVar = BE.encodeChunked 16 BE.word64VarFixedBound BE.emptyB
+    encodeVar = 
+      (`mappend` BE.encodeWithF BE.word8 0) .
+      BE.encodeChunked 16 BE.word64VarFixedBound BE.emptyB
 
     runBuilder f cs = 
         L.unpack $ toLazyByteStringWith strategy L.empty $ f $ stringUtf8 cs

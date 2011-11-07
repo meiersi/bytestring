@@ -20,6 +20,7 @@ Executable testsuite
                  , test-framework-hunit       == 0.2.*
                  , HUnit                      == 1.2.*
                  , byteorder                  == 1.0.*
+                 , dlist                      == 0.5.*
 
 
   if flag(portable) || os(windows)

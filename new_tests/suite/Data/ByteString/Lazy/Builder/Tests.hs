@@ -1,4 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# OPTIONS_GHC -fno-warn-orphans #-}
 
 -- |
 -- Copyright   : (c) 2011 Simon Meier
@@ -10,52 +11,44 @@
 --
 -- Testing composition of 'Builders'.
 
-module Data.ByteString.Lazy.Builder (tests) where
+module Data.ByteString.Lazy.Builder.Tests (tests) where
 
-import Data.Bits
-import Data.Char (ord)
 import Data.Monoid
 import Data.Foldable (asum, foldMap)
 
-import Control.Monad
 import Control.Applicative
-
-import Numeric (showHex)
 
 import Foreign
 
 import qualified Data.DList      as D
 
-import qualified "new-bytestring" Data.ByteString      as S
-import qualified "new-bytestring" Data.ByteString.Lazy as L
+import qualified Data.ByteString      as S
+import qualified Data.ByteString.Lazy as L
 
 import           Data.ByteString.Lazy.Builder
 import           Data.ByteString.Lazy.Builder.Extras
-import qualified Data.ByteString.Lazy.Builder.Utf8                 as Utf8
-import           Data.ByteString.Lazy.Builder.basicEncoding (Encoding)
-import qualified Data.ByteString.Lazy.Builder.basicEncoding      as E
-import qualified Data.ByteString.Lazy.Builder.basicEncoding.Utf8 as EUtf8
-import Codec.Bounded.Encoding.Internal.Test (cmpEncodingErr)
-
-import System.ByteOrder 
+import           Data.ByteString.Lazy.Builder.ASCII
+import qualified Data.ByteString.Lazy.Builder.BasicEncoding      as E
+import           Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils
 
 import Test.Framework
 import Test.Framework.Providers.QuickCheck2
-import Test.Framework.Providers.HUnit
-import Test.HUnit.Lang (assertFailure)
+-- import Test.Framework.Providers.HUnit
+-- import Test.HUnit.Lang (assertFailure)
 import Test.QuickCheck (Arbitrary(..), oneof, choose, listOf, elements)
 import Test.QuickCheck.Property (printTestCase)
 
-import Unsafe.Coerce (unsafeCoerce)
 
+tests :: [Test]
+tests = [testBuilderRecipe]
 
 ------------------------------------------------------------------------------
 -- Testing chunk-handling.
 ------------------------------------------------------------------------------
 
-testBuilder :: Test
-testBuilder = 
-    testProperty "Data.ByteString.Lazy.Builder" $ testRecipe <$> arbitrary
+testBuilderRecipe :: Test
+testBuilderRecipe = 
+    testProperty "builder recipe" $ testRecipe <$> arbitrary
   where
     testRecipe r = 
         printTestCase msg $ x1 == x2
@@ -101,38 +94,38 @@ renderRecipe :: Recipe -> [Word8]
 renderRecipe (Recipe _ _ _ cont as) =
     D.toList $ foldMap renderAction as `mappend` renderLBS cont
   where
-    -- renderAction (SBS Hex bs)  = foldMap hexWord8 $ S.unpack bs
+    renderAction (SBS Hex bs)  = foldMap hexWord8 $ S.unpack bs
     renderAction (SBS _ bs)    = D.fromList $ S.unpack bs
-    -- renderAction (LBS Hex lbs) = foldMap hexWord8 $ L.unpack lbs
+    renderAction (LBS Hex lbs) = foldMap hexWord8 $ L.unpack lbs
     renderAction (LBS _ lbs)   = renderLBS lbs
     renderAction (W8 w)        = return w
     renderAction (W8S ws)      = D.fromList ws
     renderAction Flush         = mempty
-    renderAction (IDec i)      = D.fromList $ encodeUtf8 $ show i
-    renderAction (FDec f)      = D.fromList $ encodeUtf8 $ show f
-    renderAction (DDec d)      = D.fromList $ encodeUtf8 $ show d
+    renderAction (IDec i)      = D.fromList $ encodeASCII $ show i
+    renderAction (FDec f)      = D.fromList $ encodeASCII $ show f
+    renderAction (DDec d)      = D.fromList $ encodeASCII $ show d
 
     renderLBS = D.fromList . L.unpack
-    hexWord8  = D.fromList . hexFixedList
+    hexWord8  = D.fromList . wordHexFixed_list
 
 
 buildRecipe :: Recipe -> [Word8]
 buildRecipe (Recipe how firstSize otherSize cont as) =
     L.unpack $ toLBS $ foldMap buildAction as
   where
-    -- buildAction (SBS Hex bs)            = Utf8.byteStringHexFixed bs
+    buildAction (SBS Hex bs)            = byteStringHexFixed bs
     buildAction (SBS Copy bs)           = byteStringCopy bs
     buildAction (SBS Insert bs)         = byteStringInsert bs
     buildAction (SBS (Threshold i) bs)  = byteStringThreshold i bs
-    -- buildAction (LBS Hex lbs)           = Utf8.lazyByteStringHexFixed lbs
+    buildAction (LBS Hex lbs)           = lazyByteStringHexFixed lbs
     buildAction (LBS Copy lbs)          = lazyByteStringCopy lbs
     buildAction (LBS Insert lbs)        = lazyByteStringInsert lbs
     buildAction (LBS (Threshold i) lbs) = lazyByteStringThreshold i lbs
     buildAction (W8 w)                  = word8 w
     buildAction (W8S ws)                = E.encodeListWithF E.word8 ws
-    buildAction (IDec i)                = Utf8.integerDec i
-    buildAction (FDec f)                = Utf8.floatDec f
-    buildAction (DDec d)                = Utf8.doubleDec d
+    buildAction (IDec i)                = integerDec i
+    buildAction (FDec f)                = floatDec f
+    buildAction (DDec d)                = doubleDec d
     buildAction Flush                   = flush
 
     toLBS = toLazyByteStringWith (strategy how firstSize otherSize) cont

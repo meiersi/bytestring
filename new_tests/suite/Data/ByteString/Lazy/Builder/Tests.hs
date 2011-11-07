@@ -16,13 +16,14 @@ module Data.ByteString.Lazy.Builder.Tests (tests) where
 
 import           Control.Applicative
 import           Control.Monad
+import           Control.Monad.State 
+import           Control.Monad.Writer
 import           Control.Exception (evaluate)
 
 import           Foreign
 
 import           Data.Char (ord, chr)
 import qualified Data.DList      as D
-import           Data.Monoid
 import           Data.Foldable (asum, foldMap)
 
 import qualified Data.ByteString      as S
@@ -31,6 +32,7 @@ import qualified Data.ByteString.Lazy as L
 import           Data.ByteString.Lazy.Builder
 import           Data.ByteString.Lazy.Builder.Extras
 import           Data.ByteString.Lazy.Builder.ASCII
+import           Data.ByteString.Lazy.Builder.Internal (Put, putBuilder, fromPut)
 import qualified Data.ByteString.Lazy.Builder.Internal           as BI
 import qualified Data.ByteString.Lazy.Builder.BasicEncoding      as BE
 import           Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils
@@ -51,6 +53,7 @@ tests :: [Test]
 tests = 
   [ testBuilderRecipe
   , testHandlePutBuilder 
+  , testPut
   ] ++
   testsEncodingToBuilder
 
@@ -61,14 +64,14 @@ tests =
 
 testBuilderRecipe :: Test
 testBuilderRecipe = 
-    testProperty "builder recipe" $ testRecipe <$> arbitrary
+    testProperty "toLazyByteStringWith" $ testRecipe <$> arbitrary
   where
     testRecipe r = 
         printTestCase msg $ x1 == x2
       where
         x1 = renderRecipe r
         x2 = buildRecipe r
-        toString = show -- map (chr . fromIntegral)
+        toString = map (chr . fromIntegral)
         msg = unlines 
           [ "recipe: " ++ show r
           , "render: " ++ toString x1 
@@ -78,16 +81,16 @@ testBuilderRecipe =
 
 testHandlePutBuilder :: Test
 testHandlePutBuilder = 
-    testProperty "builder recipe" testRecipe 
+    testProperty "hPutBuilder" testRecipe 
   where
-    testRecipe :: (String, String, String, [Action]) -> Bool
-    testRecipe args@(before, between, after, actions) = unsafePerformIO $ do
+    testRecipe :: (String, String, String, Recipe) -> Bool
+    testRecipe args@(before, between, after, recipe) = unsafePerformIO $ do
         tempDir <- getTemporaryDirectory
         (tempFile, tempH) <- openTempFile tempDir "TestBuilder"
         -- switch to UTF-8 encoding
         hSetEncoding tempH utf8
         -- output recipe with intermediate direct writing to handle
-        let b = foldMap buildAction actions
+        let b = fst $ recipeComponents recipe
         hPutStr tempH before
         hPutBuilder tempH b
         hPutStr tempH between
@@ -120,6 +123,7 @@ data Mode =
        Threshold Int
      | Insert 
      | Copy
+     | Smart
      | Hex
      deriving( Eq, Ord, Show )
 
@@ -129,11 +133,11 @@ data Action =
      | W8  Word8
      | W8S [Word8]
      | String String
-     | IDec Integer
      | FDec Float
      | DDec Double
      | Flush
      | EnsureFree Word
+     | ModState Int
      deriving( Eq, Ord, Show )
 
 data Strategy = Safe | Untrimmed
@@ -143,42 +147,52 @@ data Recipe = Recipe Strategy Int Int L.ByteString [Action]
      deriving( Eq, Ord, Show )
 
 renderRecipe :: Recipe -> [Word8]
-renderRecipe (Recipe _ _ _ cont as) =
-    D.toList $ foldMap renderAction as `mappend` renderLBS cont
+renderRecipe (Recipe _ firstSize _ cont as) =
+    D.toList $ execWriter (evalStateT (mapM_ renderAction as) firstSize) 
+                 `mappend` renderLBS cont
   where
-    renderAction (SBS Hex bs)   = foldMap hexWord8 $ S.unpack bs
-    renderAction (SBS _ bs)     = D.fromList $ S.unpack bs
-    renderAction (LBS Hex lbs)  = foldMap hexWord8 $ L.unpack lbs
-    renderAction (LBS _ lbs)    = renderLBS lbs
-    renderAction (W8 w)         = return w
-    renderAction (W8S ws)       = D.fromList ws
-    renderAction (String cs)    = foldMap (D.fromList . charUtf8_list) cs
-    renderAction Flush          = mempty
-    renderAction (EnsureFree _) = mempty
-    renderAction (IDec i)       = D.fromList $ encodeASCII $ show i
-    renderAction (FDec f)       = D.fromList $ encodeASCII $ show f
-    renderAction (DDec d)       = D.fromList $ encodeASCII $ show d
+    renderAction (SBS Hex bs)   = tell $ foldMap hexWord8 $ S.unpack bs
+    renderAction (SBS _ bs)     = tell $ D.fromList $ S.unpack bs
+    renderAction (LBS Hex lbs)  = tell $ foldMap hexWord8 $ L.unpack lbs
+    renderAction (LBS _ lbs)    = tell $ renderLBS lbs
+    renderAction (W8 w)         = tell $ return w
+    renderAction (W8S ws)       = tell $ D.fromList ws
+    renderAction (String cs)    = tell $ foldMap (D.fromList . charUtf8_list) cs
+    renderAction Flush          = tell $ mempty
+    renderAction (EnsureFree _) = tell $ mempty
+    renderAction (FDec f)       = tell $ D.fromList $ encodeASCII $ show f
+    renderAction (DDec d)       = tell $ D.fromList $ encodeASCII $ show d
+    renderAction (ModState i)   = do
+        s <- get
+        tell (D.fromList $ encodeASCII $ show s)
+        put (s - i)
+
 
     renderLBS = D.fromList . L.unpack
     hexWord8  = D.fromList . wordHexFixed_list
 
-buildAction :: Action -> Builder
-buildAction (SBS Hex bs)            = byteStringHexFixed bs
-buildAction (SBS Copy bs)           = byteStringCopy bs
-buildAction (SBS Insert bs)         = byteStringInsert bs
-buildAction (SBS (Threshold i) bs)  = byteStringThreshold i bs
-buildAction (LBS Hex lbs)           = lazyByteStringHexFixed lbs
-buildAction (LBS Copy lbs)          = lazyByteStringCopy lbs
-buildAction (LBS Insert lbs)        = lazyByteStringInsert lbs
-buildAction (LBS (Threshold i) lbs) = lazyByteStringThreshold i lbs
-buildAction (W8 w)                  = word8 w
-buildAction (W8S ws)                = BE.encodeListWithF BE.word8 ws
-buildAction (String cs)             = stringUtf8 cs
-buildAction (IDec i)                = integerDec i
-buildAction (FDec f)                = floatDec f
-buildAction (DDec d)                = doubleDec d
-buildAction Flush                   = flush
-buildAction (EnsureFree minFree)    = ensureFree $ fromIntegral minFree
+buildAction :: Action -> StateT Int Put ()
+buildAction (SBS Hex bs)            = lift $ putBuilder $ byteStringHexFixed bs
+buildAction (SBS Smart bs)          = lift $ putBuilder $ byteString bs
+buildAction (SBS Copy bs)           = lift $ putBuilder $ byteStringCopy bs
+buildAction (SBS Insert bs)         = lift $ putBuilder $ byteStringInsert bs
+buildAction (SBS (Threshold i) bs)  = lift $ putBuilder $ byteStringThreshold i bs
+buildAction (LBS Hex lbs)           = lift $ putBuilder $ lazyByteStringHexFixed lbs
+buildAction (LBS Smart lbs)         = lift $ putBuilder $ lazyByteString lbs
+buildAction (LBS Copy lbs)          = lift $ putBuilder $ lazyByteStringCopy lbs
+buildAction (LBS Insert lbs)        = lift $ putBuilder $ lazyByteStringInsert lbs
+buildAction (LBS (Threshold i) lbs) = lift $ putBuilder $ lazyByteStringThreshold i lbs
+buildAction (W8 w)                  = lift $ putBuilder $ word8 w
+buildAction (W8S ws)                = lift $ putBuilder $ BE.encodeListWithF BE.word8 ws
+buildAction (String cs)             = lift $ putBuilder $ stringUtf8 cs
+buildAction (FDec f)                = lift $ putBuilder $ floatDec f
+buildAction (DDec d)                = lift $ putBuilder $ doubleDec d
+buildAction Flush                   = lift $ putBuilder $ flush
+buildAction (EnsureFree minFree)    = lift $ putBuilder $ ensureFree $ fromIntegral minFree
+buildAction (ModState i)            = do
+    s <- get
+    lift $ putBuilder $ intDec s
+    put (s - i)
 
 buildRecipe :: Recipe -> [Word8]
 buildRecipe recipe =
@@ -189,12 +203,14 @@ buildRecipe recipe =
 
 recipeComponents :: Recipe -> (Builder, Builder -> L.ByteString)
 recipeComponents (Recipe how firstSize otherSize cont as) =
-    (foldMap buildAction as, toLBS)
+    (b, toLBS)
   where
     toLBS = toLazyByteStringWith (strategy how firstSize otherSize) cont
       where
         strategy Safe      = safeStrategy
         strategy Untrimmed = untrimmedStrategy
+
+    b = fromPut $ evalStateT (mapM_ buildAction as) firstSize
 
 
 -- 'Arbitary' instances
@@ -217,7 +233,8 @@ instance Arbitrary S.ByteString where
       | otherwise = pure $ S.take (S.length bs `div` 2) bs
 
 instance Arbitrary Mode where
-    arbitrary = oneof [Threshold <$> arbitrary, pure Insert, pure Copy, pure Hex]
+    arbitrary = oneof 
+        [Threshold <$> arbitrary, pure Smart, pure Insert, pure Copy, pure Hex]
 
     shrink (Threshold i) = Threshold <$> shrink i
     shrink _             = []
@@ -231,11 +248,11 @@ instance Arbitrary Action where
         -- ensure that larger character codes are also tested
       , String <$> listOf ((\c -> chr (ord c * ord c)) <$> arbitrary)
       , pure Flush
+        -- never request more than 64kb free space
       , (EnsureFree . (`mod` 0xffff)) <$> arbitrary 
-        -- never request more than 64kb, free space
-      , IDec <$> arbitrary
       , FDec <$> arbitrary
       , DDec <$> arbitrary
+      , ModState <$> arbitrary
       ]
       where
 
@@ -250,9 +267,9 @@ instance Arbitrary Action where
     shrink (String cs)    = String <$> shrink cs
     shrink Flush          = []
     shrink (EnsureFree i) = EnsureFree <$> shrink i
-    shrink (IDec i)       = IDec <$> shrink i
     shrink (FDec f)       = FDec <$> shrink f
     shrink (DDec d)       = DDec <$> shrink d
+    shrink (ModState i)   = ModState <$> shrink i
 
 instance Arbitrary Strategy where
     arbitrary = elements [Safe, Untrimmed]
@@ -305,8 +322,9 @@ test_encodeUnfoldrF :: Test
 test_encodeUnfoldrF =
     compareImpls "encodeUnfoldrF word8" id encode
   where
+    toLBS = toLazyByteStringWith (safeStrategy 23 101) L.empty
     encode = 
-        L.unpack . toLazyByteString . BE.encodeUnfoldrWithF BE.word8 go
+        L.unpack . toLBS . BE.encodeUnfoldrWithF BE.word8 go
       where
         go []     = Nothing
         go (w:ws) = Just (w, ws)
@@ -316,8 +334,9 @@ test_encodeUnfoldrB :: Test
 test_encodeUnfoldrB =
     compareImpls "encodeUnfoldrB charUtf8" (concatMap charUtf8_list) encode
   where
+    toLBS = toLazyByteStringWith (safeStrategy 23 101) L.empty
     encode = 
-        L.unpack . toLazyByteString . BE.encodeUnfoldrWithB BE.charUtf8 go
+        L.unpack . toLBS . BE.encodeUnfoldrWithB BE.charUtf8 go
       where
         go []     = Nothing
         go (c:cs) = Just (c, cs)
@@ -385,6 +404,40 @@ parseSizePrefix parseLen =
       where
         (len, ws')      = parseLen ws
         (payload, rest) = splitAt len ws'
+
+------------------------------------------------------------------------------
+-- Testing the Put monad
+------------------------------------------------------------------------------
+
+testPut :: Test
+testPut = testGroup "Put monad"
+  [ testProperty "identity" (\v -> (pure id <*> putInt v) `eqPut` (putInt v))
+
+  , testProperty "composition" $ \(u, v, w) -> 
+        (pure (.) <*> minusInt u <*> minusInt v <*> putInt w) `eqPut`
+        (minusInt u <*> (minusInt v <*> putInt w))
+
+  , testProperty "homomorphism" $ \(f, x) -> 
+        (pure (f -) <*> pure x) `eqPut` (pure (f - x))
+
+  , testProperty "interchange" $ \(u, y) -> 
+        (minusInt u <*> pure y) `eqPut` (pure ($ y) <*> minusInt u)
+
+  , testProperty "ignore left value" $ \(u, v) -> 
+        (putInt u *> putInt v) `eqPut` (pure (const id) <*> putInt u <*> putInt v)
+
+  , testProperty "ignore right value" $ \(u, v) -> 
+        (putInt u <* putInt v) `eqPut` (pure const <*> putInt u <*> putInt v)
+
+  , testProperty "functor" $ \(f, x) -> 
+        (fmap (f -) (putInt x)) `eqPut` (pure (f -) <*> putInt x)
+
+  ]
+  where
+    putInt i    = putBuilder (intHost i) >> return i
+    minusInt i  = (-) <$> putInt i
+    run p       = toLazyByteString $ fromPut (do i <- p; _ <- putInt i; return ())
+    eqPut p1 p2 = run p1 == run p2
 
 
 ------------------------------------------------------------------------------

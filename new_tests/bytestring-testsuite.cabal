@@ -22,6 +22,7 @@ Executable testsuite
                  , byteorder                  == 1.0.*
                  , dlist                      == 0.5.*
                  , directory                  == 1.1.*
+                 , mtl                        == 2.0.*
 
 
   if flag(portable) || os(windows)

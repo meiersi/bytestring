@@ -172,9 +172,9 @@ module Data.ByteString.Lazy.Builder
       -- current buffer, or wants to directly insert a reference to a chunk of
       -- memory. In the last two cases, the 'Builder' also returns a
       -- continutation 'Builder' that the driver can call to fill the next
-      -- buffer. Here, we provide the two drivers that satisfy almost all use
+      -- buffer. Here, we provide the one drivers that satisfies almost all use
       -- cases. See "Data.ByteString.Lazy.Builder.Extras", for information
-      -- about fine-tuning them.
+      -- about fine-tuning it.
     , toLazyByteString
     -- , hPutBuilder
 

@@ -28,6 +28,7 @@ Todo items
     - check endianness for external representation of IEEE floats and doubles
     - document benchmarks
     - document tests
+    - make C function names more unique
     - prepare patches for main darcs repo:
         1. one patch that adds all files for the builder
         2. one patch per change in existing modules

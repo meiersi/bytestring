@@ -26,10 +26,8 @@ Todo items
       improvement. According to Milan Straka putting the most used constructor
       first may result in a speed improvement.
     - check endianness for external representation of IEEE floats and doubles
-    - cleanup doc
-    - port test and benchmark code from system-io-write
-    - test builders (more tests and use .cabal to build test-executable)
-    - cleanup documentation
+    - document benchmarks
+    - document tests
     - prepare patches for main darcs repo:
         1. one patch that adds all files for the builder
         2. one patch per change in existing modules

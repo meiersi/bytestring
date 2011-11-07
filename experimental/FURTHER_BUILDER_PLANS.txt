@@ -1,3 +1,15 @@
+Author: Simon Meier
+Date: 2011/11/07
+
+
+This was the plan of the integration. Most of the points have now been
+achieved. Some of the libraries outlined herein do not yet exist. The
+corresponding ideas should be gathered and distilled...it just takes
+some time...as usual :-)
+
+
+--- Old outline < mid 2011
+
 
 Integration of the blaze-builder work into 'bytestring' and a set of new
 libraries.

@@ -14,27 +14,23 @@ module Data.ByteString.Lazy.Builder.BasicEncoding.Tests (tests) where
 
 import           Control.Arrow (first)
 
-import           Data.Char (ord, chr)
-import           Data.Monoid 
+import           Data.Char  (ord)
 import qualified Data.ByteString.Lazy                                 as L
-import qualified Data.ByteString.Lazy.Builder.BasicEncoding           as BE
 import           Data.ByteString.Lazy.Builder
-import           Data.ByteString.Lazy.Builder.Extras
+import qualified Data.ByteString.Lazy.Builder.BasicEncoding           as BE
 import           Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils
 
-import           Numeric (showHex, readHex)
+import           Numeric (showHex)
 
 import           Foreign
-import           Unsafe.Coerce (unsafeCoerce)
 
-import           System.ByteOrder 
 import           Test.Framework
-import           Test.Framework.Providers.QuickCheck2 (testProperty)
 import           Test.QuickCheck (Arbitrary)
 
 
 tests :: [Test]
-tests = concat [testsBinary, testsASCII, testsChar8, testsUtf8 ]
+tests = concat [ testsBinary, testsASCII, testsChar8, testsUtf8
+               , testsCombinatorsB ]
 
 
 ------------------------------------------------------------------------------
@@ -114,49 +110,6 @@ testsBinary =
   , testFixedBoundF "word64VarFixedBound" word64VarFixedBound_list  BE.word64VarFixedBound
 
   ]
-
-bigEndian_list :: (Storable a, Bits a, Integral a) => a -> [Word8]
-bigEndian_list = reverse . littleEndian_list
-
-littleEndian_list :: (Storable a, Bits a, Integral a) => a -> [Word8]
-littleEndian_list x = 
-    map (fromIntegral . (x `shiftR`) . (8*)) $ [0..sizeOf x - 1]
-
-hostEndian_list :: (Storable a, Bits a, Integral a) => a -> [Word8]
-hostEndian_list = case byteOrder of
-    LittleEndian -> littleEndian_list
-    BigEndian    -> bigEndian_list
-    _            -> error $ 
-        "bounded-encoding: unsupported byteorder '" ++ show byteOrder ++ "'"
-
-
-float_list :: (Word32 -> [Word8]) -> Float -> [Word8]
-float_list f  = f . coerceFloatToWord32
-
-double_list :: (Word64 -> [Word8]) -> Double -> [Word8]
-double_list f = f . coerceDoubleToWord64
-
--- Note that the following use of unsafeCoerce is not guaranteed to be 
--- safe on GHC 7.0 and less. The reason is probably the following ticket:
---
---   http://hackage.haskell.org/trac/ghc/ticket/4092
---
--- However, that only applies if the value is loaded in a register. We
--- avoid this by coercing only boxed values and ensuring that they
--- remain boxed using a NOINLINE pragma.
--- 
-
--- | Super unsafe coerce a 'Float' to a 'Word32'. We have to explicitly mask
--- out the higher bits in case we are working on a 64-bit machine.
-{-# NOINLINE coerceFloatToWord32 #-}
-coerceFloatToWord32 :: Float -> Word32
-coerceFloatToWord32 = (.&. maxBound) . unsafeCoerce
-
--- | Super unsafe coerce a 'Double' to a 'Word64'. Currently, there are no
--- > 64 bit machines supported by GHC. But we just play it safe.
-{-# NOINLINE coerceDoubleToWord64 #-}
-coerceDoubleToWord64 :: Double -> Word64
-coerceDoubleToWord64 = (.&. maxBound) . unsafeCoerce
 
 
 -- Variable length encodings
@@ -260,9 +213,6 @@ testsChar8 :: [Test]
 testsChar8 = 
   [ testBoundedF "char8"     char8_list        BE.char8  ]
 
-char8_list :: Char -> [Word8]
-char8_list = return . fromIntegral . ord
-
 
 ------------------------------------------------------------------------------
 -- ASCII
@@ -316,24 +266,6 @@ testsASCII =
       (genHexFixedBound_list 'x') (BE.word64HexFixedBound 'x')
   ]
 
-int8HexFixed_list :: Int8 -> [Word8]
-int8HexFixed_list  = wordHexFixed_list . (fromIntegral :: Int8  -> Word8 )
-
-int16HexFixed_list :: Int16 -> [Word8]
-int16HexFixed_list = wordHexFixed_list . (fromIntegral :: Int16 -> Word16)
-
-int32HexFixed_list :: Int32 -> [Word8]
-int32HexFixed_list = wordHexFixed_list . (fromIntegral :: Int32 -> Word32)
-
-int64HexFixed_list :: Int64 -> [Word8]
-int64HexFixed_list = wordHexFixed_list . (fromIntegral :: Int64 -> Word64)
-
-floatHexFixed_list :: Float -> [Word8]
-floatHexFixed_list  = float_list wordHexFixed_list
-
-doubleHexFixed_list :: Double -> [Word8]
-doubleHexFixed_list = double_list wordHexFixed_list
-
 -- | PRE: positive bound and value.
 genDecFixedBound_list :: (Show a, Integral a)
                       => Char    -- ^ Padding character.
@@ -366,4 +298,39 @@ genHexFixedBound_list padChar bound =
 testsUtf8 :: [Test]
 testsUtf8 = 
   [ testBoundedB "charUtf8"  charUtf8_list  BE.charUtf8 ]
+
+
+------------------------------------------------------------------------------
+-- BoundedEncoding combinators
+------------------------------------------------------------------------------
+
+maybeB :: BE.BoundedEncoding () -> BE.BoundedEncoding a -> BE.BoundedEncoding (Maybe a)
+maybeB nothing just = maybe (Left ()) Right BE.>$< BE.eitherB nothing just
+
+testsCombinatorsB :: [Test]
+testsCombinatorsB =
+  [ compareImpls "mapMaybe (via BoundedEncoding)" 
+        (L.pack . concatMap encChar) 
+        (toLazyByteString . encViaBuilder)
+
+  , compareImpls "filter (via BoundedEncoding)" 
+        (L.pack . filter (< 32)) 
+        (toLazyByteString . BE.encodeListWithB (BE.ifB (< 32) (BE.fromF BE.word8) BE.emptyB))
+
+  , compareImpls "pairB"
+        (L.pack . concatMap (\(c,w) -> charUtf8_list c ++ [w]))
+        (toLazyByteString . BE.encodeListWithB 
+            ((\(c,w) -> (c,(w,undefined))) BE.>$< 
+                BE.charUtf8 BE.>*< (BE.fromF BE.word8) BE.>*< (BE.fromF BE.emptyF)))
+  ]
+  where
+    encChar = maybe [112] (hostEndian_list . ord)
+
+    encViaBuilder = BE.encodeListWithB $ maybeB (BE.fromF $ (\_ -> 112) BE.>$< BE.word8) 
+                                                (ord BE.>$< (BE.fromF $ BE.intHost))
+
+
+
+
+
 

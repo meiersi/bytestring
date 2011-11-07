@@ -392,8 +392,8 @@ is to encode the data first into a separate buffer, compute the length of the
 encoded data, write it to the current output buffer, and append the separate
 buffers. The drawback of this method is that it requires a ...
 -}
-  , withSizeFB
-  , withSizeBB
+  -- , withSizeFB
+  -- , withSizeBB
   , encodeWithSize
 
   , encodeChunked

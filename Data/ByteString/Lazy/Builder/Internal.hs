@@ -94,13 +94,11 @@ module Data.ByteString.Lazy.Builder.Internal (
   , Put
   , put
   , runPut
-  , runPutWith
   , hPut
 
   -- ** Streams of chunks interleaved with IO
   , ChunkIOStream(..)
   , buildStepToCIOS
-  , buildStepToCIOSUntrimmed
   , ciosToLazyByteString
 
   -- ** Conversion to and from Builders
@@ -108,7 +106,7 @@ module Data.ByteString.Lazy.Builder.Internal (
   , fromPut
 
   -- ** Lifting IO actions
-  , putLiftIO
+  -- , putLiftIO
 
 ) where
 
@@ -349,11 +347,6 @@ runPut :: Put a       -- ^ Put to run
                       -- the 'done' signal.
 runPut (Put p) = p $ \x (BufferRange op _) -> return $ Done op x
 
--- | Run a 'Put' with a continuation step.
-{-# INLINE runPutWith #-}
-runPutWith :: Put a  -> (a -> BuildStep b) -> BuildStep b 
-runPutWith (Put p) = p 
-
 instance Functor Put where
   fmap f p = Put $ \k -> unPut p (\x -> k (f x))
   {-# INLINE fmap #-}
@@ -396,10 +389,12 @@ fromPut (Put p) = Builder $ \k -> p (\_ -> k)
 -- Lifting IO actions
 ---------------------
 
+{-
 -- | Lift an 'IO' action to a 'Put' action.
 {-# INLINE putLiftIO #-}
 putLiftIO :: IO a -> Put a
 putLiftIO io = put $ \k br -> io >>= (`k` br)
+-}
 
 
 ------------------------------------------------------------------------------
@@ -773,15 +768,6 @@ ciosToLazyByteString k = go
     go (Yield1 bs io)     = L.Chunk bs $ unsafePerformIO (go <$> io)
     go (YieldC _ lbsC io) = lbsC $ unsafePerformIO (go <$> io)
 
-
--- | A default way for converting a 'BuildStep' expected to be large (> 4kb) to
--- a throw-away 'ChunkIOStream'. 
-buildStepToCIOSUntrimmed :: BuildStep a -> IO (ChunkIOStream a)
-buildStepToCIOSUntrimmed =
-    buildStepToCIOS (untrimmedStrategy L.defaultChunkSize L.defaultChunkSize)
-                    (return . Finished)
-
-
 {-# INLINE buildStepToCIOS #-}
 buildStepToCIOS
     :: AllocationStrategy          -- ^ Buffer allocation strategy to use
@@ -794,8 +780,10 @@ buildStepToCIOS (AllocationStrategy firstSize bufSize trim) k =
     fillNew !step0 !size = do
         S.mallocByteString size >>= fill step0
       where
-        fill !step !fpbuf =
-            fillWithBuildStep step doneH fullH insertChunksH br
+        fill !step !fpbuf = do
+            res <- fillWithBuildStep step doneH fullH insertChunksH br
+            touchForeignPtr fpbuf
+            return res
           where
             op = unsafeForeignPtrToPtr fpbuf -- safe due to mkCIOS
             pe = op `plusPtr` size
@@ -817,6 +805,8 @@ buildStepToCIOS (AllocationStrategy firstSize bufSize trim) k =
             -- Yield a chunk, trimming it if necesary
             {-# INLINE wrapChunk #-}
             wrapChunk !op' mkCIOS
+              | pe < op'            = error $
+                  "buildStepToCIOS: overwrite by " ++ show (op' `minusPtr` pe) ++ " bytes"
               | chunkSize == 0      = mkCIOS True
               | trim chunkSize size = do
                   bs <- S.create chunkSize $ \pbuf -> copyBytes pbuf op chunkSize

@@ -16,14 +16,12 @@
 --
 module Data.ByteString.Lazy.Builder.BasicEncoding.Internal.Base16 (
     EncodingTable
-  , upperTable
+  -- , upperTable
   , lowerTable
   , encode4_as_8 
   , encode8_as_16h
-  , encode8_as_8_8
+  -- , encode8_as_8_8
   ) where
-
-import Control.Applicative 
 
 import qualified Data.ByteString          as S
 import qualified Data.ByteString.Internal as S
@@ -45,16 +43,6 @@ tableFromList xs = case S.pack xs of S.PS fp _ _ -> EncodingTable fp
 unsafeIndex :: EncodingTable -> Int -> IO Word8
 unsafeIndex (EncodingTable table) = peekElemOff (unsafeForeignPtrToPtr table)
 
-{-# NOINLINE upperAlphabet #-}
-upperAlphabet :: EncodingTable
-upperAlphabet = 
-    tableFromList $ map (fromIntegral . fromEnum) $ ['0'..'9'] ++ ['A'..'F']
-
-{-# NOINLINE lowerAlphabet #-}
-lowerAlphabet :: EncodingTable
-lowerAlphabet = 
-    tableFromList $ map (fromIntegral . fromEnum) $ ['0'..'9'] ++ ['a'..'f']
-
 base16EncodingTable :: EncodingTable -> IO EncodingTable
 base16EncodingTable alphabet = do
     xs <- sequence $ concat $ [ [ix j, ix k] | j <- [0..15], k <- [0..15] ]
@@ -62,11 +50,23 @@ base16EncodingTable alphabet = do
   where
     ix = unsafeIndex alphabet
 
+{-
+{-# NOINLINE upperAlphabet #-}
+upperAlphabet :: EncodingTable
+upperAlphabet = 
+    tableFromList $ map (fromIntegral . fromEnum) $ ['0'..'9'] ++ ['A'..'F']
+
 -- | The encoding table for hexadecimal values with upper-case characters;
 -- e.g., DEADBEEF.
 {-# NOINLINE upperTable #-}
 upperTable :: EncodingTable
 upperTable = unsafePerformIO $ base16EncodingTable upperAlphabet
+-}
+
+{-# NOINLINE lowerAlphabet #-}
+lowerAlphabet :: EncodingTable
+lowerAlphabet = 
+    tableFromList $ map (fromIntegral . fromEnum) $ ['0'..'9'] ++ ['a'..'f']
 
 -- | The encoding table for hexadecimal values with lower-case characters;
 -- e.g., deadbeef.
@@ -95,6 +95,7 @@ encode8_as_16h :: EncodingTable -> Word8 -> IO Word16
 encode8_as_16h (EncodingTable table) = 
     peekElemOff (castPtr $ unsafeForeignPtrToPtr table) . fromIntegral
 
+{-
 -- | Encode an octet as a big-endian ordered tuple of octets; i.e.,
 --
 -- >   encode8_as_8_8 lowerTable 10
@@ -106,4 +107,4 @@ encode8_as_8_8 table x =
     (,) <$> unsafeIndex table i <*> unsafeIndex table (i + 1)
   where
     i = 2 * fromIntegral x
-
+-}

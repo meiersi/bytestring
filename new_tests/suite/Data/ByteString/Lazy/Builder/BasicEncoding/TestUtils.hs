@@ -6,7 +6,7 @@
 -- Stability   : experimental
 -- Portability : tested on GHC only
 --
--- Testing the correctness of bounded encodings. See the file 'test/TestAll.hs'
+-- Testing utilities for comparing
 -- for an example on how to use the functions provided here.
 -- 
 module Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils (
@@ -20,29 +20,38 @@ module Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils (
   , compareImpls
 
   -- * Testing 'BoundedEncoding's
-  , testB
   , testBoundedB
-  {-
-    EncodingFailure
-  , evalEncoding
-  , showEncoding
-  , testEncoding
-  , cmpEncoding
-  , cmpEncoding_
-  , cmpEncodingErr
-  -}
 
   -- * Encoding reference implementations
+
+  , charUtf8_list
+  , char8_list
+
+  -- ** ASCII-based encodings
   , encodeASCII
   , encodeForcedASCII
   , charASCII_list
   , dec_list
   , hex_list
   , wordHexFixed_list
+  , int8HexFixed_list
+  , int16HexFixed_list
+  , int32HexFixed_list
+  , int64HexFixed_list
+  , floatHexFixed_list
+  , doubleHexFixed_list
 
-  , charUtf8_list
-
+  -- ** Binary
   , parseVar
+
+  , bigEndian_list
+  , littleEndian_list
+  , hostEndian_list
+  , float_list
+  , double_list
+  , coerceFloatToWord32
+  , coerceDoubleToWord64
+
   ) where
 
 import           Control.Arrow (first)
@@ -54,6 +63,9 @@ import           Data.Char (chr, ord)
 import           Numeric (showHex)
 
 import           Foreign
+
+import           System.ByteOrder
+import           Unsafe.Coerce (unsafeCoerce)
 
 import           Test.Framework
 import           Test.Framework.Providers.QuickCheck2
@@ -79,7 +91,6 @@ testBoundedProperty name p = testGroup name
 quote :: String -> String
 quote cs = '`' : cs ++ "'"
 
-
 -- | Quote a @[Word8]@ list as as 'String'.
 quoteWord8s :: [Word8] -> String
 quoteWord8s = quote . map (chr . fromIntegral)
@@ -87,6 +98,9 @@ quoteWord8s = quote . map (chr . fromIntegral)
 
 -- FixedEncoding
 ----------------
+
+-- TODO: Port code that checks for low-level properties of basic encodings (no
+-- overwrites, all bytes written, etc.) from old 'system-io-write' library
 
 -- | Test a 'FixedEncoding' against a reference implementation.
 testF :: (Arbitrary a, Show a)
@@ -145,15 +159,6 @@ testFixedBoundF name ref bfe =
 -- BoundedEncoding
 ------------------
 
--- | Test a 'BoundedEncoding' against a reference implementation.
-testB :: (Arbitrary a, Show a)
-      => String 
-      -> (a -> [Word8]) 
-      -> BoundedEncoding a 
-      -> Test
-testB name ref fe = 
-    testProperty name $ \x -> evalB fe x == ref x
-
 -- | Test a 'BoundedEncoding' of a bounded value against a reference implementation
 -- and ensure that the bounds are always included as testcases.
 testBoundedB :: (Arbitrary a, Bounded a, Show a)
@@ -175,13 +180,16 @@ testBoundedB name ref fe =
         y  = evalB fe x
         y' = ref x
 
+-- | Compare two implementations of a function.
+compareImpls :: (Arbitrary a, Show a, Show b, Eq b)
+             => TestName -> (a -> b) -> (a -> b) -> Test
 compareImpls name f1 f2 = 
     testProperty name check
   where
     check x 
       | y1 == y2  = True
       | otherwise = error $ unlines $
-          [ "testBoundedB: results disagree for " ++ quote (show x)
+          [ "compareImpls: results disagree for " ++ quote (show x)
           , " f1: " ++ show y1
           , " f2: " ++ show y2
           ]
@@ -189,167 +197,44 @@ compareImpls name f1 f2 =
         y1 = f1 x
         y2 = f2 x
 
------------------------------------------------------------------------------
 
-
-{- OLD CODE from separate library
-
-import Data.Maybe
-import Foreign
-import Numeric (showHex)
-
-import Data.ByteString.Lazy.Builder.BasicEncoding.Internal
-
-------------------------------------------------------------------------------
--- Testing Encodings
-------------------------------------------------------------------------------
-
--- Representing failures
-------------------------
-
--- | A failure of an 'Encoding'.
-data EncodingFailure = EncodingFailure  String  EncodingResult  EncodingResult
-       deriving( Eq )
-
-type EncodingResult = ( [Word8]         -- full list
-                   , [[Word8]]       -- split list
-                   , [Ptr Word8] )   -- in-write pointers
-
-instance Show EncodingFailure where
-    show (EncodingFailure cause res1 res2) = unlines $
-            [ ""
-            , "Encoding violated post-condition: " ++ cause ++ "!"
-            ] ++
-            (map ("  " ++) $ lines $ unlines
-                [ "String based result comparison:"
-                , showEncodingResult stringLine 1 res1
-                , showEncodingResult stringLine 2 res2
-                , "Hex based result comparison:"
-                , showEncodingResult hexLine 1 res1
-                , showEncodingResult hexLine 2 res2 
-                ] )
-      where
-        hexLine = concatMap (\x -> pad2 $ showHex x "")
-        pad2 [ ] = '0':'0':[]
-        pad2 [x] = '0':x  :[]
-        pad2 xs  = xs
-
-        stringLine = map (toEnum . fromIntegral)
-
-        showEncodingResult line i (full, splits, ptrs) =
-            unlines $ zipWith (++) names 
-                    $ map (quotes . line) (full : splits) ++ [ppPtrs]
-          where
-            names = [ show (i::Int) ++ " total result:   "
-                    , "  front slack:    "
-                    , "  write result:   "
-                    , "  reserved space: "
-                    , "  back slack:     "
-                    , "  pointers/diffs: "
-                    ]
-            quotes xs = "'" ++ xs ++ "'"
-            ppPtrs = show (head ptrs) ++ do
-                (p1,p2) <- zip ptrs (tail ptrs)
-                "|" ++ show (p2 `minusPtr` p1) ++ "|" ++ show p2
-
- 
--- Execution a write and testing its invariants
------------------------------------------------
-
--- | Execute an 'Encoding' and return the written list of bytes.
-evalEncoding :: Encoding a -> a -> [Word8]
-evalEncoding w x = case testEncoding w x of
-    Left err  -> error $ "evalEncoding: " ++ show err
-    Right res -> res
-
--- | Execute an 'Encoding' and return the written list of bytes interpreted as
--- Unicode codepoints.
-showEncoding :: Encoding a -> a -> [Char]
-showEncoding w = map (toEnum . fromEnum) . evalEncoding w
-
--- | Execute an 'Encoding' twice and check that all post-conditions hold and the
--- written values are identical. In case of success, a list of the written
--- bytes is returned.
-testEncoding :: Encoding a -> a -> Either EncodingFailure [Word8]
-testEncoding = testEncodingWith (5, 11)
-
-testEncodingWith :: (Int, Int) -> Encoding a -> a -> Either EncodingFailure [Word8]
-testEncodingWith (slackF, slackB) w x = unsafePerformIO $ do
-    res1@(xs1, _, _) <- execEncoding (replicate (slackF + slackB + bound) 40)
-    res2             <- execEncoding (invert xs1)
-    return $ check res1 res2
-  where
-    bound = getBound w
-
-    invert = map complement
-
-    check res1@(xs1, [frontSlack1, written1, reserved1, backSlack1], ptrs1)
-          res2@(_  , [frontSlack2, written2, reserved2, backSlack2], ptrs2)
-      -- test properties of first write
-      | length frontSlack1 /= slackF                = err "front slack length"
-      | length backSlack1   /= slackB               = err "back slack length"
-      | length xs1 /= slackF + slackB + bound       = err "total length"
-      | not (ascending ptrs1)                       = err "pointers 1"
-      -- test remaining properties of second write
-      | not (ascending ptrs2)                       = err "pointers 2"
-      -- compare encodings
-      | frontSlack1      /= invert frontSlack2      = err "front over-write"
-      | backSlack1       /= invert backSlack2       = err "back over-write"
-      | written1         /= written2                = err "different encodings"
-      | length reserved1 /= length reserved2        = err "different reserved lengths"
-      | any (\(a,b) -> a /= complement b) untouched = err "different reserved usage"
-      | otherwise                                   = Right written1
-      where
-        (_, untouched) = break (uncurry (/=)) $ zip reserved1 reserved2
-        err info = Left (EncodingFailure info res1 res2)
-        ascending xs = all (uncurry (<=)) $ zip xs (tail xs)
-    check _ _ = error "impossible"
-
-    -- list-to-memory, run write, memory-to-list, report results
-    execEncoding ys0 = do
-      r@(buf, size) <- R.fromList ys0
-      withForeignPtr buf $ \sp -> do
-          let ep      = sp `plusPtr` size
-              op      = sp `plusPtr` slackF
-              opBound = op `plusPtr` bound
-          op' <- runEncoding w x op
-          ys1 <- R.toList r
-          touchForeignPtr buf
-          -- cut the written list into: front slack, written, reserved, back slack
-          case splitAt (op `minusPtr` sp) ys1 of
-              (frontSlack, ys2) -> case splitAt (op' `minusPtr` op) ys2 of
-                  (written, ys3) -> case splitAt (opBound `minusPtr` op') ys3 of
-                      (reserved, backSlack) -> return $
-                          (ys1, [frontSlack, written, reserved, backSlack], [sp, op, op', opBound, ep])
-
--- | Compare an 'Encoding' against a reference implementation. @cmpEncoding f e x@
--- returns 'Nothing' iff the encoding @e@ and the function @f@ yield the same
--- result when applied to @x@.
-cmpEncoding :: (a -> [Word8]) -> Encoding a -> a 
-         -> Maybe (a, [Word8], Either EncodingFailure [Word8])
-cmpEncoding f w x 
-  | result == Right (f x) = Nothing
-  | otherwise             = Just (x, f x, result)
-  where
-    result = testEncoding w x
-
--- | Like 'cmpEncoding', but return only whether the write yielded the same result
--- as the reference implementation.
-cmpEncoding_ :: Show a => (a -> [Word8]) -> Encoding a -> a -> Bool
-cmpEncoding_ f w = isNothing . cmpEncoding f w
-
--- | Like 'cmpEncoding', but return an error using @error . show@. This is a
--- convenient way to get a QuickCheck test to output debug information about
--- what went wrong.
-cmpEncodingErr :: Show a => (a -> [Word8]) -> Encoding a -> a -> Bool
-cmpEncodingErr f w = maybe True (error . show) . cmpEncoding f w
-
-
--}
 
 ------------------------------------------------------------------------------
 -- Encoding reference implementations
 ------------------------------------------------------------------------------
+
+-- | Char8 encoding: truncate Unicode codepoint to 8-bits.
+char8_list :: Char -> [Word8]
+char8_list = return . fromIntegral . ord
+
+-- | Encode a Haskell String to a list of Word8 values, in UTF8 format.
+--
+-- Copied from 'utf8-string-0.3.6' to make tests self-contained. 
+-- Copyright (c) 2007, Galois Inc. All rights reserved.
+--
+charUtf8_list :: Char -> [Word8]
+charUtf8_list =
+    map fromIntegral . encode . ord
+  where
+    encode oc
+      | oc <= 0x7f       = [oc]
+
+      | oc <= 0x7ff      = [ 0xc0 + (oc `shiftR` 6)
+                           , 0x80 + oc .&. 0x3f
+                           ]
+
+      | oc <= 0xffff     = [ 0xe0 + (oc `shiftR` 12)
+                           , 0x80 + ((oc `shiftR` 6) .&. 0x3f)
+                           , 0x80 + oc .&. 0x3f
+                           ]
+      | otherwise        = [ 0xf0 + (oc `shiftR` 18)
+                           , 0x80 + ((oc `shiftR` 12) .&. 0x3f)
+                           , 0x80 + ((oc `shiftR` 6) .&. 0x3f)
+                           , 0x80 + oc .&. 0x3f
+                           ]
+
+-- ASCII-based encodings
+------------------------
 
 -- | Encode a 'String' of only ASCII characters using the ASCII encoding.
 encodeASCII :: String -> [Word8]
@@ -380,6 +265,69 @@ wordHexFixed_list x =
  where
    pad n cs = replicate (n - length cs) '0' ++ cs
 
+int8HexFixed_list :: Int8 -> [Word8]
+int8HexFixed_list  = wordHexFixed_list . (fromIntegral :: Int8  -> Word8 )
+
+int16HexFixed_list :: Int16 -> [Word8]
+int16HexFixed_list = wordHexFixed_list . (fromIntegral :: Int16 -> Word16)
+
+int32HexFixed_list :: Int32 -> [Word8]
+int32HexFixed_list = wordHexFixed_list . (fromIntegral :: Int32 -> Word32)
+
+int64HexFixed_list :: Int64 -> [Word8]
+int64HexFixed_list = wordHexFixed_list . (fromIntegral :: Int64 -> Word64)
+
+floatHexFixed_list :: Float -> [Word8]
+floatHexFixed_list  = float_list wordHexFixed_list
+
+doubleHexFixed_list :: Double -> [Word8]
+doubleHexFixed_list = double_list wordHexFixed_list
+
+-- Binary
+---------
+
+bigEndian_list :: (Storable a, Bits a, Integral a) => a -> [Word8]
+bigEndian_list = reverse . littleEndian_list
+
+littleEndian_list :: (Storable a, Bits a, Integral a) => a -> [Word8]
+littleEndian_list x = 
+    map (fromIntegral . (x `shiftR`) . (8*)) $ [0..sizeOf x - 1]
+
+hostEndian_list :: (Storable a, Bits a, Integral a) => a -> [Word8]
+hostEndian_list = case byteOrder of
+    LittleEndian -> littleEndian_list
+    BigEndian    -> bigEndian_list
+    _            -> error $ 
+        "bounded-encoding: unsupported byteorder '" ++ show byteOrder ++ "'"
+
+
+float_list :: (Word32 -> [Word8]) -> Float -> [Word8]
+float_list f  = f . coerceFloatToWord32
+
+double_list :: (Word64 -> [Word8]) -> Double -> [Word8]
+double_list f = f . coerceDoubleToWord64
+
+-- Note that the following use of unsafeCoerce is not guaranteed to be 
+-- safe on GHC 7.0 and less. The reason is probably the following ticket:
+--
+--   http://hackage.haskell.org/trac/ghc/ticket/4092
+--
+-- However, that only applies if the value is loaded in a register. We
+-- avoid this by coercing only boxed values and ensuring that they
+-- remain boxed using a NOINLINE pragma.
+-- 
+
+-- | Super unsafe coerce a 'Float' to a 'Word32'. We have to explicitly mask
+-- out the higher bits in case we are working on a 64-bit machine.
+{-# NOINLINE coerceFloatToWord32 #-}
+coerceFloatToWord32 :: Float -> Word32
+coerceFloatToWord32 = (.&. maxBound) . unsafeCoerce
+
+-- | Super unsafe coerce a 'Double' to a 'Word64'. Currently, there are no
+-- > 64 bit machines supported by GHC. But we just play it safe.
+{-# NOINLINE coerceDoubleToWord64 #-}
+coerceDoubleToWord64 :: Double -> Word64
+coerceDoubleToWord64 = (.&. maxBound) . unsafeCoerce
 
 -- | Parse a variable length encoding
 parseVar :: (Num a, Bits a) => [Word8] -> (a, [Word8])
@@ -393,30 +341,4 @@ parseVar =
       where
         add x = (x `shiftL` 7) .|. (fromIntegral w .&. 0x7f)
 
-
--- | Encode a Haskell String to a list of Word8 values, in UTF8 format.
---
--- Copied from 'utf8-string-0.3.6' to make tests self-contained. 
--- Copyright (c) 2007, Galois Inc. All rights reserved.
---
-charUtf8_list :: Char -> [Word8]
-charUtf8_list =
-    map fromIntegral . encode . ord
-  where
-    encode oc
-      | oc <= 0x7f       = [oc]
-
-      | oc <= 0x7ff      = [ 0xc0 + (oc `shiftR` 6)
-                           , 0x80 + oc .&. 0x3f
-                           ]
-
-      | oc <= 0xffff     = [ 0xe0 + (oc `shiftR` 12)
-                           , 0x80 + ((oc `shiftR` 6) .&. 0x3f)
-                           , 0x80 + oc .&. 0x3f
-                           ]
-      | otherwise        = [ 0xf0 + (oc `shiftR` 18)
-                           , 0x80 + ((oc `shiftR` 12) .&. 0x3f)
-                           , 0x80 + ((oc `shiftR` 6) .&. 0x3f)
-                           , 0x80 + oc .&. 0x3f
-                           ]
 

@@ -55,11 +55,15 @@ tests =
   , testHandlePutBuilder 
   , testPut
   ] ++
-  testsEncodingToBuilder
+  testsEncodingToBuilder ++
+  testsBinary ++
+  testsASCII ++
+  testsChar8 ++
+  testsUtf8
 
 
 ------------------------------------------------------------------------------
--- Testing chunk-handling.
+-- Testing 'Builder' execution
 ------------------------------------------------------------------------------
 
 testBuilderRecipe :: Test
@@ -405,39 +409,43 @@ parseSizePrefix parseLen =
         (len, ws')      = parseLen ws
         (payload, rest) = splitAt len ws'
 
+
 ------------------------------------------------------------------------------
 -- Testing the Put monad
 ------------------------------------------------------------------------------
 
 testPut :: Test
 testPut = testGroup "Put monad"
-  [ testProperty "identity" (\v -> (pure id <*> putInt v) `eqPut` (putInt v))
+  [ testLaw "identity" (\v -> (pure id <*> putInt v) `eqPut` (putInt v))
 
-  , testProperty "composition" $ \(u, v, w) -> 
+  , testLaw "composition" $ \(u, v, w) -> 
         (pure (.) <*> minusInt u <*> minusInt v <*> putInt w) `eqPut`
         (minusInt u <*> (minusInt v <*> putInt w))
 
-  , testProperty "homomorphism" $ \(f, x) -> 
+  , testLaw "homomorphism" $ \(f, x) -> 
         (pure (f -) <*> pure x) `eqPut` (pure (f - x))
 
-  , testProperty "interchange" $ \(u, y) -> 
+  , testLaw "interchange" $ \(u, y) -> 
         (minusInt u <*> pure y) `eqPut` (pure ($ y) <*> minusInt u)
 
-  , testProperty "ignore left value" $ \(u, v) -> 
+  , testLaw "ignore left value" $ \(u, v) -> 
         (putInt u *> putInt v) `eqPut` (pure (const id) <*> putInt u <*> putInt v)
 
-  , testProperty "ignore right value" $ \(u, v) -> 
+  , testLaw "ignore right value" $ \(u, v) -> 
         (putInt u <* putInt v) `eqPut` (pure const <*> putInt u <*> putInt v)
 
-  , testProperty "functor" $ \(f, x) -> 
+  , testLaw "functor" $ \(f, x) -> 
         (fmap (f -) (putInt x)) `eqPut` (pure (f -) <*> putInt x)
 
   ]
   where
-    putInt i    = putBuilder (intHost i) >> return i
+    putInt i    = putBuilder (integerDec i) >> return i
     minusInt i  = (-) <$> putInt i
     run p       = toLazyByteString $ fromPut (do i <- p; _ <- putInt i; return ())
-    eqPut p1 p2 = run p1 == run p2
+    eqPut :: Put Integer -> Put Integer -> (L.ByteString, L.ByteString)
+    eqPut p1 p2 = (run p1, run p1)
+
+    testLaw name f = compareImpls name (fst . f) (snd . f)
 
 
 ------------------------------------------------------------------------------
@@ -461,3 +469,117 @@ ensureFree minFree =
           | otherwise = k br'
           where
             freeSpace = ope' `minusPtr` op'
+
+
+------------------------------------------------------------------------------
+-- Testing the pre-defined builders
+------------------------------------------------------------------------------
+
+testBuilderConstr :: (Arbitrary a, Show a) 
+                  => TestName -> (a -> [Word8]) -> (a -> Builder) -> Test
+testBuilderConstr name ref mkBuilder = 
+    testProperty name check
+  where
+    check x =
+        (ws ++ ws) == 
+        (L.unpack $ toLazyByteString $ mkBuilder x `mappend` mkBuilder x)
+      where
+        ws = ref x
+
+
+testsBinary :: [Test]
+testsBinary =
+  [ testBuilderConstr "word8"     bigEndian_list    word8
+  , testBuilderConstr "int8"      bigEndian_list    int8
+
+  --  big-endian
+  , testBuilderConstr "int16BE"   bigEndian_list    int16BE
+  , testBuilderConstr "int32BE"   bigEndian_list    int32BE
+  , testBuilderConstr "int64BE"   bigEndian_list    int64BE
+                              
+  , testBuilderConstr "word16BE"  bigEndian_list    word16BE
+  , testBuilderConstr "word32BE"  bigEndian_list    word32BE
+  , testBuilderConstr "word64BE"  bigEndian_list    word64BE
+
+  , testBuilderConstr "floatLE"     (float_list  littleEndian_list) floatLE
+  , testBuilderConstr "doubleLE"    (double_list littleEndian_list) doubleLE
+
+  --  little-endian
+  , testBuilderConstr "int16LE"   littleEndian_list int16LE
+  , testBuilderConstr "int32LE"   littleEndian_list int32LE
+  , testBuilderConstr "int64LE"   littleEndian_list int64LE
+                             
+  , testBuilderConstr "word16LE"  littleEndian_list word16LE
+  , testBuilderConstr "word32LE"  littleEndian_list word32LE
+  , testBuilderConstr "word64LE"  littleEndian_list word64LE
+
+  , testBuilderConstr "floatBE"     (float_list  bigEndian_list)   floatBE
+  , testBuilderConstr "doubleBE"    (double_list bigEndian_list)   doubleBE
+
+  --  host dependent
+  , testBuilderConstr "int16Host"   hostEndian_list  int16Host
+  , testBuilderConstr "int32Host"   hostEndian_list  int32Host
+  , testBuilderConstr "int64Host"   hostEndian_list  int64Host
+  , testBuilderConstr "intHost"     hostEndian_list  intHost
+                              
+  , testBuilderConstr "word16Host"  hostEndian_list  word16Host
+  , testBuilderConstr "word32Host"  hostEndian_list  word32Host
+  , testBuilderConstr "word64Host"  hostEndian_list  word64Host
+  , testBuilderConstr "wordHost"    hostEndian_list  wordHost
+
+  , testBuilderConstr "floatHost"   (float_list  hostEndian_list)   floatHost
+  , testBuilderConstr "doubleHost"  (double_list hostEndian_list)   doubleHost
+  ]
+
+testsASCII :: [Test]
+testsASCII = 
+  [ testBuilderConstr "charASCII" charASCII_list charASCII
+  , testBuilderConstr "stringASCII" (concatMap charASCII_list) stringASCII
+
+  , testBuilderConstr "int8Dec"   dec_list int8Dec
+  , testBuilderConstr "int16Dec"  dec_list int16Dec
+  , testBuilderConstr "int32Dec"  dec_list int32Dec
+  , testBuilderConstr "int64Dec"  dec_list int64Dec
+  , testBuilderConstr "intDec"    dec_list intDec
+
+  , testBuilderConstr "word8Dec"  dec_list word8Dec
+  , testBuilderConstr "word16Dec" dec_list word16Dec
+  , testBuilderConstr "word32Dec" dec_list word32Dec
+  , testBuilderConstr "word64Dec" dec_list word64Dec
+  , testBuilderConstr "wordDec"   dec_list wordDec
+
+  , testBuilderConstr "integerDec" dec_list integerDec
+  , testBuilderConstr "floatDec"   dec_list floatDec
+  , testBuilderConstr "doubleDec"  dec_list doubleDec
+
+  , testBuilderConstr "word8Hex"  hex_list word8Hex
+  , testBuilderConstr "word16Hex" hex_list word16Hex
+  , testBuilderConstr "word32Hex" hex_list word32Hex
+  , testBuilderConstr "word64Hex" hex_list word64Hex
+  , testBuilderConstr "wordHex"   hex_list wordHex
+
+  , testBuilderConstr "word8HexFixed"  wordHexFixed_list word8HexFixed
+  , testBuilderConstr "word16HexFixed" wordHexFixed_list word16HexFixed
+  , testBuilderConstr "word32HexFixed" wordHexFixed_list word32HexFixed
+  , testBuilderConstr "word64HexFixed" wordHexFixed_list word64HexFixed
+
+  , testBuilderConstr "int8HexFixed"  int8HexFixed_list  int8HexFixed
+  , testBuilderConstr "int16HexFixed" int16HexFixed_list int16HexFixed
+  , testBuilderConstr "int32HexFixed" int32HexFixed_list int32HexFixed
+  , testBuilderConstr "int64HexFixed" int64HexFixed_list int64HexFixed
+
+  , testBuilderConstr "floatHexFixed"  floatHexFixed_list  floatHexFixed
+  , testBuilderConstr "doubleHexFixed" doubleHexFixed_list doubleHexFixed
+  ]
+
+testsChar8 :: [Test]
+testsChar8 = 
+  [ testBuilderConstr "charChar8" char8_list char8
+  , testBuilderConstr "stringChar8" (concatMap char8_list) string8
+  ]
+
+testsUtf8 :: [Test]
+testsUtf8 = 
+  [ testBuilderConstr "charUtf8" charUtf8_list charUtf8
+  , testBuilderConstr "stringUtf8" (concatMap charUtf8_list) stringUtf8
+  ]

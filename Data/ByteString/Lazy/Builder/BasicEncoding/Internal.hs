@@ -30,7 +30,7 @@ module Data.ByteString.Lazy.Builder.BasicEncoding.Internal (
   , emptyF
   , contramapF
   , pairF
-  , liftIOF
+  -- , liftIOF
 
   , storableToF
 
@@ -46,13 +46,13 @@ module Data.ByteString.Lazy.Builder.BasicEncoding.Internal (
   , eitherB
   , ifB
 
-  , liftIOB
+  -- , liftIOB
 
   , toB
   , fromF
 
-  , withSizeFB
-  , withSizeBB
+  -- , withSizeFB
+  -- , withSizeBB
 
   -- * Shared operators
   , (>$<)
@@ -184,9 +184,11 @@ fromF = toB
 storableToF :: forall a. Storable a => FixedEncoding a
 storableToF = FE (sizeOf (undefined :: a)) (\x op -> poke (castPtr op) x)
 
+{-
 {-# INLINE CONLIKE liftIOF #-}
 liftIOF :: FixedEncoding a -> FixedEncoding (IO a)
 liftIOF (FE l io) = FE l (\xWrapped op -> do x <- xWrapped; io x op)
+-}
 
 ------------------------------------------------------------------------------
 -- Bounded-size Encodings
@@ -262,6 +264,7 @@ ifB p be1 be2 =
     contramapB (\x -> if p x then Left x else Right x) (eitherB be1 be2)
 
 
+{-
 {-# INLINE withSizeFB #-}
 withSizeFB :: (Word -> FixedEncoding Word) -> BoundedEncoding a -> BoundedEncoding a
 withSizeFB feSize (BE b io) = 
@@ -288,6 +291,7 @@ withSizeBB (BE bSize ioSize) (BE b io) =
 {-# INLINE CONLIKE liftIOB #-}
 liftIOB :: BoundedEncoding a -> BoundedEncoding (IO a)
 liftIOB (BE l io) = BE l (\xWrapped op -> do x <- xWrapped; io x op)
+-}
 
 ------------------------------------------------------------------------------
 -- Encodings from 'ByteString's.
@@ -337,7 +341,6 @@ httpChunkedTransfer =
 
 chunked :: Builder -> Builder
 chunked = encodeChunked 16 word64VarFixedBound emptyB
-
 
 -}
 

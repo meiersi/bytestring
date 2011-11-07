@@ -29,6 +29,9 @@ Todo items
     - document benchmarks
     - document tests
     - make C function names more unique
+    - check that conditional compilation has its required pre-requisites
+      (see Data.ByteString.Lazy.Builder.BasicEncoding.Internal.UncheckedShifts
+       for a blueprint)
     - prepare patches for main darcs repo:
         1. one patch that adds all files for the builder
         2. one patch per change in existing modules

@@ -20,14 +20,17 @@ EOF
     exit;
 fi
 
-$SUITE -j4 -a100 +RTS -N4 -RTS $*
+$SUITE -j4 -a1000 +RTS -N4 -RTS $*
 
 DIR=./cabal-dev/hpc
 
 rm -Rf $DIR
 mkdir -p $DIR
 
-EXCLUDES='Main'
+EXCLUDES='Main
+Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils
+Data.ByteString.Lazy.Builder.BasicEncoding.Tests
+Data.ByteString.Lazy.Builder.Tests'
 
 EXCL=""
 

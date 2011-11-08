@@ -18,10 +18,13 @@ import qualified "new-bytestring" Data.ByteString                  as S
 import qualified "new-bytestring" Data.ByteString.Lazy             as L
 
 import           Data.ByteString.Lazy.Builder
-import           Data.ByteString.Lazy.Builder.Utf8  
-import           Data.ByteString.Lazy.Builder.BoundedEncoding         ( Encoding, (#.) )
-import qualified Data.ByteString.Lazy.Builder.BoundedEncoding      as E
-import qualified Data.ByteString.Lazy.Builder.BoundedEncoding.Utf8 as Utf8
+import           Data.ByteString.Lazy.Builder.ASCII
+import           Data.ByteString.Lazy.Builder.BasicEncoding         
+                   ( FixedEncoding, BoundedEncoding, (>$<) )
+import qualified Data.ByteString.Lazy.Builder.BasicEncoding          as E
+import qualified Data.ByteString.Lazy.Builder.BasicEncoding.Internal as EI
+
+import Foreign
 
 ------------------------------------------------------------------------------
 -- Benchmark support
@@ -83,11 +86,33 @@ benchB name x b =
 benchBInts :: String -> ([Int] -> Builder) -> Benchmark
 benchBInts name = benchB name intData
 
--- | Benchmark an encoding. Full inlining to enable specialization.
-{-# INLINE benchE #-}
-benchE :: String -> Encoding Int -> Benchmark
-benchE name e = 
-  bench (name ++" (" ++ show nRepl ++ ")") $ E.benchIntEncoding nRepl e
+-- | Benchmark a 'FixedEncoding'. Full inlining to enable specialization.
+{-# INLINE benchFE #-}
+benchFE :: String -> FixedEncoding Int -> Benchmark
+benchFE name = benchBE name . E.fromF
+
+-- | Benchmark a 'BoundedEncoding'. Full inlining to enable specialization.
+{-# INLINE benchBE #-}
+benchBE :: String -> BoundedEncoding Int -> Benchmark
+benchBE name e = 
+  bench (name ++" (" ++ show nRepl ++ ")") $ benchIntEncodingB nRepl e
+
+-- We use this construction of just looping through @n,n-1,..,1@ to ensure that
+-- we measure the speed of the encoding and not the speed of generating the
+-- values to be encoded.
+{-# INLINE benchIntEncodingB #-}
+benchIntEncodingB :: Int                  -- ^ Maximal 'Int' to write
+                  -> BoundedEncoding Int  -- ^ 'BoundedEncoding' to execute
+                  -> IO ()                -- ^ 'IO' action to benchmark
+benchIntEncodingB n0 w
+  | n0 <= 0   = return ()
+  | otherwise = do
+      fpbuf <- mallocForeignPtrBytes (n0 * EI.sizeBound w)
+      withForeignPtr fpbuf (loop n0) >> return ()
+  where
+    loop !n !op
+      | n <= 0    = return op
+      | otherwise = EI.runB w n op >>= loop (n - 1)
 
 
 
@@ -110,15 +135,18 @@ main = do
   Criterion.Main.defaultMain 
     [ bgroup "Data.ByteString.Lazy.Builder"
       [ bgroup "Encoding wrappers"
-        [ benchBInts "foldMap word8"                 $ foldMap (word8 . fromIntegral)
-        , benchBInts "encodeListWith word8"          $ E.encodeListWith (E.word8 #. fromIntegral)
-        , benchB     "encodeUnfoldrWith word8" nRepl $ 
-            E.encodeUnfoldrWith (E.word8 #. fromIntegral) countToZero
-        , benchB     "encodeByteStringWith word8" byteStringData $ 
-            E.encodeByteStringWith E.word8 
-        , benchB     "encodeLazyByteStringWith word8" lazyByteStringData $ 
-            E.encodeLazyByteStringWith E.word8 
+        [ benchBInts "foldMap word8" $
+            foldMap (word8 . fromIntegral)
+        , benchBInts "encodeListWithF word8" $
+            E.encodeListWithF (fromIntegral >$< E.word8)
+        , benchB     "encodeUnfoldrWithF word8" nRepl $ 
+            E.encodeUnfoldrWithF (fromIntegral >$< E.word8) countToZero
+        , benchB     "encodeByteStringWithF word8" byteStringData $ 
+            E.encodeByteStringWithF E.word8 
+        , benchB     "encodeLazyByteStringWithF word8" lazyByteStringData $ 
+            E.encodeLazyByteStringWithF E.word8 
         ]
+
       , bgroup "Non-bounded encodings"
         [ benchB "foldMap floatDec"        floatData          $ foldMap floatDec
         , benchB "foldMap doubleDec"       doubleData         $ foldMap doubleDec
@@ -128,86 +156,88 @@ main = do
         ]
       ]
 
-    , bgroup "Data.ByteString.Lazy.Builder.BoundedEncoding"
-      [ benchE "char8"      $ E.char8      #. toEnum
+    , bgroup "Data.ByteString.Lazy.Builder.BasicEncoding"
+      [ benchFE "charASCII"  $ toEnum       >$< E.charASCII
+      , benchFE "char8"      $ toEnum       >$< E.char8
+      , benchBE "charUtf8"   $ toEnum       >$< E.charUtf8
 
       -- binary encoding
-      , benchE "int8"       $ E.int8       #. fromIntegral
-      , benchE "word8"      $ E.word8      #. fromIntegral
+      , benchFE "int8"       $ fromIntegral >$< E.int8       
+      , benchFE "word8"      $ fromIntegral >$< E.word8      
 
       -- big-endian
-      , benchE "int16BE"    $ E.int16BE    #. fromIntegral
-      , benchE "int32BE"    $ E.int32BE    #. fromIntegral
-      , benchE "int64BE"    $ E.int64BE    #. fromIntegral
+      , benchFE "int16BE"    $ fromIntegral >$< E.int16BE    
+      , benchFE "int32BE"    $ fromIntegral >$< E.int32BE    
+      , benchFE "int64BE"    $ fromIntegral >$< E.int64BE    
 
-      , benchE "word16BE"   $ E.word16BE   #. fromIntegral
-      , benchE "word32BE"   $ E.word32BE   #. fromIntegral
-      , benchE "word64BE"   $ E.word64BE   #. fromIntegral
+      , benchFE "word16BE"   $ fromIntegral >$< E.word16BE   
+      , benchFE "word32BE"   $ fromIntegral >$< E.word32BE   
+      , benchFE "word64BE"   $ fromIntegral >$< E.word64BE   
 
-      , benchE "floatBE"    $ E.floatBE    #. fromIntegral
-      , benchE "doubleBE"   $ E.doubleBE   #. fromIntegral
+      , benchFE "floatBE"    $ fromIntegral >$< E.floatBE    
+      , benchFE "doubleBE"   $ fromIntegral >$< E.doubleBE   
 
       -- little-endian
-      , benchE "int16LE"    $ E.int16LE    #. fromIntegral
-      , benchE "int32LE"    $ E.int32LE    #. fromIntegral
-      , benchE "int64LE"    $ E.int64LE    #. fromIntegral
+      , benchFE "int16LE"    $ fromIntegral >$< E.int16LE    
+      , benchFE "int32LE"    $ fromIntegral >$< E.int32LE    
+      , benchFE "int64LE"    $ fromIntegral >$< E.int64LE    
 
-      , benchE "word16LE"   $ E.word16LE   #. fromIntegral
-      , benchE "word32LE"   $ E.word32LE   #. fromIntegral
-      , benchE "word64LE"   $ E.word64LE   #. fromIntegral
+      , benchFE "word16LE"   $ fromIntegral >$< E.word16LE   
+      , benchFE "word32LE"   $ fromIntegral >$< E.word32LE   
+      , benchFE "word64LE"   $ fromIntegral >$< E.word64LE   
 
-      , benchE "floatLE"    $ E.floatLE    #. fromIntegral
-      , benchE "doubleLE"   $ E.doubleLE   #. fromIntegral
+      , benchFE "floatLE"    $ fromIntegral >$< E.floatLE    
+      , benchFE "doubleLE"   $ fromIntegral >$< E.doubleLE   
 
       -- host-dependent
-      , benchE "int16Host"  $ E.int16Host  #. fromIntegral
-      , benchE "int32Host"  $ E.int32Host  #. fromIntegral
-      , benchE "int64Host"  $ E.int64Host  #. fromIntegral
-      , benchE "intHost"    $ E.intHost    #. fromIntegral
+      , benchFE "int16Host"  $ fromIntegral >$< E.int16Host  
+      , benchFE "int32Host"  $ fromIntegral >$< E.int32Host  
+      , benchFE "int64Host"  $ fromIntegral >$< E.int64Host  
+      , benchFE "intHost"    $ fromIntegral >$< E.intHost    
 
-      , benchE "word16Host" $ E.word16Host #. fromIntegral
-      , benchE "word32Host" $ E.word32Host #. fromIntegral
-      , benchE "word64Host" $ E.word64Host #. fromIntegral
-      , benchE "wordHost"   $ E.wordHost   #. fromIntegral
+      , benchFE "word16Host" $ fromIntegral >$< E.word16Host 
+      , benchFE "word32Host" $ fromIntegral >$< E.word32Host 
+      , benchFE "word64Host" $ fromIntegral >$< E.word64Host 
+      , benchFE "wordHost"   $ fromIntegral >$< E.wordHost   
 
-      , benchE "floatHost"  $ E.floatHost  #. fromIntegral
-      , benchE "doubleHost" $ E.doubleHost #. fromIntegral
+      , benchFE "floatHost"  $ fromIntegral >$< E.floatHost  
+      , benchFE "doubleHost" $ fromIntegral >$< E.doubleHost 
       ]
 
-    , bgroup "Data.ByteString.Lazy.Builder.BoundedEncoding.Utf8"
-      [ benchE "char"        $ Utf8.char        #. toEnum
+    , bgroup "Data.ByteString.Lazy.Builder.BoundedEncoding.ASCII"
+      [ 
       -- decimal number
-      , benchE "int8Dec"     $ Utf8.int8Dec     #. fromIntegral
-      , benchE "int16Dec"    $ Utf8.int16Dec    #. fromIntegral
-      , benchE "int32Dec"    $ Utf8.int32Dec    #. fromIntegral
-      , benchE "int64Dec"    $ Utf8.int64Dec    #. fromIntegral
-      , benchE "intDec"      $ Utf8.intDec      #. fromIntegral
+        benchBE "int8Dec"     $ fromIntegral >$< E.int8Dec     
+      , benchBE "int16Dec"    $ fromIntegral >$< E.int16Dec    
+      , benchBE "int32Dec"    $ fromIntegral >$< E.int32Dec    
+      , benchBE "int64Dec"    $ fromIntegral >$< E.int64Dec    
+      , benchBE "intDec"      $ fromIntegral >$< E.intDec      
 
-      , benchE "word8Dec"    $ Utf8.word8Dec    #. fromIntegral
-      , benchE "word16Dec"   $ Utf8.word16Dec   #. fromIntegral
-      , benchE "word32Dec"   $ Utf8.word32Dec   #. fromIntegral
-      , benchE "word64Dec"   $ Utf8.word64Dec   #. fromIntegral
-      , benchE "wordDec"     $ Utf8.wordDec     #. fromIntegral
+      , benchBE "word8Dec"    $ fromIntegral >$< E.word8Dec    
+      , benchBE "word16Dec"   $ fromIntegral >$< E.word16Dec   
+      , benchBE "word32Dec"   $ fromIntegral >$< E.word32Dec   
+      , benchBE "word64Dec"   $ fromIntegral >$< E.word64Dec   
+      , benchBE "wordDec"     $ fromIntegral >$< E.wordDec     
 
-      -- decimal number
-      , benchE "word8Hex"    $ Utf8.word8Hex    #. fromIntegral
-      , benchE "word16Hex"   $ Utf8.word16Hex   #. fromIntegral
-      , benchE "word32Hex"   $ Utf8.word32Hex   #. fromIntegral
-      , benchE "word64Hex"   $ Utf8.word64Hex   #. fromIntegral
-      , benchE "wordHex"     $ Utf8.wordHex     #. fromIntegral
+      -- hexadecimal number
+      , benchBE "word8Hex"    $ fromIntegral >$< E.word8Hex    
+      , benchBE "word16Hex"   $ fromIntegral >$< E.word16Hex   
+      , benchBE "word32Hex"   $ fromIntegral >$< E.word32Hex   
+      , benchBE "word64Hex"   $ fromIntegral >$< E.word64Hex   
+      , benchBE "wordHex"     $ fromIntegral >$< E.wordHex     
 
       -- fixed-width hexadecimal numbers
-      , benchE "int8HexFixed"     $ Utf8.int8HexFixed     #. fromIntegral
-      , benchE "int16HexFixed"    $ Utf8.int16HexFixed    #. fromIntegral
-      , benchE "int32HexFixed"    $ Utf8.int32HexFixed    #. fromIntegral
-      , benchE "int64HexFixed"    $ Utf8.int64HexFixed    #. fromIntegral
+      , benchFE "int8HexFixed"     $ fromIntegral >$< E.int8HexFixed     
+      , benchFE "int16HexFixed"    $ fromIntegral >$< E.int16HexFixed    
+      , benchFE "int32HexFixed"    $ fromIntegral >$< E.int32HexFixed    
+      , benchFE "int64HexFixed"    $ fromIntegral >$< E.int64HexFixed    
 
-      , benchE "word8HexFixed"    $ Utf8.word8HexFixed    #. fromIntegral
-      , benchE "word16HexFixed"   $ Utf8.word16HexFixed   #. fromIntegral
-      , benchE "word32HexFixed"   $ Utf8.word32HexFixed   #. fromIntegral
-      , benchE "word64HexFixed"   $ Utf8.word64HexFixed   #. fromIntegral
+      , benchFE "word8HexFixed"    $ fromIntegral >$< E.word8HexFixed    
+      , benchFE "word16HexFixed"   $ fromIntegral >$< E.word16HexFixed   
+      , benchFE "word32HexFixed"   $ fromIntegral >$< E.word32HexFixed   
+      , benchFE "word64HexFixed"   $ fromIntegral >$< E.word64HexFixed   
 
-      , benchE "floatHexFixed"    $ Utf8.floatHexFixed    #. fromIntegral
-      , benchE "doubleHexFixed"   $ Utf8.doubleHexFixed   #. fromIntegral
+      , benchFE "floatHexFixed"    $ fromIntegral >$< E.floatHexFixed    
+      , benchFE "doubleHexFixed"   $ fromIntegral >$< E.doubleHexFixed   
       ]
     ]

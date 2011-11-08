@@ -34,6 +34,13 @@ import Data.Monoid
 n :: Int
 n = 10000
 
+-- | Note that 'blaze-builder' is twice as fast for short bytestrings, because
+-- it uses 'inlinePerformIO', while the 'bytestring' builder uses
+-- 'unsafePerformIO'. The latter is the right approach, as it guarantees that
+-- buildsteps will be called at most once and can therefore make destructive
+-- use of ressources. Moreover, the design of the 'bytestring' builder
+-- execution is such that it works without any 'unsafePerformIO', if the
+-- builder is provided with an IO context.
 nShort :: Int
 nShort = 64
 

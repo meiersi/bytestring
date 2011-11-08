@@ -708,12 +708,14 @@ data AllocationStrategy = AllocationStrategy
          (Int -> Int -> Bool) -- trim
 
 -- | Sanitize a buffer size; i.e., make it at least the size of a 'Int'.
+{-# INLINE sanitize #-}
 sanitize :: Int -> Int
 sanitize = max (sizeOf (undefined :: Int))
 
 -- | Use this strategy for generating lazy 'L.ByteString's whose chunks are
 -- discarded right after they are generated. For example, if you just generate
 -- them to write them to a network socket.
+{-# INLINE untrimmedStrategy #-}
 untrimmedStrategy :: Int -- ^ Size of the first buffer
                   -> Int -- ^ Size of successive buffers
                   -> AllocationStrategy 
@@ -726,6 +728,7 @@ untrimmedStrategy firstSize bufSize =
 -- | Use this strategy for generating lazy 'L.ByteString's whose chunks are
 -- likely to survive one garbage collection. This strategy trims buffers 
 -- that are filled less than half in order to avoid spilling too much memory.
+{-# INLINE safeStrategy #-}
 safeStrategy :: Int  -- ^ Size of first buffer
              -> Int  -- ^ Size of successive buffers
              -> AllocationStrategy
@@ -745,6 +748,7 @@ safeStrategy firstSize bufSize =
 -- defined as follows.
 --
 -- @
+-- {-# NOINLINE toLazyByteString #-}
 -- toLazyByteString = 
 --   toLazyByteStringWith ('safeStrategy' 'L.smallChunkSize' 'L.defaultChunkSize') empty
 -- @

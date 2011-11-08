@@ -263,6 +263,7 @@ import           Data.List                          (intersperse)
 -- | Execute a 'Builder' and return the generated chunks as a lazy 'L.ByteString'.
 -- The work is performed lazy, i.e., only when a chunk of the lazy 'L.ByteString'
 -- is forced.
+{-# NOINLINE toLazyByteString #-} -- ensure code is shared
 toLazyByteString :: Builder -> L.ByteString
 toLazyByteString = toLazyByteStringWith
     (safeStrategy L.smallChunkSize L.defaultChunkSize) L.Empty

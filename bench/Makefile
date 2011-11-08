@@ -11,7 +11,7 @@ GHC = ghc
 # benchmarking all functions
 bench-all:
 	$(GHC) --make -O2 -fforce-recomp -main-is BenchAll BenchAll.hs
-	./BenchAll --resamples 10000
+	./BenchAll
 
 bench-all-core:
 	$(GHC)-core -- --make -O2 -fforce-recomp -main-is BenchAll BenchAll.hs
@@ -20,7 +20,7 @@ bench-all-core:
 # running example: CSV file generation
 csv:
 	$(GHC) --make -O2 -fforce-recomp -main-is CSV CSV.hs
-	./CSV --resamples 10000
+	./CSV
 
 core-csv:
 	$(GHC)-core -- --make -O2 -fforce-recomp -main-is CSV CSV.hs
@@ -28,7 +28,7 @@ core-csv:
 # benchmarking regressions test
 regression:
 	$(GHC) --make -O2 -fforce-recomp -main-is BuilderRegression BuilderRegression.hs
-	./BuilderRegression --resamples 10000
+	./BuilderRegression
 
 regression-core:
 	$(GHC)-core -- --make -O2 -fforce-recomp -main-is BuilderRegression BuilderRegression.hs

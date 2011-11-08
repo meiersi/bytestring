@@ -464,14 +464,17 @@ sizeBound = fromIntegral . I.sizeBound
 ------------------------------------------------------------------------------
 
 -- | Encode a value with a 'FixedEncoding'.
+{-# INLINE encodeWithF #-}
 encodeWithF :: FixedEncoding a -> (a -> Builder)
 encodeWithF = encodeWithB . toB
 
 -- | Encode a list of values from left-to-right with a 'FixedEncoding'.
+{-# INLINE encodeListWithF #-}
 encodeListWithF :: FixedEncoding a -> ([a] -> Builder)
 encodeListWithF = encodeListWithB . toB
 
 -- | Encode a list of values represented as an 'unfoldr' with a 'FixedEncoding'.
+{-# INLINE encodeUnfoldrWithF #-}
 encodeUnfoldrWithF :: FixedEncoding b -> (a -> Maybe (b, a)) -> a -> Builder
 encodeUnfoldrWithF = encodeUnfoldrWithB . toB
 
@@ -485,11 +488,13 @@ encodeUnfoldrWithF = encodeUnfoldrWithB . toB
 --
 -- We can also use it to hex-encode a strict 'S.ByteString' as shown by the
 -- 'byteStringHexFixed' example above.
+{-# INLINE encodeByteStringWithF #-}
 encodeByteStringWithF :: FixedEncoding Word8 -> (S.ByteString -> Builder)
 encodeByteStringWithF = encodeByteStringWithB . toB
 
 -- | /Heavy inlining./ Encode all bytes of a lazy 'L.ByteString' from
 -- left-to-right with a 'FixedEncoding'.
+{-# INLINE encodeLazyByteStringWithF #-}
 encodeLazyByteStringWithF :: FixedEncoding Word8 -> (L.ByteString -> Builder)
 encodeLazyByteStringWithF = encodeLazyByteStringWithB . toB
 
@@ -1004,6 +1009,7 @@ word64DecFixedBound = genDecFixedBound
 ------------------------------------------------------------------------------
 
 -- | Char8 encode a 'Char'.
+{-# INLINE char8 #-}
 char8 :: FixedEncoding Char 
 char8 = (fromIntegral . ord) >$< word8
 
@@ -1038,6 +1044,7 @@ charUtf8 = boundedEncoding 4 (encodeCharUtf8 f1 f2 f3 f4)
 -- needs to happen with the resulting bytes: you have to specify functions to
 -- deal with those.
 --
+{-# INLINE encodeCharUtf8 #-}
 encodeCharUtf8 :: (Word8 -> a)                             -- ^ 1-byte UTF-8
                -> (Word8 -> Word8 -> a)                    -- ^ 2-byte UTF-8
                -> (Word8 -> Word8 -> Word8 -> a)           -- ^ 3-byte UTF-8
@@ -1061,7 +1068,6 @@ encodeCharUtf8 f1 f2 f3 f4 c = case ord c of
                x3 = fromIntegral $ ((x `shiftR` 6) .&. 0x3F) + 0x80
                x4 = fromIntegral $ (x .&. 0x3F) + 0x80
            in f4 x1 x2 x3 x4
-{-# INLINE encodeCharUtf8 #-}
 
 
 ------------------------------------------------------------------------------

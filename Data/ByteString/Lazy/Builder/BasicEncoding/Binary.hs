@@ -416,6 +416,7 @@ doubleHost = storableToF
 -- Base-128 Variable-Length Encodings
 ------------------------------------------------------------------------------
 
+{-# INLINE encodeBase128 #-}
 encodeBase128 
     :: forall a b. (Integral a, Bits a, Storable b, Integral b, Num b) 
     => (a -> Int -> a) -> BoundedEncoding b

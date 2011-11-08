@@ -845,8 +845,10 @@ putWithSize innerBufSize mkSizeFE innerP =
                 -- returns the last buffer for writing, we could also fill the
                 -- last buffer with 'k' and return the signal, once it is
                 -- filled, therefore avoiding unfilled space.
-                return $ insertChunks 
-                    (startInner' `plusPtr` curBufLen) lenAfter lbsC (k x)
+                return $ insertChunks (startInner' `plusPtr` curBufLen) 
+                                      (fromIntegral lenAll) 
+                                      lbsC 
+                                      (k x)
               where
                 toLBS = runCIOSWithLength <=< 
                     buildStepToCIOSUntrimmedWith (fromIntegral innerBufSize)

@@ -305,18 +305,19 @@ testsEncodingToBuilder =
   [ test_encodeUnfoldrF
   , test_encodeUnfoldrB
 
-  , testProperty "encodeChunked [base-128, variable-length] . stringUtf8" $ \cs ->
-        (testBuilder id cs) == 
-        (parseChunks parseVar $ testBuilder encodeVar cs)
+  , compareImpls "encodeChunked [base-128, variable-length] (recipe)" 
+        (testBuilder id)
+        (parseChunks parseVar . testBuilder encodeVar)
 
-  , testProperty "encodeChunked [hex] . stringUtf8" $ \cs ->
-        (testBuilder id cs) == 
-        (parseChunks parseHexLen $ testBuilder encodeHex cs)
+  , compareImpls "encodeChunked [hex] (recipe)"
+        (testBuilder id)
+        (parseChunks parseHexLen . testBuilder encodeHex)
 
-  , testProperty "encodeWithSize [hex] . stringUtf8" $ \cs ->
-        (testBuilder id cs) == 
-        (parseSizePrefix parseHexLen $ testBuilder prefixHexSize cs)
+  , compareImpls "encodeWithSize [hex] (recipe)" 
+        (testBuilder id)
+        (parseSizePrefix parseHexLen . testBuilder prefixHexSize)
   ]
+
 
 -- Unfoldr fused with encoding
 ------------------------------
@@ -352,7 +353,11 @@ testBuilder :: (Builder -> Builder) -> Recipe -> L.ByteString
 testBuilder f recipe = 
     toLBS (f b)
   where
-    (b, toLBS) = recipeComponents recipe
+    (b, toLBS) = recipeComponents $ clearTail recipe
+    -- need to remove tail of recipe to have a tighter
+    -- check on encodeWithSize
+    clearTail (Recipe how firstSize otherSize _ as) =
+        Recipe how firstSize otherSize L.empty as
 
 -- | Chunked encoding using base-128, variable-length encoding for the
 -- chunk-size.
@@ -402,11 +407,10 @@ parseSizePrefix parseLen =
     L.pack . go . L.unpack
   where
     go ws
-      | len <= length ws'    = payload ++ rest
-      | otherwise            = error $ "too few bytes: " ++ show ws
+      | len <= length ws'  = take len ws'
+      | otherwise          = error $ "too few bytes: " ++ show (len, ws, ws')
       where
-        (len, ws')      = parseLen ws
-        (payload, rest) = splitAt len ws'
+        (len, ws') = parseLen ws
 
 
 ------------------------------------------------------------------------------

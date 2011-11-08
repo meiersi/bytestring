@@ -32,6 +32,8 @@ Todo items
     - check that conditional compilation has its required pre-requisites
       (see Data.ByteString.Lazy.Builder.BasicEncoding.Internal.UncheckedShifts
        for a blueprint)
+    - test nesting of builder transformers / check that size on YieldC is
+      accurate.
     - rethink inlining strategy: using INLINABLE together with 'inline' should
         give better results in terms of code size (at least).
     - prepare patches for main darcs repo:

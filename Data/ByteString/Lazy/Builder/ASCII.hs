@@ -255,11 +255,11 @@ doubleHexFixed :: Double -> Builder
 doubleHexFixed = E.encodeWithF E.doubleHexFixed
 
 -- | Encode each byte of a 'S.ByteString' using its fixed-width hex encoding.
-{-# INLINE byteStringHexFixed #-}
+{-# NOINLINE byteStringHexFixed #-} -- share code
 byteStringHexFixed :: S.ByteString -> Builder
 byteStringHexFixed = E.encodeByteStringWithF E.word8HexFixed
 
 -- | Encode each byte of a lazy 'L.ByteString' using its fixed-width hex encoding.
-{-# INLINE lazyByteStringHexFixed #-}
+{-# NOINLINE lazyByteStringHexFixed #-} -- share code
 lazyByteStringHexFixed :: L.ByteString -> Builder
 lazyByteStringHexFixed = E.encodeLazyByteStringWithF E.word8HexFixed

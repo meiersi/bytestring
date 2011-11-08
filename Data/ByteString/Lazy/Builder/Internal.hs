@@ -94,7 +94,7 @@ module Data.ByteString.Lazy.Builder.Internal (
   , Put
   , put
   , runPut
-  -- , hPut
+  , hPut
 
   -- ** Streams of chunks interleaved with IO
   , ChunkIOStream(..)
@@ -122,14 +122,12 @@ import qualified Data.ByteString               as S
 import qualified Data.ByteString.Internal      as S
 import qualified Data.ByteString.Lazy.Internal as L
 
-{-
 import GHC.IO.Buffer (Buffer(..), newByteBuffer)
 import GHC.IO.Handle.Internals (wantWritableHandle, flushWriteBuffer)
 import GHC.IO.Handle.Types (Handle__, haByteBuffer) 
 import GHC.IORef
 
 import System.IO (Handle)
--}
 
 import Foreign
 
@@ -407,18 +405,6 @@ putLiftIO io = put $ \k br -> io >>= (`k` br)
 -- Executing a Put directly on a buffered Handle
 ------------------------------------------------------------------------------
 
-{- 
-2011/11/07: Simon Meier
-
-The code below would be really nice to have. However, in my tests I was
-experiencing very spurious hangs and I guess it is due to some
-misunderstanding of the implicit protocol of how to write to a Handle.
-
-This has to be clarified first before using this code in production.
--}
-
-{-
-
 -- | Run a 'Put' action redirecting the produced output to a 'Handle'.
 --
 -- The output is buffered using the 'Handle's associated buffer. If this
@@ -508,8 +494,6 @@ hPut h b =
                                       (lbsC L.Empty)
                         fillHandle 1 nextStep
 
-
--}
 
 ------------------------------------------------------------------------------
 -- ByteString insertion / controlling chunk boundaries

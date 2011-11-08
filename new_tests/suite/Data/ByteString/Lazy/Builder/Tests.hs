@@ -37,11 +37,9 @@ import           Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils
 
 import           Numeric (readHex)
 
-{-
 import           Control.Exception (evaluate)
 import           System.IO
 import           System.Directory
--}
 
 import           Test.Framework
 import           Test.Framework.Providers.QuickCheck2
@@ -53,7 +51,7 @@ import           Test.QuickCheck.Property (printTestCase)
 tests :: [Test]
 tests = 
   [ testBuilderRecipe
-  -- , testHandlePutBuilder 
+  , testHandlePutBuilder 
   , testPut
   ] ++
   testsEncodingToBuilder ++
@@ -84,7 +82,6 @@ testBuilderRecipe =
           , "diff  : " ++ show (dropWhile (uncurry (==)) $ zip x1 x2)
           ]
 
-{-
 testHandlePutBuilder :: Test
 testHandlePutBuilder = 
     testProperty "hPutBuilder" testRecipe 
@@ -120,7 +117,6 @@ testHandlePutBuilder =
             success = lbs == lbsRef
         unless success (error msg)
         return success
--}
 
 
 -- Recipes with which to test the builder functions

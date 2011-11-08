@@ -7,9 +7,10 @@
 -- Stability   : experimental
 -- Portability : tested on GHC only
 --
--- Performance and compatibility regression tests for the Builder.
+-- Performance and compatibility regression tests
+-- for the Builder and changes to Data.ByteString.Lazy.
 --
-module BuilderRegression where
+module Regression where
 
 import qualified "blaze-builder" Blaze.ByteString.Builder as Blaze
 
@@ -113,8 +114,7 @@ blaze = ( "blaze"
 benchmarks :: [Benchmark]
 testResults :: [String]
 (benchmarks, testResults) = unzip $ 
-    [ {-
-      comparison "encodeWith `mappend` encodeWith" $
+    [ comparison "encodeWith `mappend` encodeWith" $
         [ impl newBuilder (mconcat . map (\x -> NewL.word8 x `mappend` NewL.word8 x)) word8Input
         , impl blaze      (mconcat . map (\x -> Blaze.fromWord8 x `mappend` Blaze.fromWord8 x)) word8Input
         ]
@@ -150,11 +150,6 @@ testResults :: [String]
         [ impl newBS NewL.pack word8Input
         , impl oldBS OldL.pack word8Input
         , impl blaze Blaze.fromWord8s word8Input
-        ]
-      -}
-      comparison "pack [Word8]"
-        [ impl newBuilder (E.encodeListWithF E.word8) word8Input
-        , impl blaze      Blaze.fromWord8s            word8Input
         ]
     ]
   where

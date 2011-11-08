@@ -7,7 +7,7 @@
 -- Stability   : experimental
 -- Portability : tested on GHC only
 --
--- Benchmark all Encodings implemented directly.
+-- Benchmark all 'Builder' functions.
 module BenchAll where
 
 import Prelude hiding (words)

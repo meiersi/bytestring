@@ -124,10 +124,10 @@ import qualified Data.ByteString.Lazy.Internal as L
 
 import GHC.IO.Buffer (Buffer(..), newByteBuffer)
 import GHC.IO.Handle.Internals (wantWritableHandle, flushWriteBuffer)
-import GHC.IO.Handle.Types (Handle__, haByteBuffer) 
+import GHC.IO.Handle.Types (Handle__, haByteBuffer, haBufferMode) 
 import GHC.IORef
 
-import System.IO (Handle)
+import System.IO (Handle, hFlush, BufferMode(..))
 
 import Foreign
 
@@ -411,8 +411,8 @@ putLiftIO io = put $ \k br -> io >>= (`k` br)
 -- buffer is too small to execute one step of the 'Put' action, then
 -- it is replaced with a large enough buffer.
 hPut :: forall a. Handle -> Put a -> IO a
-hPut h b =
-    fillHandle 1 (runPut b)
+hPut h p = do
+    fillHandle 1 (runPut p)
   where
     fillHandle :: Int -> BuildStep a -> IO a
     fillHandle !minFree step = do
@@ -478,7 +478,14 @@ hPut h b =
 
                 doneH op' x = do
                     updateBufR op' 
-                    return $ return x
+                    -- We must flush if this Handle is set to NoBuffering.
+                    -- If it is set to LineBuffering, be conservative and
+                    -- flush anyway (we didn't check for newlines in the data).
+                    -- Flushing must happen outside this 'wantWriteableHandle'
+                    -- due to the possible async. exception.
+                    case haBufferMode h_ of
+                        BlockBuffering _      -> return $ return x
+                        _line_or_no_buffering -> return $ hFlush h >> return x
 
                 fullH op' minSize nextStep = do
                     updateBufR op' 

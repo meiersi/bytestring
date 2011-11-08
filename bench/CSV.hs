@@ -81,9 +81,9 @@ module CSV where
 
  * Built-in UTF-8 support: very hard to get efficient otherwise.
 
-     Utf8.string :: String -> Builder
-     Utf8.intDec :: Int -> Builder
-     Utf8.intHex :: Int -> Builder
+     stringUtf8 :: String -> Builder
+     intDec :: Int -> Builder
+     intHex :: Int -> Builder
 
  * Fine-grained control over when to copy/reference existing bytestrings
 
@@ -111,7 +111,7 @@ import qualified "new-bytestring" Data.ByteString                     as S
 import qualified "new-bytestring" Data.ByteString.Lazy                as L
 
 import           Data.ByteString.Lazy.Builder                         as B
-import           Data.ByteString.Lazy.Builder.Utf8                    as B
+import           Data.ByteString.Lazy.Builder.ASCII                   as B
 
 import Data.Monoid
 import Data.Foldable (foldMap)
@@ -121,9 +121,8 @@ import Control.DeepSeq
 
 
 -- To be used in a later optimization
-import           Data.ByteString.Lazy.Builder.BoundedEncoding ( (<#>), (#.) )
-import qualified Data.ByteString.Lazy.Builder.BoundedEncoding         as E
-import qualified Data.ByteString.Lazy.Builder.BoundedEncoding.Utf8    as E
+import           Data.ByteString.Lazy.Builder.BasicEncoding ( (>*<), (>$<) )
+import qualified Data.ByteString.Lazy.Builder.BasicEncoding         as E
 
 -- To be used in a later comparison
 import qualified Data.DList                                      as D
@@ -200,7 +199,7 @@ benchString = bench "renderTable maxiTable" $ nf renderTable maxiTable
 -- 1.36 ms
 benchStringUtf8 :: Benchmark
 benchStringUtf8 = bench "utf8 + renderTable maxiTable" $ 
-  nf (L.length . B.toLazyByteString . B.string . renderTable) maxiTable
+  nf (L.length . B.toLazyByteString . B.stringUtf8 . renderTable) maxiTable
 
 
 -- using difference lists:  0.91 ms
@@ -223,11 +222,11 @@ infixr 4 <>
 -- import  Data.ByteString.Lazy.Builder.Utf8  as B
 
 renderStringB :: String -> Builder
-renderStringB cs = B.char '"' <> foldMap escape cs <> B.char '"'
+renderStringB cs = B.charUtf8 '"' <> foldMap escape cs <> B.charUtf8 '"'
   where
-    escape '\\' = B.char '\\' <> B.char '\\'
-    escape '\"' = B.char '\\' <> B.char '"'
-    escape c    = B.char c
+    escape '\\' = B.charUtf8 '\\' <> B.charUtf8 '\\'
+    escape '\"' = B.charUtf8 '\\' <> B.charUtf8 '"'
+    escape c    = B.charUtf8 c
 
 renderCellB :: Cell -> Builder
 renderCellB (StringC cs) = renderStringB cs
@@ -236,10 +235,10 @@ renderCellB (IntC i)     = B.intDec i
 renderRowB :: Row -> Builder
 renderRowB []     = mempty
 renderRowB (c:cs) = 
-    renderCellB c <> mconcat [ B.char ',' <> renderCellB c' | c' <- cs ]
+    renderCellB c <> mconcat [ B.charUtf8 ',' <> renderCellB c' | c' <- cs ]
 
 renderTableB :: Table -> Builder
-renderTableB rs = mconcat [renderRowB r <> B.char '\n' | r <- rs]
+renderTableB rs = mconcat [renderRowB r <> B.charUtf8 '\n' | r <- rs]
 
 -- 0.81ms
 benchBuilderUtf8 :: Benchmark
@@ -293,13 +292,14 @@ benchNF = bench "nf maxiTable" $ nf id maxiTable
 
      - compositional: coalesce buffer-checks, ...
 
-       E.encodeIf :: (a -> Bool) -> Encoding a -> Encoding a -> Encoding a
-       E.char     :: Encoding Char
-       (<#>)      :: Encoding a -> Encoding b -> Encoding (a, b)
+       E.encodeIfB :: (a -> Bool) 
+                   -> BoundedEncoding a -> BoundedEncoding a -> BoundedEncoding a
+       E.charUtf8  :: BoundedEncoding Char
+       (>*<)       :: BoundedEncoding a -> BoundedEncoding b -> BoundedEncoding (a, b)
+                   
+       (>$<)       :: (b -> a) -> BoundedEncoding a -> BoundedEncoding b
 
-       (#.)       :: Encoding a -> (b -> a) -> Encoding b
-
-       ^ Encodings are cofunctors; like most data-sinks
+       ^ BoundedEncodings are contrafunctors; like most data-sinks
 
 
      - Implementation relies heavily on inlining to compute bounds and
@@ -308,13 +308,13 @@ benchNF = bench "nf maxiTable" $ nf id maxiTable
 
 renderStringBE :: String -> Builder
 renderStringBE cs = 
-    B.char '"' <> E.encodeListWith escape cs <> B.char '"'
+    B.charUtf8 '"' <> E.encodeListWithB escape cs <> B.charUtf8 '"'
   where
-    escape :: E.Encoding Char
+    escape :: E.BoundedEncoding Char
     escape = 
-      E.encodeIf (== '\\') (E.char <#> E.char #. const ('\\', '\\')) $
-      E.encodeIf (== '\"') (E.char <#> E.char #. const ('\\', '\"')) $
-      E.char
+      E.ifB (== '\\') (const ('\\', '\\') >$< E.charUtf8 >*< E.charUtf8) $
+      E.ifB (== '\"') (const ('\\', '\"') >$< E.charUtf8 >*< E.charUtf8) $
+      E.charUtf8
 
 renderCellBE :: Cell -> Builder
 renderCellBE (StringC cs) = renderStringBE cs
@@ -323,10 +323,10 @@ renderCellBE (IntC i)     = B.intDec i
 renderRowBE :: Row -> Builder
 renderRowBE []     = mempty
 renderRowBE (c:cs) = 
-    renderCellBE c <> mconcat [ B.char ',' <> renderCellBE c' | c' <- cs ]
+    renderCellBE c <> mconcat [ B.charUtf8 ',' <> renderCellBE c' | c' <- cs ]
 
 renderTableBE :: Table -> Builder
-renderTableBE rs = mconcat [renderRowBE r <> B.char '\n' | r <- rs]
+renderTableBE rs = mconcat [renderRowBE r <> B.charUtf8 '\n' | r <- rs]
 
 -- 0.65 ms
 benchBuilderEncodingUtf8 :: Benchmark
@@ -367,7 +367,7 @@ renderTableD rs = mconcat [renderRowD r <> return '\n' | r <- rs]
 -- 0.91 ms
 benchDListUtf8 :: Benchmark
 benchDListUtf8 = bench "utf8 + renderTableD maxiTable" $ 
-  nf (L.length . B.toLazyByteString . B.string . D.toList . renderTableD) maxiTable
+  nf (L.length . B.toLazyByteString . B.stringUtf8 . D.toList . renderTableD) maxiTable
 
 
 ------------------------------------------------------------------------------

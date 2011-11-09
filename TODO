@@ -38,6 +38,7 @@ Todo items
         give better results in terms of code size (at least).
     - provide .cabal files or cabal integration for benchmarks
     - use lazy pack based on builder
+    - make bounds-check-merging work again
     - prepare patches for main darcs repo:
         1. one patch that adds all files for the builder
         2. one patch per change in existing modules

@@ -539,7 +539,7 @@ encodeWithB w =
           | otherwise = return $ bufferFull bound op (step k)
 
 {-# RULES 
-   "append/encodeWith" forall w1 w2 x1 x2.
+   "append/encodeWithB" forall w1 w2 x1 x2.
        append (encodeWithB w1 x1) (encodeWithB w2 x2) 
      = encodeWithB (pairB w1 w2) (x1, x2) 
   #-}

@@ -1,5 +1,6 @@
 CSV
 BenchAll
 Regression
+BoundsCheckFusion
 *.hi
 *.o

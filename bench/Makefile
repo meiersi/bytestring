@@ -25,3 +25,10 @@ csv:
 core-csv:
 	$(GHC)-core -- --make -O2 -fforce-recomp -main-is CSV CSV.hs
 
+# benchmarking all functions
+bounds-check-fusion:
+	$(GHC) --make -O2 -fforce-recomp -main-is BoundsCheckFusion BoundsCheckFusion.hs
+	./BoundsCheckFusion
+
+bounds-check-fusion-core:
+	$(GHC)-core -- --make -O2 -fforce-recomp -main-is BoundsCheckFusion BoundsCheckFusion.hs

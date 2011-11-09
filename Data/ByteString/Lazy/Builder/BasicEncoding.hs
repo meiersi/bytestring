@@ -539,9 +539,18 @@ encodeWithB w =
           | otherwise = return $ bufferFull bound op (step k)
 
 {-# RULES 
-   "append/encodeWithB" forall w1 w2 x1 x2.
+ 
+"append/encodeWithB" forall w1 w2 x1 x2.
        append (encodeWithB w1 x1) (encodeWithB w2 x2) 
      = encodeWithB (pairB w1 w2) (x1, x2) 
+
+"append/encodeWithB/assoc_r" forall w1 w2 x1 x2 b.
+       append (encodeWithB w1 x1) (append (encodeWithB w2 x2) b)
+     = append (encodeWithB (pairB w1 w2) (x1, x2)) b
+
+"append/encodeWithB/assoc_l" forall w1 w2 x1 x2 b.
+       append (append b (encodeWithB w1 x1)) (encodeWithB w2 x2) 
+     = append b (encodeWithB (pairB w1 w2) (x1, x2))
   #-}
 
 -- TODO: The same rules for 'putBuilder (..) >> putBuilder (..)'

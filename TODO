@@ -28,7 +28,6 @@ Todo items
     - check endianness for external representation of IEEE floats and doubles
     - document benchmarks
     - document tests
-    - make C function names more unique
     - check that conditional compilation has its required pre-requisites
       (see Data.ByteString.Lazy.Builder.BasicEncoding.Internal.UncheckedShifts
        for a blueprint)

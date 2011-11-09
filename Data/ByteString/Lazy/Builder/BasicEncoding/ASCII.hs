@@ -101,10 +101,10 @@ charASCII = (\c -> fromIntegral $ ord c .&. 0x7f) >$< word8
 -- Signed integers
 ------------------
 
-foreign import ccall unsafe "static int_dec" c_int_dec
+foreign import ccall unsafe "static _hs_bytestring_int_dec" c_int_dec
     :: CInt -> Ptr Word8 -> IO (Ptr Word8)
 
-foreign import ccall unsafe "static long_long_int_dec" c_long_long_int_dec
+foreign import ccall unsafe "static _hs_bytestring_long_long_int_dec" c_long_long_int_dec
     :: CLLong -> Ptr Word8 -> IO (Ptr Word8)
 
 {-# INLINE encodeIntDecimal #-}
@@ -143,10 +143,10 @@ intDec = caseWordSize_32_64
 -- Unsigned integers
 --------------------
 
-foreign import ccall unsafe "static uint_dec" c_uint_dec
+foreign import ccall unsafe "static _hs_bytestring_uint_dec" c_uint_dec
     :: CUInt -> Ptr Word8 -> IO (Ptr Word8)
 
-foreign import ccall unsafe "static long_long_uint_dec" c_long_long_uint_dec
+foreign import ccall unsafe "static _hs_bytestring_long_long_uint_dec" c_long_long_uint_dec
     :: CULLong -> Ptr Word8 -> IO (Ptr Word8)
 
 {-# INLINE encodeWordDecimal #-}
@@ -187,10 +187,10 @@ wordDec = caseWordSize_32_64
 -- without lead
 ---------------
 
-foreign import ccall unsafe "static uint_hex" c_uint_hex
+foreign import ccall unsafe "static _hs_bytestring_uint_hex" c_uint_hex
     :: CUInt -> Ptr Word8 -> IO (Ptr Word8)
 
-foreign import ccall unsafe "static long_long_uint_hex" c_long_long_uint_hex
+foreign import ccall unsafe "static _hs_bytestring_long_long_uint_hex" c_long_long_uint_hex
     :: CULLong -> Ptr Word8 -> IO (Ptr Word8)
 
 {-# INLINE encodeWordHex #-}

@@ -12,7 +12,7 @@
 const char* digits = "0123456789abcdef";
 
 // signed integers
-char* int_dec (int x, char* buf) 
+char* _hs_bytestring_int_dec (int x, char* buf) 
 {
     char c, *ptr = buf, *next_free;
     int x_tmp;
@@ -48,7 +48,7 @@ char* int_dec (int x, char* buf)
 }
 
 // signed long long ints (64 bit integers)
-char* long_long_int_dec (long long int x, char* buf) 
+char* _hs_bytestring_long_long_int_dec (long long int x, char* buf) 
 {
     char c, *ptr = buf, *next_free;
     long long int x_tmp;
@@ -84,7 +84,7 @@ char* long_long_int_dec (long long int x, char* buf)
 }
 
 // unsigned integers
-char* uint_dec (unsigned int x, char* buf) 
+char* _hs_bytestring_uint_dec (unsigned int x, char* buf) 
 {
     char c, *ptr = buf, *next_free;
     unsigned int x_tmp;
@@ -107,7 +107,7 @@ char* uint_dec (unsigned int x, char* buf)
 }
 
 // unsigned long ints
-char* long_long_uint_dec (long long unsigned int x, char* buf) 
+char* _hs_bytestring_long_long_uint_dec (long long unsigned int x, char* buf) 
 {
     char c, *ptr = buf, *next_free;
     long long unsigned int x_tmp;
@@ -135,7 +135,7 @@ char* long_long_uint_dec (long long unsigned int x, char* buf)
 ///////////////////////
 
 // unsigned ints (32 bit words)
-char* uint_hex (unsigned int x, char* buf) {
+char* _hs_bytestring_uint_hex (unsigned int x, char* buf) {
     // write hex representation in reverse order
     char c, *ptr = buf, *next_free;
     do {
@@ -153,7 +153,7 @@ char* uint_hex (unsigned int x, char* buf) {
 };
 
 // unsigned long ints (64 bit words)
-char* long_long_uint_hex (long long unsigned int x, char* buf) {
+char* _hs_bytestring_long_long_uint_hex (long long unsigned int x, char* buf) {
     // write hex representation in reverse order
     char c, *ptr = buf, *next_free;
     do {

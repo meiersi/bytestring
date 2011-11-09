@@ -14,8 +14,8 @@ import Prelude hiding (words)
 import Criterion.Main
 import Data.Foldable (foldMap)
 
-import qualified "new-bytestring" Data.ByteString                  as S
-import qualified "new-bytestring" Data.ByteString.Lazy             as L
+import qualified Data.ByteString                  as S
+import qualified Data.ByteString.Lazy             as L
 
 import           Data.ByteString.Lazy.Builder
 import           Data.ByteString.Lazy.Builder.ASCII

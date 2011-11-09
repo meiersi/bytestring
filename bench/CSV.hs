@@ -107,8 +107,8 @@ module CSV where
 -}
 
 
-import qualified "new-bytestring" Data.ByteString                     as S
-import qualified "new-bytestring" Data.ByteString.Lazy                as L
+import qualified Data.ByteString                     as S
+import qualified Data.ByteString.Lazy                as L
 
 import           Data.ByteString.Lazy.Builder                         as B
 import           Data.ByteString.Lazy.Builder.ASCII                   as B
@@ -132,8 +132,6 @@ import qualified Data.Text.Lazy                                  as TL
 import qualified Data.Text.Lazy.Encoding                         as TL
 import qualified Data.Text.Lazy.Builder                          as TB
 import qualified Data.Text.Lazy.Builder.Int                      as TB
-
-import qualified "bytestring" Data.ByteString.Lazy               as OldL
 
 import Data.Char (ord)
 import qualified Data.Binary.Builder                             as BinB
@@ -394,6 +392,9 @@ benchDListUtf8String = bench "utf8-light + renderTable maxiTable" $
 -- Data.Binary.Builder based rendering
 ------------------------------------------------------------------------------
 
+-- Note that as of binary-0.6.0.0 the binary builder is the same as the one
+-- provided by the bytestring library.
+
 {-# INLINE char8BinB #-}
 char8BinB :: Char -> BinB.Builder
 char8BinB = BinB.singleton . fromIntegral . ord
@@ -407,7 +408,7 @@ renderStringBinB cs = char8BinB '"' <> foldMap escape cs <> char8BinB '"'
 
 renderCellBinB :: Cell -> BinB.Builder
 renderCellBinB (StringC cs) = renderStringBinB cs
-renderCellBinB (IntC i)     = foldMap char8BinB $ show i
+renderCellBinB (IntC i)     = B.intDec i
            
 renderRowBinB :: Row -> BinB.Builder
 renderRowBinB []     = mempty
@@ -420,7 +421,7 @@ renderTableBinB rs = mconcat [renderRowBinB r <> char8BinB '\n' | r <- rs]
 -- 1.22 ms
 benchBinaryBuilderChar8 :: Benchmark
 benchBinaryBuilderChar8 = bench "char8 + renderTableBinB maxiTable" $ 
-  nf (OldL.length . BinB.toLazyByteString . renderTableBinB) maxiTable
+  nf (L.length . BinB.toLazyByteString . renderTableBinB) maxiTable
 
 
 ------------------------------------------------------------------------------
@@ -454,7 +455,7 @@ benchTextBuilder = bench "renderTableTB maxiTable" $
 -- 1.10 ms
 benchTextBuilderUtf8 :: Benchmark
 benchTextBuilderUtf8 = bench "utf8 + renderTableTB maxiTable" $ 
-  nf (OldL.length . TL.encodeUtf8 . TB.toLazyText . renderTableTB) maxiTable
+  nf (L.length . TL.encodeUtf8 . TB.toLazyText . renderTableTB) maxiTable
 
 ------------------------------------------------------------------------------
 -- Benchmarking

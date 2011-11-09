@@ -12,6 +12,10 @@
 --
 module Regression where
 
+-- NOTE: The regression testing does not work currrently, as different versions
+-- of the same package (in this case bytestring-0.9.3 and bytestring-0.9.2) cannot
+-- be loaded at the same time. The code is kept for later use/modification.
+
 import qualified "blaze-builder" Blaze.ByteString.Builder as Blaze
 
 import qualified "new-bytestring" Data.ByteString.Lazy                       as NewL

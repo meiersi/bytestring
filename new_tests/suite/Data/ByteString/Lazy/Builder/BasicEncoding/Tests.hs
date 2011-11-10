@@ -18,6 +18,7 @@ import           Data.Char  (ord)
 import qualified Data.ByteString.Lazy                                 as L
 import           Data.ByteString.Lazy.Builder
 import qualified Data.ByteString.Lazy.Builder.BasicEncoding           as BE
+import qualified Data.ByteString.Lazy.Builder.BasicEncoding.Extras    as BE
 import           Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils
 
 import           Numeric (showHex)

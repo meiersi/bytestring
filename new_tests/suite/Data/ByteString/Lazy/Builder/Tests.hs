@@ -31,8 +31,9 @@ import           Data.ByteString.Lazy.Builder
 import           Data.ByteString.Lazy.Builder.Extras
 import           Data.ByteString.Lazy.Builder.ASCII
 import           Data.ByteString.Lazy.Builder.Internal (Put, putBuilder, fromPut)
-import qualified Data.ByteString.Lazy.Builder.Internal           as BI
-import qualified Data.ByteString.Lazy.Builder.BasicEncoding      as BE
+import qualified Data.ByteString.Lazy.Builder.Internal             as BI
+import qualified Data.ByteString.Lazy.Builder.BasicEncoding        as BE
+import qualified Data.ByteString.Lazy.Builder.BasicEncoding.Extras as BE
 import           Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils
 
 import           Numeric (readHex)
@@ -305,17 +306,21 @@ testsEncodingToBuilder =
   [ test_encodeUnfoldrF
   , test_encodeUnfoldrB
 
-  , compareImpls "encodeChunked [base-128, variable-length] (recipe)" 
+  , compareImpls "encodeSize/Chunked/Size/Chunked (recipe)"
         (testBuilder id)
-        (parseChunks parseVar . testBuilder encodeVar)
+        ( 
+          parseChunks parseHexLen .
+          parseSizePrefix parseHexLen .
+          parseChunks parseVar .
+          parseSizePrefix parseHexLen .
+          testBuilder (
+            prefixHexSize . 
+            encodeVar . 
+            prefixHexSize . 
+            encodeHex
+          )
+        )
 
-  , compareImpls "encodeChunked [hex] (recipe)"
-        (testBuilder id)
-        (parseChunks parseHexLen . testBuilder encodeHex)
-
-  , compareImpls "encodeWithSize [hex] (recipe)" 
-        (testBuilder id)
-        (parseSizePrefix parseHexLen . testBuilder prefixHexSize)
   ]
 
 

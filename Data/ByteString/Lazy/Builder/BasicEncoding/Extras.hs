@@ -706,23 +706,30 @@ putWithSize innerBufSize mkSizeFE innerP =
 
             slowPrefixSize :: Ptr Word8 -> Builder -> BuildStep a -> IO (BuildSignal r)
             slowPrefixSize opInner' bInner nextStep = do
-                (x, lbsC, lenAfter) <- toLBS $ runBuilderWith bInner nextStep
+                (x, chunks, payLenChunks) <- toLBS $ runBuilderWith bInner nextStep
 
-                let curBufLen   = opInner' `minusPtr` startInner
-                    lenAll      = fromIntegral lenAfter + fromIntegral curBufLen
-                    sizeFE'     = mkSizeFE lenAll
+                let -- length of payload data in current buffer
+                    payLenCur   = opInner' `minusPtr` startInner
+                    -- length of whole payload
+                    payLen      = fromIntegral payLenCur + fromIntegral payLenChunks
+                    -- encoder for payload length
+                    sizeFE'     = mkSizeFE payLen
+                    -- start of payload in current buffer with the payload
+                    -- length encoded before
                     startInner' = op `plusPtr` I.size sizeFE'
+
                 -- move data in current buffer out of the way, if required
                 unless (startInner == startInner') $ 
-                    moveBytes startInner' startInner curBufLen
-                runF sizeFE' lenAll op
+                    moveBytes startInner' startInner payLenCur
+                -- encode payload length at start of the buffer
+                runF sizeFE' payLen op
                 -- TODO: If we were to change the CIOS definition such that it also
                 -- returns the last buffer for writing, we could also fill the
                 -- last buffer with 'k' and return the signal, once it is
                 -- filled, therefore avoiding unfilled space.
-                return $ insertChunks (startInner' `plusPtr` curBufLen) 
-                                      (fromIntegral lenAll) 
-                                      lbsC 
+                return $ insertChunks (startInner' `plusPtr` payLenCur) 
+                                      payLenChunks
+                                      chunks
                                       (k x)
               where
                 toLBS = runCIOSWithLength <=< 

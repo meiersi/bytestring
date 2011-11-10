@@ -45,9 +45,10 @@ library
                      Data.ByteString.Lazy.Builder
                      Data.ByteString.Lazy.Builder.Extras
                      Data.ByteString.Lazy.Builder.ASCII
+                     Data.ByteString.Lazy.Builder.BasicEncoding
                      -- exposed, but hidden in haddocks
                      Data.ByteString.Lazy.Builder.Internal
-                     Data.ByteString.Lazy.Builder.BasicEncoding
+                     Data.ByteString.Lazy.Builder.BasicEncoding.Extras
                      Data.ByteString.Lazy.Builder.BasicEncoding.Internal
 
   other-modules:     

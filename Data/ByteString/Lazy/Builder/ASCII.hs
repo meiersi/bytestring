@@ -77,10 +77,10 @@ import           Foreign
 ------------------------------------------------------------------------------
 
 
--- | Encode a 'String' using 'E.charASCII'.
-{-# INLINE stringASCII #-}
-stringASCII :: String -> Builder
-stringASCII = E.encodeListWithF E.charASCII
+-- | Encode a 'String' using 'E.char7'.
+{-# INLINE string7 #-}
+string7 :: String -> Builder
+string7 = E.encodeListWithF E.char7
 
 ------------------------------------------------------------------------------
 -- Decimal Encoding
@@ -117,7 +117,7 @@ intDec = E.encodeWithB E.intDec
 -- | /Currently slow./ Decimal encoding of an 'Integer' using the ASCII digits.
 {-# INLINE integerDec #-}
 integerDec :: Integer -> Builder
-integerDec =  stringASCII . show
+integerDec =  string7 . show
 
 
 -- Unsigned integers
@@ -157,12 +157,12 @@ wordDec = E.encodeWithB E.wordDec
 -- | /Currently slow./ Decimal encoding of an IEEE 'Float'.
 {-# INLINE floatDec #-}
 floatDec :: Float -> Builder
-floatDec = stringASCII . show
+floatDec = string7 . show
 
 -- | /Currently slow./ Decimal encoding of an IEEE 'Double'.
 {-# INLINE doubleDec #-}
 doubleDec :: Double -> Builder
-doubleDec = stringASCII . show
+doubleDec = string7 . show
 
 
 ------------------------------------------------------------------------------

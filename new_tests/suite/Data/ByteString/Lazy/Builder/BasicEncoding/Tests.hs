@@ -221,7 +221,7 @@ testsChar8 =
 
 testsASCII :: [Test]
 testsASCII = 
-  [ testBoundedF "charASCII" charASCII_list BE.charASCII
+  [ testBoundedF "char7" char7_list BE.char7
 
   , testBoundedB "int8Dec"   dec_list BE.int8Dec
   , testBoundedB "int16Dec"  dec_list BE.int16Dec

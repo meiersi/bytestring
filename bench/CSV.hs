@@ -320,7 +320,7 @@ renderStringBE cs =
       E.charUtf8
 
     {-# INLINE fixed2 #-}
-    fixed2 x = E.fromF $ const x  >$< E.charASCII >*< E.charASCII
+    fixed2 x = E.fromF $ const x  >$< E.char7 >*< E.char7
 
 renderCellBE :: Cell -> Builder
 renderCellBE (StringC cs) = renderStringBE cs
@@ -509,7 +509,7 @@ renderStringFoldMap_BE cs =
       E.charUtf8
 
     {-# INLINE fixed2 #-}
-    fixed2 x = E.fromF $ const x  >$< E.charASCII >*< E.charASCII
+    fixed2 x = E.fromF $ const x  >$< E.char7 >*< E.char7
 
 
 ------------------------------------------------------------------------------

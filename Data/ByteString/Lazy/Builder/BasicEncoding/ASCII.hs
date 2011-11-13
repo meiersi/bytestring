@@ -12,7 +12,7 @@ module Data.ByteString.Lazy.Builder.BasicEncoding.ASCII
     ( 
      
      -- *** ASCII
-     charASCII
+     char7
 
       -- **** Decimal numbers
       -- | Decimal encoding of numbers using ASCII encoded characters.
@@ -88,9 +88,9 @@ import Foreign
 import Foreign.C.Types
 
 -- | Encode the least 7-bits of a 'Char' using the ASCII encoding.
-{-# INLINE charASCII #-}
-charASCII :: FixedEncoding Char
-charASCII = (\c -> fromIntegral $ ord c .&. 0x7f) >$< word8
+{-# INLINE char7 #-}
+char7 :: FixedEncoding Char
+char7 = (\c -> fromIntegral $ ord c .&. 0x7f) >$< word8
 
 
 ------------------------------------------------------------------------------

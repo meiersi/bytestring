@@ -540,8 +540,8 @@ testsBinary =
 
 testsASCII :: [Test]
 testsASCII = 
-  [ testBuilderConstr "charASCII" charASCII_list charASCII
-  , testBuilderConstr "stringASCII" (concatMap charASCII_list) stringASCII
+  [ testBuilderConstr "char7" char7_list char7
+  , testBuilderConstr "string7" (concatMap char7_list) string7
 
   , testBuilderConstr "int8Dec"   dec_list int8Dec
   , testBuilderConstr "int16Dec"  dec_list int16Dec

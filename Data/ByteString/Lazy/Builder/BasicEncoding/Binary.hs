@@ -303,22 +303,22 @@ int64Host = storableToF
 -- | Encode a 'Float' in big endian format.
 {-# INLINE floatBE #-}
 floatBE :: FixedEncoding Float
-floatBE = coerceFloatToWord32 >$< word32BE 
+floatBE = encodeFloatViaWord32F word32BE
 
 -- | Encode a 'Float' in little endian format.
 {-# INLINE floatLE #-}
 floatLE :: FixedEncoding Float
-floatLE = coerceFloatToWord32 >$< word32LE
+floatLE = encodeFloatViaWord32F word32LE
 
 -- | Encode a 'Double' in big endian format.
 {-# INLINE doubleBE #-}
 doubleBE :: FixedEncoding Double
-doubleBE = coerceDoubleToWord64 >$< word64BE 
+doubleBE = encodeDoubleViaWord64F word64BE
 
 -- | Encode a 'Double' in little endian format.
 {-# INLINE doubleLE #-}
 doubleLE :: FixedEncoding Double
-doubleLE = coerceDoubleToWord64 >$< word64LE 
+doubleLE = encodeDoubleViaWord64F word64LE
 
 
 -- | Encode a 'Float' in native host order and host endianness. Values written

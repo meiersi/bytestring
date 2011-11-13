@@ -277,11 +277,11 @@ int64HexFixed = fromIntegral >$< word64HexFixed
 -- | Encode an IEEE 'Float' using 8 nibbles.
 {-# INLINE floatHexFixed #-}
 floatHexFixed :: FixedEncoding Float
-floatHexFixed = coerceFloatToWord32 >$< word32HexFixed
+floatHexFixed = encodeFloatViaWord32F word32HexFixed
 
 -- | Encode an IEEE 'Double' using 16 nibbles.
 {-# INLINE doubleHexFixed #-}
 doubleHexFixed :: FixedEncoding Double
-doubleHexFixed = coerceDoubleToWord64 >$< word64HexFixed
+doubleHexFixed = encodeDoubleViaWord64F word64HexFixed
 
 

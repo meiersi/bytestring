@@ -241,4 +241,3 @@ main = do
       , benchFE "doubleHexFixed"   $ fromIntegral >$< E.doubleHexFixed   
       ]
     ]
-

@@ -3,8 +3,7 @@
 -- License     : BSD3-style (see LICENSE)
 -- 
 -- Maintainer  : Simon Meier <iridcode@gmail.com>
--- Stability   : experimental
--- Portability : tested on GHC only
+-- Portability : GHC
 --
 -- Constructing 'Builder's using ASCII-based encodings.
 --
@@ -66,15 +65,13 @@ module Data.ByteString.Lazy.Builder.ASCII
 
     ) where
 
-import Foreign
+import           Data.ByteString                                  as S
+import           Data.ByteString.Lazy.Internal                    as L
+import           Data.ByteString.Lazy.Builder.Internal (Builder)
+import qualified Data.ByteString.Lazy.Builder.BasicEncoding       as E
 
-import Data.ByteString               as S
-import Data.ByteString.Lazy.Internal as L
-
-import Data.ByteString.Lazy.Builder (Builder)
-
-import qualified Data.ByteString.Lazy.Builder.BasicEncoding     as E
-
+import           Foreign
+                 
 ------------------------------------------------------------------------------
 -- Decimal Encoding
 ------------------------------------------------------------------------------

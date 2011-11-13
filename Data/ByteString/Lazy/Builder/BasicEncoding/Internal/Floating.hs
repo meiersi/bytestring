@@ -6,7 +6,7 @@
 -- 
 -- Maintainer  : Simon Meier <iridcode@gmail.com>
 -- Stability   : experimental
--- Portability : non-portable (uses unsafeCoerce)
+-- Portability : GHC
 --
 -- Conversion of 'Float's and 'Double's to 'Word32's and 'Word64's.
 --

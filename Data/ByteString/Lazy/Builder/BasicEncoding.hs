@@ -1,106 +1,186 @@
 {-# LANGUAGE CPP, BangPatterns, MonoPatBinds, ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fno-warn-unused-imports #-}
-{- | Module: Data.ByteString.Lazy.Builder.BasicEncoding
-Copyright   : (c) 2010-2011 Simon Meier
-            . (c) 2010      Jasper van der Jeugt
-License     : BSD3-style (see LICENSE)
+{- | Copyright : (c) 2010-2011 Simon Meier
+                   (c) 2010      Jasper van der Jeugt
+License        : BSD3-style (see LICENSE)
+Maintainer     : Simon Meier <iridcode@gmail.com>
+Portability    : GHC
 
-Maintainer  : Simon Meier <iridcode@gmail.com>
-Stability   : experimental
-Portability : tested on GHC only
+This module provides the types of fixed-size and bounded-size encodings,
+  which are the basic building blocks for constructing 'Builder's.
+These types are used to achieve 
+  application-specific performance improvements of 'Builder's.
 
-An /encoding/ is a conversion function of Haskell values to sequences of bytes. 
-A /fixed(-size) encoding/ is an encoding that always results in sequence of bytes
-  of a pre-determined, fixed length.
+/Fixed(-size) encodings/ are encodings that always result in a sequence of bytes
+  of a predetermined, fixed length.
 An example for a fixed encoding is the big-endian encoding of a 'Word64', 
   which always results in exactly 8 bytes. 
-A /bounded(-size) encoding/ is an encoding that always results in sequence
-  of bytes that is no larger than a pre-determined bound.
+/Bounded(-size) encodings/ are encodings that always result in a sequence
+  of bytes that is no larger than a predetermined bound.
 An example for a bounded encoding is the UTF-8 encoding of a 'Char', 
   which results always in less or equal to 4 bytes.
 Note that every fixed encoding is also a bounded encoding.
-We explicitly identify fixed encodings because they allow some optimizations
-  that are impossible with bounded encodings.
-In the following,
-  we first motivate the use of bounded encodings
-  and then give examples of optimizations 
-  that are only possible with fixed encodings.
+In the following, we therefore only refer to fixed encodings,
+  where it matters that the resulting sequence of bytes is of a
+  of a predetermined, fixed length.
+Otherwise, we just refer to bounded encodings.
 
-Typicall, encodings are implemented efficiently by allocating a buffer 
-  (a mutable array of bytes) 
-  and repeatedly executing the following two steps: 
-  (1) writing to the buffer until it is full and 
-  (2) handing over the filled part to the consumer of the encoded value. 
-Step (1) is where bounded encodings are used. 
-We must use a bounded encoding, 
-  as we must check that there is enough free space 
-  /before/ actually writing to the buffer.
+As said, 
+  the goal of bounded encodings is to improve the performance of 'Builder's.
+These improvements stem from making the two
+  most common steps performed by a 'Builder' more efficient.
+We explain these two steps in turn.
 
-In term of expressivity, 
-  it would be sufficient to construct all encodings
-  from the single fixed encoding that encodes a 'Word8' as-is. 
+The first most common step is the concatentation of two 'Builder's.
+Internally, 
+  concatentation corresponds to function composition.
+(Note that 'Builder's can be seen as difference-lists
+  of buffer-filling functions; 
+  cf.  <http://hackage.haskell.org/cgi-bin/hackage-scripts/package/dlist>.
+)
+Function composition is a fast /O(1)/ operation. 
+However, 
+  we can use bounded encodings to 
+  remove some of these function compositions altoghether,
+  which is obviously more efficient.
+
+The second most common step performed by a 'Builder' is to fill a buffer
+  using a bounded encoding,
+  which works as follows.
+The 'Builder' checks whether there is enough space left to 
+  execute the bounded encoding.  
+If there is, then the 'Builder' executes the bounded encoding
+  and calls the next 'Builder' with the updated buffer.
+Otherwise, 
+  the 'Builder' signals its driver that it requires a new buffer.
+This buffer must be at least as large as the bound of the encoding.
+We can use bounded encodings to reduce the number of buffer-free
+  checks by fusing the buffer-free checks of consecutive
+  'Builder's.
+We can also use bounded encodings to simplify the control flow
+  for signalling that a buffer is full by
+  ensuring that we check first that there is enough space left
+  and only then decide on how to encode a given value.
+
+Let us illustrate these improvements on the 
+  CSV-table rendering example from "Data.ByteString.Lazy.Builder".
+Its \"hot code\" is the rendering of a table's cells,
+  which we implement as follows using only the functions from the
+  'Builder' API.
+
+@
+import           "Data.ByteString.Lazy.Builder"         as B
+import           "Data.ByteString.Lazy.Builder.ASCII"   as B
+
+renderCell :: Cell -> Builder
+renderCell (StringC cs) = renderString cs
+renderCell (IntC i)     = B.intDec i
+
+renderString :: String -> Builder
+renderString cs = B.charUtf8 \'\"\' \<\> foldMap escape cs \<\> B.charUtf8 \'\"\'
+  where
+    escape \'\\\\\' = B.charUtf8 \'\\\\\' \<\> B.charUtf8 \'\\\\\'
+    escape \'\\\"\' = B.charUtf8 \'\\\\\' \<\> B.charUtf8 \'\\\"\'
+    escape c    = B.charUtf8 c
+@
+
+Efficient encoding of 'Int's as decimal numbers is performed by @intDec@
+  from "Data.ByteString.Lazy.Builder.ASCII".
+Optimization potential exists for the escaping of 'String's.
+The above implementation has two optimization opportunities.
+First, 
+  the buffer-free checks of the 'Builder's for escaping doublequotes
+  and backslashes can be fused.
+Second,
+  the concatenations performed by 'foldMap' can be eliminated.
+The following implementation exploits these optimizations.
+
+@
+import qualified Data.ByteString.Lazy.Builder.BasicEncoding  as E
+import           Data.ByteString.Lazy.Builder.BasicEncoding 
+                 ( 'ifB', 'fromF', ('>*<'), ('>$<') )
+
+renderString :: String -\> Builder
+renderString cs = 
+    B.charUtf8 \'\"\' \<\> E.'encodeListWithB' escape cs \<\> B.charUtf8 \'\"\'
+  where
+    escape :: E.'BoundedEncoding' Char
+    escape = 
+      'ifB' (== \'\\\\\') (fixed2 (\'\\\\\', \'\\\\\')) $
+      'ifB' (== \'\\\"\') (fixed2 (\'\\\\\', \'\\\"\')) $
+      E.'charUtf8'
+    &#160;
+    {&#45;\# INLINE fixed2 \#&#45;}
+    fixed2 x = 'fromF' $ const x '>$<' E.'char7' '>*<' E.'char7'
+@
+
+The code should be mostly self-explanatory.
+The slightly awkward syntax is because the combinators
+  are written such that the size-bound of the resulting 'BoundedEncoding'
+  can be computed at compile time.
+We also explicitly inline the 'fixed2' encoding,
+  which encodes a fixed tuple of characters, 
+  to ensure that the bound compuation happens at compile time.
+When encoding the following list of 'String's,
+  the optimized implementation of 'renderString' is two times faster.
+
+@
+maxiStrings :: [String]
+maxiStrings = take 1000 $ cycle [\"hello\", \"\\\"1\\\"\", \"&#955;-w&#246;rld\"]
+@
+
+Most of the performance gain stems from using 'encodeListWithB', 
+  which encodes a list of values from left-to-right with a
+  'BoundedEncoding'.
+It exploits the 'Builder' internals to avoid unnecessary function
+  compositions (i.e., concatentations).
+In the future,
+  we would expect the compiler to perform the optimizations
+  implemented in 'encodeListWithB'.
 However,
-  this is not sufficient in terms of efficiency. 
-It results in unnecessary buffer-full checks and 
-  it complicates the program-flow for writing to the buffer, 
-  as buffer-full checks are interleaved with analyzing the value to be
-  encoded (e.g., think about the program-flow for UTF-8 encoding). 
-This has a significant effect on overall encoding performance, 
-  as encoding primitive Haskell values such as 'Word8's or 'Char's 
-  lies at the heart of every encoding implementation.
-
-The 'BoundedEncoding's provided by this module remove this performance problem. 
-Intuitively, 
-  they consist of a tuple of the bound on the maximal number of bytes written 
-  and the actual implementation of the encoding as 
-  a function that modifies a mutable buffer. 
-Hence when executing a 'BoundedEncoding', 
- the buffer-full check can be done once before the actual writing to the buffer. 
-The provided 'BoundedEncoding's also take care to implement the
-  actual writing to the buffer efficiently. 
-Moreover, combinators are provided to construct new bounded encodings 
-  from the provided ones. 
-
-
-
-The result of an encoding can be consumed efficiently,
-  if it is represented as a sequence of large enough 
-  /chunks/ of consecutive memory (i.e., C @char@ arrays).
-The precise meaning of /large enough/ is application dependent.
-Typically, an average chunk size between 4kb and 32kb is suitable
-  for writing the result to disk or sending it over the network.
-We desire large enough chunk sizes because each chunk boundary
-  incurs extra work that we must be able to amortize.
-
-
-The need for fixed-size encodings arises when considering
-  the efficient implementation of encodings that require the encoding of a
-  value to be prefixed with the size of the resulting sequence of bytes.
-An efficient implementation avoids unnecessary buffer
-We can implement this efficiently as follows.
-We first reserve the space for the encoding of the size.
-Then, we encode the value.
-Finally, we encode the size of the resulting sequence of bytes into
-  the reserved space.
-For this to work
-
-This works only if the encoding resulting size fits 
-
-by first, reserving the space for the encoding
-  of the size, then performing the 
+  it seems that the code is currently to complicated for the
+  compiler to see through.
+Therefore,
+  we provide the 'BoundedEncoding' escape hatch, 
+  which allows data structures to provide very efficient encoding traversals,
+  like 'encodeListWithB' for lists.
   
-For efficiency,
-  we want to avoid unnecessary copying.
+Note that 'BoundedEncoding's are a bit verbose, but quite versatile.
+Here is an example of a 'BoundedEncoding' for combined HTML escapng and
+UTF-8 encoding. 
+It exploits that the escaped character with the maximal Unicode
+  codepoint is \'>\'.
 
+@
+{&#45;\# INLINE charUtf8HtmlEscaped \#&#45;}
+charUtf8HtmlEscaped :: E.BoundedEncoding Char
+charUtf8HtmlEscaped =
+    'ifB' (>  \'\>\' ) E.'charUtf8' $
+    'ifB' (== \'\<\' ) (fixed4 (\'&\',(\'l\',(\'t\',\';\')))) $        -- &lt;
+    'ifB' (== \'\>\' ) (fixed4 (\'&\',(\'g\',(\'t\',\';\')))) $        -- &gt;
+    'ifB' (== \'&\' ) (fixed5 (\'&\',(\'a\',(\'m\',(\'p\',\';\'))))) $  -- &amp;
+    'ifB' (== \'\"\' ) (fixed5 (\'&\',(\'\#\',(\'3\',(\'4\',\';\'))))) $  -- &\#34;
+    'ifB' (== \'\\\'\') (fixed5 (\'&\',(\'\#\',(\'3\',(\'9\',\';\'))))) $  -- &\#39;
+    ('fromF' E.'char7')         -- fallback for 'Char's smaller than \'\>\' 
+  where
+    {&#45;\# INLINE fixed4 \#&#45;}
+    fixed4 x = 'fromF' $ const x '>$<' 
+      E.char7 '>*<' E.char7 '>*<' E.char7 '>*<' E.char7
+    &#160;
+    {&#45;\# INLINE fixed5 \#&#45;}
+    fixed5 x = 'fromF' $ const x '>$<' 
+      E.char7 '>*<' E.char7 '>*<' E.char7 '>*<' E.char7 '>*<' E.char7
+@
 
-For example, the HTTP/1.0 requires the size of the body to be given in
-  the Content-Length field.
-
-chunked-transfer encoding requires each chunk to
-  be prefixed with the hexadecimal encoding of the chunk size.
-
-
+This module currently does not expose functions that require the special
+  properties of fixed-size encodings.
+They are useful for prefixing 'Builder's with their size or for 
+  implementing chunked encodings.
+We will expose the corresponding functions in future releases of this
+  library.
 -}
+
+
 
 {-
 --

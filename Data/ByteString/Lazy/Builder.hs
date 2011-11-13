@@ -2,11 +2,9 @@
 {-# OPTIONS_GHC -fno-warn-unused-imports #-}
 {- | Copyright   : (c) 2010 Jasper Van der Jeugt 
                    (c) 2010 - 2011 Simon Meier
-     License     : BSD3-style (see LICENSE)
-       
-     Maintainer  : Simon Meier <iridcode@gmail.com>
-     Stability   : experimental
-     Portability : tested on GHC only
+License     : BSD3-style (see LICENSE)
+Maintainer  : Simon Meier <iridcode@gmail.com>
+Portability : GHC
 
 'Builder's are used to efficiently construct sequences of bytes from
   smaller parts.
@@ -54,11 +52,12 @@ As a simple example of an encoding implementation,
 We use the following imports and abbreviate 'mappend' to simplify reading.
 
 @
-import qualified "Data.ByteString.Lazy"         as L
+import qualified "Data.ByteString.Lazy"               as L
 import           "Data.ByteString.Lazy.Builder"
+import           "Data.ByteString.Lazy.Builder.ASCII" ('intDec')
 import           Data.Monoid
-import           Data.Foldable                ('foldMap')
-import           Data.List                    ('intersperse')
+import           Data.Foldable                        ('foldMap')
+import           Data.List                            ('intersperse')
 
 infixr 4 \<\>
 (\<\>) :: 'Monoid' m => m -> m -> m
@@ -88,7 +87,7 @@ renderRow (c:cs) =
 
 renderCell :: Cell -> Builder
 renderCell (StringC cs) = renderString cs
-renderCell (IntC i)     = 'stringUtf8' $ show i
+renderCell (IntC i)     = 'intDec' i
 
 renderString :: String -> Builder
 renderString cs = charUtf8 \'\"\' \<\> foldMap escape cs \<\> charUtf8 \'\"\'
@@ -97,6 +96,17 @@ renderString cs = charUtf8 \'\"\' \<\> foldMap escape cs \<\> charUtf8 \'\"\'
     escape \'\\\"\' = charUtf8 \'\\\\\' \<\> charUtf8 \'\\\"\'
     escape c    = charUtf8 c
 @
+
+Note that the ASCII encoding is a subset of the UTF-8 encoding,
+  which is why we can use the optimized function 'intDec' to 
+  encode an 'Int' as a decimal number with UTF-8 encoded digits.
+Using 'intDec' is more efficient than @'stringUtf8' . 'show'@,
+  as it avoids constructing an intermediate 'String'.
+Avoiding this intermediate data structure significantly improves
+  performance because encoding 'Cell's is the core operation
+  for rendering CSV-tables.
+See "Data.ByteString.Lazy.Builder.BasicEncoding" for further 
+  information on how to improve the performance of 'renderString'.
 
 We demonstrate our UTF-8 CSV encoding function on the following table. 
 
@@ -155,7 +165,9 @@ The following definition of 'renderString' is also about 20% slower.
 
 Apart from removing intermediate data-structures, 
   encodings can be optimized further by fine-tuning their execution
-  parameters using the functions in "Data.ByteString.Lazy.Builder.Extras".
+  parameters using the functions in "Data.ByteString.Lazy.Builder.Extras" and
+  their \"inner loops\" using the functions in
+  "Data.ByteString.Lazy.Builder.BasicEncoding".
 -}
 
 
@@ -254,6 +266,7 @@ import           System.IO
 import           Foreign
 
 -- HADDOCK only imports
+import           Data.ByteString.Lazy.Builder.ASCII (intDec)
 import qualified Data.ByteString               as S (concat)
 import           Data.Monoid
 import           Data.Foldable                      (foldMap)

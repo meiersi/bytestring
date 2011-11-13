@@ -1,12 +1,9 @@
 {-# LANGUAGE CPP, BangPatterns, MonoPatBinds #-}
--- |
--- Module      : Data.ByteString.Lazy.Builder.BasicEncoding
--- Copyright   : (c) 2010-2011 Simon Meier
--- License     : BSD3-style (see LICENSE)
--- 
--- Maintainer  : Simon Meier <iridcode@gmail.com>
--- Stability   : experimental
--- Portability : tested on GHC only
+-- | Copyright   : (c) 2010-2011 Simon Meier
+-- License       : BSD3-style (see LICENSE)
+--               
+-- Maintainer    : Simon Meier <iridcode@gmail.com>
+-- Portability   : GHC
 --
 module Data.ByteString.Lazy.Builder.BasicEncoding.Binary (
 

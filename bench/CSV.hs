@@ -132,6 +132,7 @@ import qualified Data.Text.Lazy                                  as TL
 import qualified Data.Text.Lazy.Encoding                         as TL
 import qualified Data.Text.Lazy.Builder                          as TB
 import qualified Data.Text.Lazy.Builder.Int                      as TB
+import qualified Data.ByteString.Lazy.Builder.Internal           as B
 
 import Data.Char (ord)
 import qualified Data.Binary.Builder                             as BinB
@@ -166,6 +167,10 @@ table = [map StringC strings, map IntC [-3..3]]
 -- | A bigger table for benchmarking our encoding functions.
 maxiTable :: Table
 maxiTable = take 1000 $ cycle table
+
+-- | A bigger list of strings for benchmarking.
+maxiStrings :: [String]
+maxiStrings = take 1000 $ cycle strings
 
 
 ------------------------------------------------------------------------------
@@ -310,9 +315,12 @@ renderStringBE cs =
   where
     escape :: E.BoundedEncoding Char
     escape = 
-      E.ifB (== '\\') (const ('\\', '\\') >$< E.charUtf8 >*< E.charUtf8) $
-      E.ifB (== '\"') (const ('\\', '\"') >$< E.charUtf8 >*< E.charUtf8) $
+      E.ifB (== '\\') (fixed2 ('\\', '\\')) $
+      E.ifB (== '\"') (fixed2 ('\\', '\"')) $
       E.charUtf8
+
+    {-# INLINE fixed2 #-}
+    fixed2 x = E.fromF $ const x  >$< E.charASCII >*< E.charASCII
 
 renderCellBE :: Cell -> Builder
 renderCellBE (StringC cs) = renderStringBE cs
@@ -408,7 +416,8 @@ renderStringBinB cs = char8BinB '"' <> foldMap escape cs <> char8BinB '"'
 
 renderCellBinB :: Cell -> BinB.Builder
 renderCellBinB (StringC cs) = renderStringBinB cs
-renderCellBinB (IntC i)     = B.intDec i
+renderCellBinB (IntC i)     = 
+    foldMap (BinB.singleton . fromIntegral . ord) $ show i
            
 renderRowBinB :: Row -> BinB.Builder
 renderRowBinB []     = mempty
@@ -458,6 +467,52 @@ benchTextBuilderUtf8 = bench "utf8 + renderTableTB maxiTable" $
   nf (L.length . TL.encodeUtf8 . TB.toLazyText . renderTableTB) maxiTable
 
 ------------------------------------------------------------------------------
+-- String rendering
+------------------------------------------------------------------------------
+
+benchRenderStringfoldMap_B :: Benchmark
+benchRenderStringfoldMap_B = bench "renderString [foldMap, builder]" $
+  nf (L.length . toLazyByteString . foldMap renderStringFoldMap_B) maxiStrings
+
+benchRenderStringfoldMap_BE :: Benchmark
+benchRenderStringfoldMap_BE = bench "renderString [foldMap, bounded encoding]" $
+  nf (L.length . toLazyByteString . foldMap renderStringFoldMap_BE) maxiStrings
+
+benchRenderStringEncodeListWith :: Benchmark
+benchRenderStringEncodeListWith = bench "renderString [encodeListWith]" $
+  nf (L.length . toLazyByteString . foldMap renderStringBE) maxiStrings
+
+-- the @'mappend' :: Builder -> Builder -> Builder@ operator fuses 
+-- buffer-free checks by default. To measure, the impact of this fusion
+-- we define an unfused append.
+
+{-# INLINE unfusedAppend #-}
+unfusedAppend :: B.Builder -> B.Builder -> B.Builder
+unfusedAppend b1 b2 =
+  B.builder $ B.runBuilderWith b1 . B.runBuilderWith b2
+
+renderStringFoldMap_B :: String -> Builder
+renderStringFoldMap_B cs = B.charUtf8 '"' <> foldMap escape cs <> B.charUtf8 '"'
+  where
+    escape '\\' = B.charUtf8 '\\' `unfusedAppend` B.charUtf8 '\\'
+    escape '\"' = B.charUtf8 '\\' `unfusedAppend` B.charUtf8 '"'
+    escape c    = B.charUtf8 c
+
+renderStringFoldMap_BE :: String -> Builder
+renderStringFoldMap_BE cs = 
+    B.charUtf8 '"' <> foldMap escape cs <> B.charUtf8 '"'
+  where
+    escape :: Char -> Builder
+    escape = E.encodeWithB $
+      E.ifB (== '\\') (fixed2 ('\\', '\\')) $
+      E.ifB (== '\"') (fixed2 ('\\', '\"')) $
+      E.charUtf8
+
+    {-# INLINE fixed2 #-}
+    fixed2 x = E.fromF $ const x  >$< E.charASCII >*< E.charASCII
+
+
+------------------------------------------------------------------------------
 -- Benchmarking
 ------------------------------------------------------------------------------
 
@@ -470,7 +525,11 @@ main = do
         (show $ map S.length $ L.toChunks $ encodeUtf8CSV maxiTable)
     putStrLn ""
     defaultMain
-      [ benchNF
+      [ benchRenderStringfoldMap_B
+      , benchRenderStringfoldMap_BE
+      , benchRenderStringEncodeListWith
+
+      , benchNF
       , benchString
       , benchStringUtf8
       , benchDListUtf8

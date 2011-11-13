@@ -1,12 +1,11 @@
 {-# LANGUAGE CPP, BangPatterns, MonoPatBinds, ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fno-warn-unused-imports #-}
-{- | Module: Data.ByteString.Lazy.Builder.BasicEncoding
-Copyright   : (c) 2010-2011 Simon Meier
-License     : BSD3-style (see LICENSE)
-
-Maintainer  : Simon Meier <iridcode@gmail.com>
-Stability   : experimental
-Portability : tested on GHC only
+{- | Copyright : (c) 2010-2011 Simon Meier
+License        : BSD3-style (see LICENSE)
+               
+Maintainer     : Simon Meier <iridcode@gmail.com>
+Stability      : experimental
+Portability    : GHC
 
 An /encoding/ is a conversion function of Haskell values to sequences of bytes. 
 A /fixed(-size) encoding/ is an encoding that always results in sequence of bytes

@@ -1,12 +1,12 @@
 {-# LANGUAGE ScopedTypeVariables, CPP, BangPatterns, MonoPatBinds #-}
 {-# OPTIONS_HADDOCK hide #-}
 -- |
--- Copyright   : 2010, 2011 Simon Meier, 2010 Jasper van der Jeugt
+-- Copyright   : 2010-2011 Simon Meier, 2010 Jasper van der Jeugt
 -- License     : BSD3-style (see LICENSE)
 -- 
 -- Maintainer  : Simon Meier <iridcode@gmail.com>
 -- Stability   : experimental
--- Portability : tested on GHC only
+-- Portability : GHC
 --
 -- This module is internal. It is only intended to be used by the 'bytestring'
 -- and the 'text' library. Please contact the maintainer, if you need to use

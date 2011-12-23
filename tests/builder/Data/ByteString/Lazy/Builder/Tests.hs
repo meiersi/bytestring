@@ -18,7 +18,7 @@ import           Control.Applicative
 import           Control.Monad.State
 import           Control.Monad.Writer
 
-import           Foreign (Word, Word8, Word64, minusPtr)
+import           Foreign (Word, Word8, Int64, minusPtr)
 import           System.IO.Unsafe (unsafePerformIO)
 
 import           Data.Char (ord, chr)
@@ -413,7 +413,7 @@ testBuilder f recipe =
 encodeBase127LE :: Builder -> Builder
 encodeBase127LE =
     (`mappend` BE.encodeWithF BE.word8 0)
-  . (encodeChunked 5 word64Base127LEPadded BE.emptyB)
+  . (encodeChunked 5 int64Base127LEPadded BE.emptyB)
 
 -- | Chunked encoding using 0-padded, space-terminated hexadecimal numbers
 -- for encoding the chunk-size.
@@ -422,9 +422,9 @@ encodeHex =
     (`mappend` BE.encodeWithF (hexLen 0) 0)
   . (encodeChunked 7 hexLen BE.emptyB)
 
-hexLen :: Word64 -> BE.FixedEncoding Word64
+hexLen :: Int64 -> BE.FixedEncoding Int64
 hexLen bound =
-  (\x -> (x, ' ')) >$< (word64HexPadded '0' bound `pairF` BE.char8)
+  (\x -> (x, ' ')) >$< (int64HexPadded '0' bound `pairF` BE.char8)
 
 parseHexLen :: [Word8] -> (Int, [Word8])
 parseHexLen ws = case span (/= 32) ws of

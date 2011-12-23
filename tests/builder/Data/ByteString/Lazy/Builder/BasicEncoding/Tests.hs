@@ -110,6 +110,7 @@ testsBinary =
 
   , testPaddedF "wordBase127LEPadded"   wordBase127LEPadded_list    wordBase127LEPadded
   , testPaddedF "word64Base127LEPadded" word64Base127LEPadded_list  word64Base127LEPadded
+  , testPaddedF "int64Base127LEPadded"  int64Base127LEPadded_list   int64Base127LEPadded
 
   ]
 
@@ -204,10 +205,14 @@ word64Base127LEPadded_list bound =
 
 -- Somehow this function doesn't really make sense, as the bound must be
 -- greater when interpreted as an unsigned integer.
---
--- intBase127LEPadded_list :: Int -> Int -> [Word8]
--- intBase127LEPadded_list bound =
---     wordBase127LEPadded_list (fromIntegral bound) . fromIntegral
+
+intBase127LEPadded_list :: Int -> Int -> [Word8]
+intBase127LEPadded_list bound =
+    wordBase127LEPadded_list (fromIntegral bound) . fromIntegral
+
+int64Base127LEPadded_list :: Int64 -> Int64 -> [Word8]
+int64Base127LEPadded_list bound =
+    wordBase127LEPadded_list (fromIntegral bound) . fromIntegral
 
 
 ------------------------------------------------------------------------------

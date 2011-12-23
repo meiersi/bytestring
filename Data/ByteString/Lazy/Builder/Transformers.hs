@@ -308,6 +308,11 @@ buffers. The drawback of this method is that it requires a ...
   , word64HexPadded
   , word64DecPadded
 
+  , intBase127LEPadded
+
+  , int64Base127LEPadded
+  , int64HexPadded
+
   ) where
 
 import           Data.ByteString.Lazy.Builder.Internal
@@ -340,10 +345,10 @@ import           Foreign
 {-# INLINE encodeChunked #-}
 encodeChunked
     :: Word                           -- ^ Minimal free-size
-    -> (Word64 -> FixedEncoding Word64)
+    -> (Int64 -> FixedEncoding Int64)
     -- ^ Given a sizeBound on the maximal encodable size this function must return
     -- a fixed-size encoding for encoding all smaller size.
-    -> (BoundedEncoding Word64)
+    -> (BoundedEncoding Int64)
     -- ^ An encoding for terminating a chunk of the given size.
     -> Builder
     -- ^ Inner Builder to transform
@@ -356,10 +361,10 @@ encodeChunked minFree mkBeforeFE afterBE =
 {-# INLINE putChunked #-}
 putChunked
     :: Word                         -- ^ Minimal free-size
-    -> (Word64 -> FixedEncoding Word64)
+    -> (Int64 -> FixedEncoding Int64)
     -- ^ Given a sizeBound on the maximal encodable size this function must return
     -- a fixed-size encoding for encoding all smaller size.
-    -> (BoundedEncoding Word64)
+    -> (BoundedEncoding Int64)
     -- ^ Encoding a directly inserted chunk.
     -> Put a
     -- ^ Inner Put to transform
@@ -425,11 +430,10 @@ putChunked minFree0 mkBeforeFE afterBE p =
                   let !br' = BufferRange op' ope
                   runBuilderWith chunkB (fill nextInnerStep) br'
               where
-                nU     = fromIntegral n
                 chunkB =
-                  encodeWithF (mkBeforeFE nU) nU   `mappend`
+                  encodeWithF (mkBeforeFE n) n     `mappend`
                   sizedChunksInsert chunks Nothing `mappend`
-                  encodeWithB afterBE nU
+                  encodeWithB afterBE n
 
             -- TODO: Think about exploiting this last partially filled buffer.
             insertChunksH opInner' chunks (Just buf) nextInnerStep = do
@@ -452,9 +456,9 @@ putChunked minFree0 mkBeforeFE afterBE p =
 {-# INLINE encodeSizePrefixed #-}
 encodeSizePrefixed
     ::
-       Word
+       Int
     -- ^ Inner buffer-size.
-    -> (Word64 -> FixedEncoding Word64)
+    -> (Int64 -> FixedEncoding Int64)
     -- ^ Given a bound on the maximal size to encode, this function must return
     -- a fixed-size encoding for all smaller sizes.
     -> Builder
@@ -467,9 +471,9 @@ encodeSizePrefixed innerBufSize mkSizeFE =
 {-# INLINE putSizePrefixed #-}
 putSizePrefixed
     :: forall a.
-       Word
+       Int
     -- ^ Buffer-size for inner driver.
-    -> (Word64 -> FixedEncoding Word64)
+    -> (Int64 -> FixedEncoding Int64)
     -- ^ Encoding the size for the fallback case.
     -> Put a
     -- ^ 'Put' to prefix with the length of its sequence of bytes.
@@ -531,7 +535,7 @@ putSizePrefixed innerBufSize mkSizeFE innerP =
             slowPrefixSize opInner' bInner nextStep = do
                 (x, chunks@(SizedChunks lenChunks _), bufLast) <-
                     runCIOSWithLength <=<
-                    buildStepToCIOSUntrimmedWith (fromIntegral innerBufSize) $
+                    buildStepToCIOSUntrimmedWith innerBufSize $
                         runBuilderWith bInner nextStep
 {- At this point the situation is as follows:
 
@@ -553,7 +557,7 @@ filling.
                     startLast    = unsafeForeignPtrToPtr fpLast
                     innerLenLast = opLast `minusPtr` startLast
                     innerLen     = fromIntegral innerLenCur +
-                                   fromIntegral lenChunks +
+                                   lenChunks +
                                    fromIntegral innerLenLast
                     -- encoder for length of inner builder data
                     sizeFE'      = mkSizeFE innerLen
@@ -629,13 +633,10 @@ word64Base127LEPadded :: Word64 -> FixedEncoding Word64
 word64Base127LEPadded = genericBase127LEPadded shiftr_w64
 
 
--- Somehow this function doesn't really make sense, as the bound must be
--- greater when interpreted as an unsigned integer. These conversions and
--- decisions should be left to the user.
---
---{-# INLINE intBase127LEFixed #-}
---intBase127LEFixed :: Size -> FixedEncoding Size
---intBase127LEFixed bound = fromIntegral >$< wordBase127LEFixed (fromIntegral bound)
+{-# INLINE intBase127LEPadded #-}
+intBase127LEPadded :: Int64 -> FixedEncoding Int64
+intBase127LEPadded bound =
+    fromIntegral >$< wordBase127LEPadded (fromIntegral bound)
 
 {-# INLINE genHexPadded #-}
 genHexPadded :: (Num a, Bits a, Integral a)
@@ -672,10 +673,15 @@ wordHexPadded = genHexPadded shiftr_w
 word64HexPadded :: Char -> Word64 -> FixedEncoding Word64
 word64HexPadded = genHexPadded shiftr_w64
 
+{-# INLINE int64HexPadded #-}
+int64HexPadded :: Char -> Int64 -> FixedEncoding Int64
+int64HexPadded pad bound =
+    fromIntegral >$< word64HexPadded pad (fromIntegral bound)
+
+
 -- | Note: Works only for positive numbers.
 {-# INLINE genDecPadded #-}
-genDecPadded :: (Num a, Bits a, Integral a)
-                 => Char -> a -> FixedEncoding a
+genDecPadded :: (Num a, Bits a, Integral a) => Char -> a -> FixedEncoding a
 genDecPadded padding0 bound =
     fixedEncoding n0 io
   where
@@ -706,3 +712,9 @@ wordDecPadded = genDecPadded
 {-# INLINE word64DecPadded #-}
 word64DecPadded :: Char -> Word64 -> FixedEncoding Word64
 word64DecPadded = genDecPadded
+
+{-# INLINE int64Base127LEPadded #-}
+int64Base127LEPadded :: Int64 -> FixedEncoding Int64
+int64Base127LEPadded bound =
+    fromIntegral >$< word64Base127LEPadded (fromIntegral bound)
+

@@ -127,7 +127,7 @@ testBoundedF :: (Arbitrary a, Bounded a, Show a)
 testBoundedF name ref fe =
     testBoundedProperty name $ \x -> evalF fe x == ref x
 
--- FixedEncoding derived from a bound on a given value.
+-- FixedEncoding derived from a bound on a given positive value.
 
 testPaddedF :: (Arbitrary a, Show a, Integral a)
                 => String
@@ -137,7 +137,7 @@ testPaddedF :: (Arbitrary a, Show a, Integral a)
 testPaddedF name ref bfe =
     testProperty name prop
   where
-    prop (b, x0)
+    prop (b0, x0)
       | y == y'   = True
       | otherwise = error $ unlines $
           [ "testF: results disagree for " ++ quote (show (b, x))
@@ -145,8 +145,11 @@ testPaddedF name ref bfe =
           , " reference:      " ++ show y'++ " " ++ quoteWord8s y'
           ]
       where
+        b  = if b0 < 0 then negate b0 else b0
+        x1 = if x0 < 0 then negate x0 else x0
+
         x  | b == 0    = 0
-           | otherwise = x0 `mod` b
+           | otherwise = x1 `mod` b
         y  = evalF (bfe b) x
         y' = ref b x
 

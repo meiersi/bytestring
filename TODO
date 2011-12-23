@@ -12,7 +12,7 @@ TODO before full builder release
 
   [DONE] rename: encodeWithSize ~~> encodeSizePrefixed
   [DONE] fix naming scheme for varInt encodings
-  - switch to Int64 and Int for representing sizes
+  [DONE] switch to Int64 and Int for representing sizes
   [DONE] remove 'Monoidal' type-class
   [DONE] ensure correspondance of 'Contravariant' with 'contravariant' package
   [DONE] merge BasicEncoding.Extras to BasicEncoding

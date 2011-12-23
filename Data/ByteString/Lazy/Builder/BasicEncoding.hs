@@ -369,6 +369,7 @@ module Data.ByteString.Lazy.Builder.BasicEncoding (
 
   -- * Fixed-size encodings
     FixedEncoding
+  , size
 
   -- ** Combinators
   -- | The combinators for 'FixedEncoding's are implemented such that the 'size'
@@ -408,6 +409,7 @@ module Data.ByteString.Lazy.Builder.BasicEncoding (
   -- * Bounded-size encodings
 
   , BoundedEncoding
+  , sizeBound
 
   -- ** Combinators
   -- | The combinators for 'BoundedEncoding's are implemented such that the
@@ -487,8 +489,7 @@ import           Data.List (unfoldr)  -- HADDOCK ONLY
 import           Data.Char (chr, ord)
 import           Control.Monad ((<=<), unless)
 
-import           Data.ByteString.Lazy.Builder.BasicEncoding.Internal hiding (size, sizeBound)
-import qualified Data.ByteString.Lazy.Builder.BasicEncoding.Internal as I (size, sizeBound)
+import           Data.ByteString.Lazy.Builder.BasicEncoding.Internal
 import           Data.ByteString.Lazy.Builder.BasicEncoding.Binary
 import           Data.ByteString.Lazy.Builder.BasicEncoding.ASCII
 
@@ -569,7 +570,7 @@ encodeWithB :: BoundedEncoding a -> (a -> Builder)
 encodeWithB w =
     mkBuilder
   where
-    bound = I.sizeBound w
+    bound = sizeBound w
     mkBuilder x = builder step
       where
         step k (BufferRange op ope)
@@ -616,7 +617,7 @@ encodeListWithB :: BoundedEncoding a -> [a] -> Builder
 encodeListWithB w =
     makeBuilder
   where
-    bound = I.sizeBound w
+    bound = sizeBound w
     makeBuilder xs0 = builder $ step xs0
       where
         step xs1 k !(BufferRange op0 ope0) = go xs1 op0
@@ -641,7 +642,7 @@ encodeUnfoldrWithB :: BoundedEncoding b -> (a -> Maybe (b, a)) -> a -> Builder
 encodeUnfoldrWithB w =
     makeBuilder
   where
-    bound = I.sizeBound w
+    bound = sizeBound w
     makeBuilder f x0 = builder $ step x0
       where
         step x1 !k = fill x1
@@ -673,7 +674,7 @@ encodeByteStringWithB :: BoundedEncoding Word8 -> S.ByteString -> Builder
 encodeByteStringWithB w =
     \bs -> builder $ step bs
   where
-    bound = I.sizeBound w
+    bound = sizeBound w
     step (S.PS ifp ioff isize) !k =
         goBS (unsafeForeignPtrToPtr ifp `plusPtr` ioff)
       where
@@ -780,12 +781,12 @@ encodeCharUtf8 f1 f2 f3 f4 c = case ord c of
 
 -- | /For testing use only./ Evaluate a 'FixedEncoding' on a given value.
 evalF :: FixedEncoding a -> a -> [Word8]
-evalF fe = S.unpack . S.unsafeCreate (I.size fe) . runF fe
+evalF fe = S.unpack . S.unsafeCreate (size fe) . runF fe
 
 -- | /For testing use only./ Evaluate a 'BoundedEncoding' on a given value.
 evalB :: BoundedEncoding a -> a -> [Word8]
 evalB be x = S.unpack $ unsafePerformIO $
-    S.createAndTrim (I.sizeBound be) $ \op -> do
+    S.createAndTrim (sizeBound be) $ \op -> do
         op' <- runB be x op
         return (op' `minusPtr` op)
 

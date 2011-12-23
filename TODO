@@ -15,7 +15,13 @@ TODO before full builder release
   - switch to Int64 and Int for representing sizes
   - remove 'Monoidal' type-class
   - ensure correspondance of 'Contravariant' with 'contravariant' package
-  - merge BasicEncoding.Extras to BasicEncoding
+  [DONE] merge BasicEncoding.Extras to BasicEncoding
+  - add 'variable length encoding builders'
+  - add fast decimal float/double conversion based on blaze-textual
+    (also add corresponding bounded encoding)
+  - consider putting builder transformers into a separate package
+    'bytestring-builder-transformers'
+    (its just too experimental)
   - investigate performance of 'encodeWithListF E.word8'
   - improve performance of varInt encodings
       intBase127LE
@@ -28,7 +34,6 @@ TODO before full builder release
   - benchmark/test 'Put' merging
   - test 'varInt' encodings
   - test with GHC 6.12, 7.0, 7.2, 7.4
-  - add fast decimal float/double conversion based on blaze-textual
   - add version constraints to all libraries used for testing
     (check that they are referring to the newest versions.)
 

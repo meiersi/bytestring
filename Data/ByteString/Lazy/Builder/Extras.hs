@@ -46,15 +46,16 @@ module Data.ByteString.Lazy.Builder.Extras
     , floatHost
     , doubleHost
 
+    , module Data.ByteString.Lazy.Builder.Transformers
+
     ) where
 
 
-import Data.ByteString.Lazy.Builder.Internal
-
+import           Data.ByteString.Lazy.Builder.Internal
+import           Data.ByteString.Lazy.Builder.Transformers
 import qualified Data.ByteString.Lazy.Builder.BasicEncoding as E
 
-
-import Foreign
+import           Foreign
 
 
 

@@ -34,7 +34,6 @@ import           Data.ByteString.Lazy.Builder.ASCII
 import           Data.ByteString.Lazy.Builder.Internal (Put, putBuilder, fromPut)
 import qualified Data.ByteString.Lazy.Builder.Internal             as BI
 import qualified Data.ByteString.Lazy.Builder.BasicEncoding        as BE
-import qualified Data.ByteString.Lazy.Builder.BasicEncoding.Extras as BE
 import           Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils
 
 import           Numeric (readHex)
@@ -413,18 +412,18 @@ testBuilder f recipe =
 encodeBase127LE :: Builder -> Builder
 encodeBase127LE =
     (`mappend` BE.encodeWithF BE.word8 0)
-  . (BE.encodeChunked 5 BE.word64Base127LEPadded BE.emptyB)
+  . (encodeChunked 5 word64Base127LEPadded BE.emptyB)
 
 -- | Chunked encoding using 0-padded, space-terminated hexadecimal numbers
 -- for encoding the chunk-size.
 encodeHex :: Builder -> Builder
 encodeHex =
     (`mappend` BE.encodeWithF (hexLen 0) 0)
-  . (BE.encodeChunked 7 hexLen BE.emptyB)
+  . (encodeChunked 7 hexLen BE.emptyB)
 
 hexLen :: Word64 -> BE.FixedEncoding Word64
 hexLen bound =
-  (\x -> (x, ' ')) BE.>$< (BE.word64HexPadded '0' bound BE.>*< BE.char8)
+  (\x -> (x, ' ')) BE.>$< (word64HexPadded '0' bound BE.>*< BE.char8)
 
 parseHexLen :: [Word8] -> (Int, [Word8])
 parseHexLen ws = case span (/= 32) ws of
@@ -449,7 +448,7 @@ parseChunks parseLen =
 -- | Prefix with size. We use an inner buffer size of 77 (almost primes are good) to
 -- get several buffer full signals.
 prefixHexSize :: Builder -> Builder
-prefixHexSize = BE.encodeSizePrefixed 77 hexLen
+prefixHexSize = encodeSizePrefixed 77 hexLen
 
 parseSizePrefix :: ([Word8] -> (Int, [Word8])) -> L.ByteString -> L.ByteString
 parseSizePrefix parseLen =

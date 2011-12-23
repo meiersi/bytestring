@@ -17,8 +17,8 @@ import           Control.Arrow (first)
 import           Data.Char  (ord)
 import qualified Data.ByteString.Lazy                                 as L
 import           Data.ByteString.Lazy.Builder
+import           Data.ByteString.Lazy.Builder.Extras
 import qualified Data.ByteString.Lazy.Builder.BasicEncoding           as BE
-import qualified Data.ByteString.Lazy.Builder.BasicEncoding.Extras    as BE
 import           Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils
 
 import           Numeric (showHex)
@@ -107,8 +107,8 @@ testsBinary =
     , prop_zigZag_parseable  "intZigZagBase127LE"    unZigZagInt   BE.intZigZagBase127LE
     ]
 
-  , testPaddedF "wordBase127LEPadded"   wordBase127LEPadded_list    BE.wordBase127LEPadded
-  , testPaddedF "word64Base127LEPadded" word64Base127LEPadded_list  BE.word64Base127LEPadded
+  , testPaddedF "wordBase127LEPadded"   wordBase127LEPadded_list    wordBase127LEPadded
+  , testPaddedF "word64Base127LEPadded" word64Base127LEPadded_list  word64Base127LEPadded
 
   ]
 
@@ -258,16 +258,16 @@ testsASCII =
   , testF "doubleHexFixed" doubleHexFixed_list BE.doubleHexFixed
 
   , testPaddedF "wordDecPadded"
-      (genDecPadded_list 'x') (BE.wordDecPadded 'x')
+      (genDecPadded_list 'x') (wordDecPadded 'x')
 
   , testPaddedF "word64DecPadded"
-      (genDecPadded_list 'x') (BE.word64DecPadded 'x')
+      (genDecPadded_list 'x') (word64DecPadded 'x')
 
   , testPaddedF "wordHexPadded"
-      (genHexPadded_list 'x') (BE.wordHexPadded 'x')
+      (genHexPadded_list 'x') (wordHexPadded 'x')
 
   , testPaddedF "word64HexPadded"
-      (genHexPadded_list 'x') (BE.word64HexPadded 'x')
+      (genHexPadded_list 'x') (word64HexPadded 'x')
   ]
 
 -- | PRE: positive bound and value.

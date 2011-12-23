@@ -259,7 +259,7 @@ data BuildSignal a =
       {-# UNPACK #-} !SizedChunks
                      !(Maybe Buffer)  -- possibly, a last buffer that was
                                       -- partially filled. This is used in
-                                      -- 'encodeWithSize' to avoid half filled
+                                      -- 'encodeSizePrefixed' to avoid half filled
                                       -- buffers.
                      !(BuildStep a)
 

@@ -375,7 +375,7 @@ buffers. The drawback of this method is that it requires a ...
   , sizeBound
   -- , withSizeFB
   -- , withSizeBB
-  , encodeWithSize
+  , encodeSizePrefixed
 
   , encodeChunked
 
@@ -650,8 +650,8 @@ putChunked minFree0 mkBeforeFE afterBE p =
 -- the method falls back to encoding the data to a separate lazy bytestring,
 -- computing the size, and encoding the size before inserting the chunks of
 -- the separate lazy bytestring.
-{-# INLINE encodeWithSize #-}
-encodeWithSize
+{-# INLINE encodeSizePrefixed #-}
+encodeSizePrefixed
     ::
        Word
     -- ^ Inner buffer-size.
@@ -661,12 +661,12 @@ encodeWithSize
     -> Builder
     -- ^ 'Put' to prefix with the length of its sequence of bytes.
     -> Builder
-encodeWithSize innerBufSize mkSizeFE =
-    fromPut . putWithSize innerBufSize mkSizeFE . putBuilder
+encodeSizePrefixed innerBufSize mkSizeFE =
+    fromPut . putSizePrefixed innerBufSize mkSizeFE . putBuilder
 
 -- | Prefix a 'Put' with the size of its written data.
-{-# INLINE putWithSize #-}
-putWithSize
+{-# INLINE putSizePrefixed #-}
+putSizePrefixed
     :: forall a.
        Word
     -- ^ Buffer-size for inner driver.
@@ -675,7 +675,7 @@ putWithSize
     -> Put a
     -- ^ 'Put' to prefix with the length of its sequence of bytes.
     -> Put a
-putWithSize innerBufSize mkSizeFE innerP =
+putSizePrefixed innerBufSize mkSizeFE innerP =
     put $ encodingStep
   where
     -- | The minimal free size is such that we can encode any size.

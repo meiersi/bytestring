@@ -404,7 +404,7 @@ testBuilder f recipe =
   where
     (b, toLBS) = recipeComponents $ clearTail recipe
     -- need to remove tail of recipe to have a tighter
-    -- check on encodeWithSize
+    -- check on encodeSizePrefixed
     clearTail (Recipe how firstSize otherSize _ as) =
         Recipe how firstSize otherSize L.empty as
 
@@ -449,7 +449,7 @@ parseChunks parseLen =
 -- | Prefix with size. We use an inner buffer size of 77 (almost primes are good) to
 -- get several buffer full signals.
 prefixHexSize :: Builder -> Builder
-prefixHexSize = BE.encodeWithSize 77 hexLen
+prefixHexSize = BE.encodeSizePrefixed 77 hexLen
 
 parseSizePrefix :: ([Word8] -> (Int, [Word8])) -> L.ByteString -> L.ByteString
 parseSizePrefix parseLen =

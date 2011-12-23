@@ -10,7 +10,7 @@ TODO:
 TODO before full builder release
 --------------------------------
 
-  - rename: encodeWithSize ~~> encodeSizePrefixed
+  [DONE] rename: encodeWithSize ~~> encodeSizePrefixed
   - fix naming scheme for varInt encodings
   - fix documentation in
           BasicEncoding.Extras
@@ -24,6 +24,13 @@ TODO before full builder release
   - improve performance of encodeChunked and encodeWithSize
   - investigate performance of running a one byte builder.
   - check all documentation
+  - add 'Put' documentation
+  - benchmark/test 'Put' merging
+  - test 'varInt' encodings
+  - switch to Int64 and Int for representing sizes
+  - test with GHC 6.12, 7.0, 7.2, 7.4
+  - add version constraints to all libraries used for testing
+    (check that they are referring to the newest versions.)
 
 Todo items
 ----------

@@ -204,8 +204,11 @@ benchmark bench-builder-all
   type:             exitcode-stdio-1.0
   hs-source-dirs:   . bench
   main-is:          BenchAll.hs
-  build-depends:    base, deepseq, ghc-prim,
-                    criterion, integer-gmp
+  build-depends:    base
+                  , deepseq
+                  , ghc-prim
+                  , criterion
+                  , integer-gmp
   c-sources:        cbits/fpstring.c
                     cbits/itoa.c
   include-dirs:     include
@@ -227,8 +230,11 @@ benchmark bench-builder-boundscheck
   type:             exitcode-stdio-1.0
   hs-source-dirs:   . bench
   main-is:          BoundsCheckFusion.hs
-  build-depends:    base, deepseq, ghc-prim,
-                    criterion, integer-gmp
+  build-depends:    base
+                  , deepseq
+                  , ghc-prim,
+                  , criterion
+                  , integer-gmp
   c-sources:        cbits/fpstring.c
                     cbits/itoa.c
   include-dirs:     include

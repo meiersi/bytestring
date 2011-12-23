@@ -18,6 +18,7 @@ import           Data.Char  (ord)
 import qualified Data.ByteString.Lazy                                 as L
 import           Data.ByteString.Lazy.Builder
 import           Data.ByteString.Lazy.Builder.Extras
+import           Data.ByteString.Lazy.Builder.BasicEncoding ((>$<), pairB)
 import qualified Data.ByteString.Lazy.Builder.BasicEncoding           as BE
 import           Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils
 
@@ -309,7 +310,7 @@ testsUtf8 =
 ------------------------------------------------------------------------------
 
 maybeB :: BE.BoundedEncoding () -> BE.BoundedEncoding a -> BE.BoundedEncoding (Maybe a)
-maybeB nothing just = maybe (Left ()) Right BE.>$< BE.eitherB nothing just
+maybeB nothing just = maybe (Left ()) Right >$< BE.eitherB nothing just
 
 testsCombinatorsB :: [Test]
 testsCombinatorsB =
@@ -324,14 +325,14 @@ testsCombinatorsB =
   , compareImpls "pairB"
         (L.pack . concatMap (\(c,w) -> charUtf8_list c ++ [w]))
         (toLazyByteString . BE.encodeListWithB
-            ((\(c,w) -> (c,(w,undefined))) BE.>$<
-                BE.charUtf8 BE.>*< (BE.fromF BE.word8) BE.>*< (BE.fromF BE.emptyF)))
+            ((\(c,w) -> ((c,w),undefined)) >$<
+                BE.charUtf8 `pairB` (BE.fromF BE.word8) `pairB` (BE.fromF BE.emptyF)))
   ]
   where
     encChar = maybe [112] (hostEndian_list . ord)
 
-    encViaBuilder = BE.encodeListWithB $ maybeB (BE.fromF $ (\_ -> 112) BE.>$< BE.word8)
-                                                (ord BE.>$< (BE.fromF $ BE.intHost))
+    encViaBuilder = BE.encodeListWithB $ maybeB (BE.fromF $ (\_ -> 112) >$< BE.word8)
+                                                (ord >$< (BE.fromF $ BE.intHost))
 
 
 

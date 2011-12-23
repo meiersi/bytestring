@@ -427,7 +427,6 @@ module Data.ByteString.Lazy.Builder.BasicEncoding (
   -- the user of this library. We plan to use the @contravariant@ library
   -- <http://hackage.haskell.org/package/contravariant> once it is part of the
   -- Haskell platform.
-  , (>*<)
   , (>$<)
 
   -- ** Builder construction

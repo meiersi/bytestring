@@ -33,6 +33,7 @@ import           Data.ByteString.Lazy.Builder.Extras
 import           Data.ByteString.Lazy.Builder.ASCII
 import           Data.ByteString.Lazy.Builder.Internal (Put, putBuilder, fromPut)
 import qualified Data.ByteString.Lazy.Builder.Internal             as BI
+import           Data.ByteString.Lazy.Builder.BasicEncoding ((>$<), pairF)
 import qualified Data.ByteString.Lazy.Builder.BasicEncoding        as BE
 import           Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils
 
@@ -423,7 +424,7 @@ encodeHex =
 
 hexLen :: Word64 -> BE.FixedEncoding Word64
 hexLen bound =
-  (\x -> (x, ' ')) BE.>$< (word64HexPadded '0' bound BE.>*< BE.char8)
+  (\x -> (x, ' ')) >$< (word64HexPadded '0' bound `pairF` BE.char8)
 
 parseHexLen :: [Word8] -> (Int, [Word8])
 parseHexLen ws = case span (/= 32) ws of

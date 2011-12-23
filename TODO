@@ -13,8 +13,8 @@ TODO before full builder release
   [DONE] rename: encodeWithSize ~~> encodeSizePrefixed
   [DONE] fix naming scheme for varInt encodings
   - switch to Int64 and Int for representing sizes
-  - remove 'Monoidal' type-class
-  - ensure correspondance of 'Contravariant' with 'contravariant' package
+  [DONE] remove 'Monoidal' type-class
+  [DONE] ensure correspondance of 'Contravariant' with 'contravariant' package
   [DONE] merge BasicEncoding.Extras to BasicEncoding
   - add 'variable length encoding builders'
   - add fast decimal float/double conversion based on blaze-textual
@@ -24,8 +24,6 @@ TODO before full builder release
     (its just too experimental)
   - investigate performance of 'encodeWithListF E.word8'
   - improve performance of varInt encodings
-      intBase127LE
-      intZigZagBase127LE
   - improve performance of encodeChunked and encodeWithSize
   - investigate performance of running a one byte builder.
   - fix documentation in BasicEncoding.Extras

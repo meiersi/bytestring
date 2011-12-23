@@ -54,9 +54,8 @@ module Data.ByteString.Lazy.Builder.BasicEncoding.Internal (
   -- , withSizeFB
   -- , withSizeBB
 
-  -- * Shared operators
+  -- * Shared contramap operator
   , (>$<)
-  , (>*<)
 
   ) where
 
@@ -85,47 +84,21 @@ infixl 4 >$<
 --
 -- >showEncoding ((\x -> ('\'', (x, '\''))) >$< fixed3) 'x' = "'x'"
 -- >  where
--- >    fixed3 = char7 >*< char7 >*< char7
+-- >    fixed3 = char7 `pairF` char7 `pairF` char7
 --
 -- Note that the rather verbose syntax for composition stems from the
 -- requirement to be able to compute the 'size's and 'sizeBound's at
 -- compile time.
 --
-(>$<) :: Contravariant f => (b -> a) -> f a -> f b
+(>$<) :: Contravariant f => (a -> b) -> f b -> f a
 (>$<) = contramap
-
+{-# INLINE (>$<) #-}
 
 instance Contravariant FixedEncoding where
     contramap = contramapF
 
 instance Contravariant BoundedEncoding where
     contramap = contramapB
-
-
--- | Type-constructors supporting lifting of type-products.
-class Monoidal f where
-    pair :: f a -> f b -> f (a, b)
-
-instance Monoidal FixedEncoding where
-    pair = pairF
-
-instance Monoidal BoundedEncoding where
-    pair = pairB
-
-infixr 5 >*<
-
--- | An overloaded infix operator for 'pairF' and 'pairB'.
--- For example,
---
--- >showF (char7 >*< char7) ('x','y') = "xy"
---
--- We can combine multiple encodings using '>*<' multiple times.
---
--- >showEncoding (char7 >*< char7 >*< char7) ('x',('y','z')) = "xyz"
---
-(>*<) :: Monoidal f => f a -> f b -> f (a, b)
-(>*<) = pair
-
 
 -- | The type used for sizes and sizeBounds of sizes.
 type Size = Int

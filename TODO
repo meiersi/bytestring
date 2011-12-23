@@ -11,24 +11,24 @@ TODO before full builder release
 --------------------------------
 
   [DONE] rename: encodeWithSize ~~> encodeSizePrefixed
-  - fix naming scheme for varInt encodings
-  - fix documentation in
-          BasicEncoding.Extras
+  [DONE] fix naming scheme for varInt encodings
+  - switch to Int64 and Int for representing sizes
   - remove 'Monoidal' type-class
   - ensure correspondance of 'Contravariant' with 'contravariant' package
+  - merge BasicEncoding.Extras to BasicEncoding
   - investigate performance of 'encodeWithListF E.word8'
   - improve performance of varInt encodings
       intBase127LE
       intZigZagBase127LE
-  - merge BasicEncoding.Extras to BasicEncoding
   - improve performance of encodeChunked and encodeWithSize
   - investigate performance of running a one byte builder.
+  - fix documentation in BasicEncoding.Extras
   - check all documentation
   - add 'Put' documentation
   - benchmark/test 'Put' merging
   - test 'varInt' encodings
-  - switch to Int64 and Int for representing sizes
   - test with GHC 6.12, 7.0, 7.2, 7.4
+  - add fast decimal float/double conversion based on blaze-textual
   - add version constraints to all libraries used for testing
     (check that they are referring to the newest versions.)
 

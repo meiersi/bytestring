@@ -355,11 +355,11 @@ testsEncodingToBuilder =
         (
           parseChunks parseHexLen .
           parseSizePrefix parseHexLen .
-          parseChunks parseVar .
+          parseChunks parseBase127LE .
           parseSizePrefix parseHexLen .
           testBuilder (
             prefixHexSize .
-            encodeVar .
+            encodeBase127LE .
             prefixHexSize .
             encodeHex
           )
@@ -410,10 +410,10 @@ testBuilder f recipe =
 
 -- | Chunked encoding using base-128, variable-length encoding for the
 -- chunk-size.
-encodeVar :: Builder -> Builder
-encodeVar =
+encodeBase127LE :: Builder -> Builder
+encodeBase127LE =
     (`mappend` BE.encodeWithF BE.word8 0)
-  . (BE.encodeChunked 5 BE.word64VarFixedBound BE.emptyB)
+  . (BE.encodeChunked 5 BE.word64Base127LEPadded BE.emptyB)
 
 -- | Chunked encoding using 0-padded, space-terminated hexadecimal numbers
 -- for encoding the chunk-size.
@@ -424,7 +424,7 @@ encodeHex =
 
 hexLen :: Word64 -> BE.FixedEncoding Word64
 hexLen bound =
-  (\x -> (x, ' ')) BE.>$< (BE.word64HexFixedBound '0' bound BE.>*< BE.char8)
+  (\x -> (x, ' ')) BE.>$< (BE.word64HexPadded '0' bound BE.>*< BE.char8)
 
 parseHexLen :: [Word8] -> (Int, [Word8])
 parseHexLen ws = case span (/= 32) ws of

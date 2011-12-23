@@ -15,7 +15,7 @@ module Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils (
     testF
   , testBoundedF
 
-  , testFixedBoundF
+  , testPaddedF
 
   , compareImpls
 
@@ -42,7 +42,7 @@ module Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils (
   , doubleHexFixed_list
 
   -- ** Binary
-  , parseVar
+  , parseBase127LE
 
   , bigEndian_list
   , littleEndian_list
@@ -129,12 +129,12 @@ testBoundedF name ref fe =
 
 -- FixedEncoding derived from a bound on a given value.
 
-testFixedBoundF :: (Arbitrary a, Show a, Integral a)
+testPaddedF :: (Arbitrary a, Show a, Integral a)
                 => String
                 -> (a -> a -> [Word8])
                 -> (a -> FixedEncoding a)
                 -> Test
-testFixedBoundF name ref bfe =
+testPaddedF name ref bfe =
     testProperty name prop
   where
     prop (b, x0)
@@ -325,11 +325,11 @@ coerceDoubleToWord64 :: Double -> Word64
 coerceDoubleToWord64 = (.&. maxBound) . unsafeCoerce
 
 -- | Parse a variable length encoding
-parseVar :: (Num a, Bits a) => [Word8] -> (a, [Word8])
-parseVar =
+parseBase127LE :: (Num a, Bits a) => [Word8] -> (a, [Word8])
+parseBase127LE =
     go
   where
-    go []    = error "parseVar: unterminated variable length int"
+    go []    = error "parseBase127LE: unterminated variable length int"
     go (w:ws)
       | w .&. 0x80 == 0 = (fromIntegral w, ws)
       | otherwise       = first add (go ws)

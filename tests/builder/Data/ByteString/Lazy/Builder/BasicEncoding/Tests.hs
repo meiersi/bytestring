@@ -81,34 +81,34 @@ testsBinary =
   , testF "floatHost"   (float_list  hostEndian_list)   BE.floatHost
   , testF "doubleHost"  (double_list hostEndian_list)   BE.doubleHost
 
-  , testBoundedB "word8Var"     genVar_list  BE.word8Var
-  , testBoundedB "word16Var"    genVar_list  BE.word16Var
-  , testBoundedB "word32Var"    genVar_list  BE.word32Var
-  , testBoundedB "word64Var"    genVar_list  BE.word64Var
-  , testBoundedB "wordVar"      genVar_list  BE.wordVar
+  , testBoundedB "word8Base127LE"     genBase127LE_list  BE.word8Base127LE
+  , testBoundedB "word16Base127LE"    genBase127LE_list  BE.word16Base127LE
+  , testBoundedB "word32Base127LE"    genBase127LE_list  BE.word32Base127LE
+  , testBoundedB "word64Base127LE"    genBase127LE_list  BE.word64Base127LE
+  , testBoundedB "wordBase127LE"      genBase127LE_list  BE.wordBase127LE
 
-  , testBoundedB "int8Var"     int8Var_list   BE.int8Var
-  , testBoundedB "int16Var"    int16Var_list  BE.int16Var
-  , testBoundedB "int32Var"    int32Var_list  BE.int32Var
-  , testBoundedB "int64Var"    int64Var_list  BE.int64Var
-  , testBoundedB "intVar"      intVar_list    BE.intVar
+  , testBoundedB "int8Base127LE"     int8Base127LE_list   BE.int8Base127LE
+  , testBoundedB "int16Base127LE"    int16Base127LE_list  BE.int16Base127LE
+  , testBoundedB "int32Base127LE"    int32Base127LE_list  BE.int32Base127LE
+  , testBoundedB "int64Base127LE"    int64Base127LE_list  BE.int64Base127LE
+  , testBoundedB "intBase127LE"      intBase127LE_list    BE.intBase127LE
 
-  , testBoundedB "int8VarSigned"     (int8Var_list  . zigZag)  BE.int8VarSigned
-  , testBoundedB "int16VarSigned"    (int16Var_list . zigZag)  BE.int16VarSigned
-  , testBoundedB "int32VarSigned"    (int32Var_list . zigZag)  BE.int32VarSigned
-  , testBoundedB "int64VarSigned"    (int64Var_list . zigZag)  BE.int64VarSigned
-  , testBoundedB "intVarSigned"      (intVar_list   . zigZag)  BE.intVarSigned
+  , testBoundedB "int8ZigZagBase127LE"     (int8Base127LE_list  . zigZag)  BE.int8ZigZagBase127LE
+  , testBoundedB "int16ZigZagBase127LE"    (int16Base127LE_list . zigZag)  BE.int16ZigZagBase127LE
+  , testBoundedB "int32ZigZagBase127LE"    (int32Base127LE_list . zigZag)  BE.int32ZigZagBase127LE
+  , testBoundedB "int64ZigZagBase127LE"    (int64Base127LE_list . zigZag)  BE.int64ZigZagBase127LE
+  , testBoundedB "intZigZagBase127LE"      (intBase127LE_list   . zigZag)  BE.intZigZagBase127LE
 
   , testGroup "parseable"
-    [ prop_zigZag_parseable  "int8VarSigned"   unZigZagInt8  BE.int8VarSigned
-    , prop_zigZag_parseable  "int16VarSigned"  unZigZagInt16 BE.int16VarSigned
-    , prop_zigZag_parseable  "int32VarSigned"  unZigZagInt32 BE.int32VarSigned
-    , prop_zigZag_parseable  "int64VarSigned"  unZigZagInt64 BE.int64VarSigned
-    , prop_zigZag_parseable  "intVarSigned"    unZigZagInt   BE.intVarSigned
+    [ prop_zigZag_parseable  "int8ZigZagBase127LE"   unZigZagInt8  BE.int8ZigZagBase127LE
+    , prop_zigZag_parseable  "int16ZigZagBase127LE"  unZigZagInt16 BE.int16ZigZagBase127LE
+    , prop_zigZag_parseable  "int32ZigZagBase127LE"  unZigZagInt32 BE.int32ZigZagBase127LE
+    , prop_zigZag_parseable  "int64ZigZagBase127LE"  unZigZagInt64 BE.int64ZigZagBase127LE
+    , prop_zigZag_parseable  "intZigZagBase127LE"    unZigZagInt   BE.intZigZagBase127LE
     ]
 
-  , testFixedBoundF "wordVarFixedBound"   wordVarFixedBound_list    BE.wordVarFixedBound
-  , testFixedBoundF "word64VarFixedBound" word64VarFixedBound_list  BE.word64VarFixedBound
+  , testPaddedF "wordBase127LEPadded"   wordBase127LEPadded_list    BE.wordBase127LEPadded
+  , testPaddedF "word64Base127LEPadded" word64Base127LEPadded_list  BE.word64Base127LEPadded
 
   ]
 
@@ -117,27 +117,27 @@ testsBinary =
 ----------------------------
 
 -- | Variable length encoding.
-genVar_list :: (Ord a, Num a, Bits a, Integral a) => a -> [Word8]
-genVar_list x
+genBase127LE_list :: (Ord a, Num a, Bits a, Integral a) => a -> [Word8]
+genBase127LE_list x
   | x <= 0x7f = sevenBits            : []
-  | otherwise = (sevenBits .|. 0x80) : genVar_list (x `shiftR` 7)
+  | otherwise = (sevenBits .|. 0x80) : genBase127LE_list (x `shiftR` 7)
   where
     sevenBits = fromIntegral x .&. 0x7f
 
-int8Var_list :: Int8 -> [Word8]
-int8Var_list  = genVar_list . (fromIntegral :: Int8 -> Word8)
+int8Base127LE_list :: Int8 -> [Word8]
+int8Base127LE_list  = genBase127LE_list . (fromIntegral :: Int8 -> Word8)
 
-int16Var_list :: Int16 -> [Word8]
-int16Var_list = genVar_list . (fromIntegral :: Int16 -> Word16)
+int16Base127LE_list :: Int16 -> [Word8]
+int16Base127LE_list = genBase127LE_list . (fromIntegral :: Int16 -> Word16)
 
-int32Var_list :: Int32 -> [Word8]
-int32Var_list = genVar_list . (fromIntegral :: Int32 -> Word32)
+int32Base127LE_list :: Int32 -> [Word8]
+int32Base127LE_list = genBase127LE_list . (fromIntegral :: Int32 -> Word32)
 
-int64Var_list :: Int64 -> [Word8]
-int64Var_list = genVar_list . (fromIntegral :: Int64 -> Word64)
+int64Base127LE_list :: Int64 -> [Word8]
+int64Base127LE_list = genBase127LE_list . (fromIntegral :: Int64 -> Word64)
 
-intVar_list :: Int -> [Word8]
-intVar_list = genVar_list . (fromIntegral :: Int -> Word)
+intBase127LE_list :: Int -> [Word8]
+intBase127LE_list = genBase127LE_list . (fromIntegral :: Int -> Word)
 
 
 -- | The so-called \"zig-zag\" encoding from Google's protocol buffers.
@@ -177,33 +177,36 @@ unZigZagInt64 = (fromIntegral :: Word64 -> Int64) . unZigZag . fromIntegral
 unZigZagInt :: Int -> Int
 unZigZagInt = (fromIntegral :: Word -> Int) . unZigZag . fromIntegral
 
--- | Check that the 'intVarSigned' encodings are parseable.
+-- | Check that the 'intZigZagBase127LE' encodings are parseable.
 prop_zigZag_parseable :: (Arbitrary t, Bits b, Show t, Eq t)
     => String -> (b -> t) -> BE.BoundedEncoding t -> Test
 prop_zigZag_parseable name unZig be =
-  compareImpls name (\x -> (x, [])) (first unZig . parseVar . BE.evalB be)
+  compareImpls name (\x -> (x, [])) (first unZig . parseBase127LE . BE.evalB be)
 
 -- | Variable length encoding to a fixed number of bytes (pad / truncate).
-genVarFixedBound_list :: (Ord a, Num a, Bits a, Integral a)
+genBase127LEPadded_list :: (Ord a, Num a, Bits a, Integral a)
                  => Int
                  -> a -> [Word8]
-genVarFixedBound_list n x
+genBase127LEPadded_list n x
   | n <= 1    = sevenBits            : []
-  | otherwise = (sevenBits .|. 0x80) : genVarFixedBound_list (n - 1) (x `shiftR` 7)
+  | otherwise = (sevenBits .|. 0x80) : genBase127LEPadded_list (n - 1) (x `shiftR` 7)
   where
     sevenBits = fromIntegral x .&. 0x7f
 
-wordVarFixedBound_list :: Word -> Word -> [Word8]
-wordVarFixedBound_list bound = genVarFixedBound_list (length $ genVar_list bound)
+wordBase127LEPadded_list :: Word -> Word -> [Word8]
+wordBase127LEPadded_list bound =
+    genBase127LEPadded_list (length $ genBase127LE_list bound)
 
-word64VarFixedBound_list :: Word64 -> Word64 -> [Word8]
-word64VarFixedBound_list bound = genVarFixedBound_list (length $ genVar_list bound)
+word64Base127LEPadded_list :: Word64 -> Word64 -> [Word8]
+word64Base127LEPadded_list bound =
+    genBase127LEPadded_list (length $ genBase127LE_list bound)
 
 -- Somehow this function doesn't really make sense, as the bound must be
 -- greater when interpreted as an unsigned integer.
 --
--- intVarFixedBound_list :: Int -> Int -> [Word8]
--- intVarFixedBound_list bound = wordVarFixedBound_list (fromIntegral bound) . fromIntegral
+-- intBase127LEPadded_list :: Int -> Int -> [Word8]
+-- intBase127LEPadded_list bound =
+--     wordBase127LEPadded_list (fromIntegral bound) . fromIntegral
 
 
 ------------------------------------------------------------------------------
@@ -254,38 +257,38 @@ testsASCII =
   , testF "floatHexFixed"  floatHexFixed_list  BE.floatHexFixed
   , testF "doubleHexFixed" doubleHexFixed_list BE.doubleHexFixed
 
-  , testFixedBoundF "wordDecFixedBound"
-      (genDecFixedBound_list 'x') (BE.wordDecFixedBound 'x')
+  , testPaddedF "wordDecPadded"
+      (genDecPadded_list 'x') (BE.wordDecPadded 'x')
 
-  , testFixedBoundF "word64DecFixedBound"
-      (genDecFixedBound_list 'x') (BE.word64DecFixedBound 'x')
+  , testPaddedF "word64DecPadded"
+      (genDecPadded_list 'x') (BE.word64DecPadded 'x')
 
-  , testFixedBoundF "wordHexFixedBound"
-      (genHexFixedBound_list 'x') (BE.wordHexFixedBound 'x')
+  , testPaddedF "wordHexPadded"
+      (genHexPadded_list 'x') (BE.wordHexPadded 'x')
 
-  , testFixedBoundF "word64HexFixedBound"
-      (genHexFixedBound_list 'x') (BE.word64HexFixedBound 'x')
+  , testPaddedF "word64HexPadded"
+      (genHexPadded_list 'x') (BE.word64HexPadded 'x')
   ]
 
 -- | PRE: positive bound and value.
-genDecFixedBound_list :: (Show a, Integral a)
+genDecPadded_list :: (Show a, Integral a)
                       => Char    -- ^ Padding character.
                       -> a       -- ^ Max value to be encoded.
                       -> a       -- ^ Value to encode.
                       -> [Word8]
-genDecFixedBound_list padChar bound =
+genDecPadded_list padChar bound =
     encodeASCII . pad . show
   where
     n      = length $ show bound
     pad cs = replicate (n - length cs) padChar ++ cs
 
 -- | PRE: positive bound and value.
-genHexFixedBound_list :: (Show a, Integral a)
+genHexPadded_list :: (Show a, Integral a)
                       => Char    -- ^ Padding character.
                       -> a       -- ^ Max value to be encoded.
                       -> a       -- ^ Value to encode.
                       -> [Word8]
-genHexFixedBound_list padChar bound =
+genHexPadded_list padChar bound =
     encodeASCII . pad . (`showHex` "")
   where
     n      = length $ (`showHex` "") bound

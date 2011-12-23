@@ -1,6 +1,5 @@
 {-# LANGUAGE CPP, BangPatterns, ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fno-warn-unused-imports #-}
-{-# OPTIONS_HADDOCK hide #-}
 {- | Copyright : (c) 2010-2011 Simon Meier
 License        : BSD3-style (see LICENSE)
 
@@ -309,11 +308,11 @@ For example, the value @1 :: Int@ is encoded as @[0x01]@. The value
 7-bit group is @000 0000@, the second byte has its MSB not set (it is the last
 byte) and its 7-bit group is @000 0001@.
 -}
-    word8Var
-  , word16Var
-  , word32Var
-  , word64Var
-  , wordVar
+    word8Base127LE
+  , word16Base127LE
+  , word32Base127LE
+  , word64Base127LE
+  , wordBase127LE
 
 {- |
 The following encodings work by casting the signed integer to the equally sized
@@ -322,11 +321,11 @@ integers it always results in the longest possible sequence of bytes,
 as their MSB is (by definition) always set.
 -}
 
-  , int8Var
-  , int16Var
-  , int32Var
-  , int64Var
-  , intVar
+  , int8Base127LE
+  , int16Base127LE
+  , int32Base127LE
+  , int64Base127LE
+  , intBase127LE
 
 {- |
 Positive and negative integers of small magnitude can be encoded compactly
@@ -355,11 +354,11 @@ The following encodings implement the combintion of ZigZag encoding
 They are intended to become the the new default binary serialization format of
   the differently sized 'Int' types.
 -}
-  , int8VarSigned
-  , int16VarSigned
-  , int32VarSigned
-  , int64VarSigned
-  , intVarSigned
+  , int8ZigZagBase127LE
+  , int16ZigZagBase127LE
+  , int32ZigZagBase127LE
+  , int64ZigZagBase127LE
+  , intZigZagBase127LE
 
 
   -- * Chunked / size-prefixed encodings
@@ -379,13 +378,13 @@ buffers. The drawback of this method is that it requires a ...
 
   , encodeChunked
 
-  , wordVarFixedBound
-  , wordHexFixedBound
-  , wordDecFixedBound
+  , wordBase127LEPadded
+  , wordHexPadded
+  , wordDecPadded
 
-  , word64VarFixedBound
-  , word64HexFixedBound
-  , word64DecFixedBound
+  , word64Base127LEPadded
+  , word64HexPadded
+  , word64DecPadded
 
   ) where
 
@@ -447,89 +446,89 @@ encodeBase128 shiftr =
         poke8 = poke op . fromIntegral
 
 -- | Base-128, variable length encoding of a 'Word8'.
-{-# INLINE word8Var #-}
-word8Var :: BoundedEncoding Word8
-word8Var = encodeBase128 shiftr_w
+{-# INLINE word8Base127LE #-}
+word8Base127LE :: BoundedEncoding Word8
+word8Base127LE = encodeBase128 shiftr_w
 
 -- | Base-128, variable length encoding of a 'Word16'.
-{-# INLINE word16Var #-}
-word16Var :: BoundedEncoding Word16
-word16Var = encodeBase128 shiftr_w
+{-# INLINE word16Base127LE #-}
+word16Base127LE :: BoundedEncoding Word16
+word16Base127LE = encodeBase128 shiftr_w
 
 -- | Base-128, variable length encoding of a 'Word32'.
-{-# INLINE word32Var #-}
-word32Var :: BoundedEncoding Word32
-word32Var = encodeBase128 shiftr_w32
+{-# INLINE word32Base127LE #-}
+word32Base127LE :: BoundedEncoding Word32
+word32Base127LE = encodeBase128 shiftr_w32
 
 -- | Base-128, variable length encoding of a 'Word64'.
-{-# INLINE word64Var #-}
-word64Var :: BoundedEncoding Word64
-word64Var = encodeBase128 shiftr_w64
+{-# INLINE word64Base127LE #-}
+word64Base127LE :: BoundedEncoding Word64
+word64Base127LE = encodeBase128 shiftr_w64
 
 -- | Base-128, variable length encoding of a 'Word'.
-{-# INLINE wordVar #-}
-wordVar :: BoundedEncoding Word
-wordVar = encodeBase128 shiftr_w
+{-# INLINE wordBase127LE #-}
+wordBase127LE :: BoundedEncoding Word
+wordBase127LE = encodeBase128 shiftr_w
 
 
 -- | Base-128, variable length encoding of an 'Int8'.
--- Use 'int8VarSigned' for encoding negative numbers.
-{-# INLINE int8Var #-}
-int8Var :: BoundedEncoding Int8
-int8Var = fromIntegral >$< word8Var
+-- Use 'int8ZigZagBase127LE' for encoding negative numbers.
+{-# INLINE int8Base127LE #-}
+int8Base127LE :: BoundedEncoding Int8
+int8Base127LE = fromIntegral >$< word8Base127LE
 
 -- | Base-128, variable length encoding of an 'Int16'.
--- Use 'int16VarSigned' for encoding negative numbers.
-{-# INLINE int16Var #-}
-int16Var :: BoundedEncoding Int16
-int16Var = fromIntegral >$< word16Var
+-- Use 'int16ZigZagBase127LE' for encoding negative numbers.
+{-# INLINE int16Base127LE #-}
+int16Base127LE :: BoundedEncoding Int16
+int16Base127LE = fromIntegral >$< word16Base127LE
 
 -- | Base-128, variable length encoding of an 'Int32'.
--- Use 'int32VarSigned' for encoding negative numbers.
-{-# INLINE int32Var #-}
-int32Var :: BoundedEncoding Int32
-int32Var = fromIntegral >$< word32Var
+-- Use 'int32ZigZagBase127LE' for encoding negative numbers.
+{-# INLINE int32Base127LE #-}
+int32Base127LE :: BoundedEncoding Int32
+int32Base127LE = fromIntegral >$< word32Base127LE
 
 -- | Base-128, variable length encoding of an 'Int64'.
--- Use 'int64VarSigned' for encoding negative numbers.
-{-# INLINE int64Var #-}
-int64Var :: BoundedEncoding Int64
-int64Var = fromIntegral >$< word64Var
+-- Use 'int64ZigZagBase127LE' for encoding negative numbers.
+{-# INLINE int64Base127LE #-}
+int64Base127LE :: BoundedEncoding Int64
+int64Base127LE = fromIntegral >$< word64Base127LE
 
 -- | Base-128, variable length encoding of an 'Int'.
--- Use 'intVarSigned' for encoding negative numbers.
-{-# INLINE intVar #-}
-intVar :: BoundedEncoding Int
-intVar = fromIntegral >$< wordVar
+-- Use 'intZigZagBase127LE' for encoding negative numbers.
+{-# INLINE intBase127LE #-}
+intBase127LE :: BoundedEncoding Int
+intBase127LE = fromIntegral >$< wordBase127LE
 
 {-# INLINE zigZag #-}
 zigZag :: (Storable a, Bits a) => a -> a
 zigZag x = (x `shiftL` 1) `xor` (x `shiftR` (8 * sizeOf x - 1))
 
 -- | Base-128, variable length, ZigZag encoding of an 'Int'.
-{-# INLINE int8VarSigned #-}
-int8VarSigned :: BoundedEncoding Int8
-int8VarSigned = zigZag >$< int8Var
+{-# INLINE int8ZigZagBase127LE #-}
+int8ZigZagBase127LE :: BoundedEncoding Int8
+int8ZigZagBase127LE = zigZag >$< int8Base127LE
 
 -- | Base-128, variable length, ZigZag encoding of an 'Int16'.
-{-# INLINE int16VarSigned #-}
-int16VarSigned :: BoundedEncoding Int16
-int16VarSigned = zigZag >$< int16Var
+{-# INLINE int16ZigZagBase127LE #-}
+int16ZigZagBase127LE :: BoundedEncoding Int16
+int16ZigZagBase127LE = zigZag >$< int16Base127LE
 
 -- | Base-128, variable length, ZigZag encoding of an 'Int32'.
-{-# INLINE int32VarSigned #-}
-int32VarSigned :: BoundedEncoding Int32
-int32VarSigned = zigZag >$< int32Var
+{-# INLINE int32ZigZagBase127LE #-}
+int32ZigZagBase127LE :: BoundedEncoding Int32
+int32ZigZagBase127LE = zigZag >$< int32Base127LE
 
 -- | Base-128, variable length, ZigZag encoding of an 'Int64'.
-{-# INLINE int64VarSigned #-}
-int64VarSigned :: BoundedEncoding Int64
-int64VarSigned = zigZag >$< int64Var
+{-# INLINE int64ZigZagBase127LE #-}
+int64ZigZagBase127LE :: BoundedEncoding Int64
+int64ZigZagBase127LE = zigZag >$< int64Base127LE
 
 -- | Base-128, variable length, ZigZag encoding of an 'Int'.
-{-# INLINE intVarSigned #-}
-intVarSigned :: BoundedEncoding Int
-intVarSigned = zigZag >$< intVar
+{-# INLINE intZigZagBase127LE #-}
+intZigZagBase127LE :: BoundedEncoding Int
+intZigZagBase127LE = zigZag >$< intBase127LE
 
 
 
@@ -801,10 +800,10 @@ appsUntilZero f x0 =
     count !n x = count (succ n) (f x)
 
 
-{-# INLINE genericVarFixedBound #-}
-genericVarFixedBound :: (Eq b, Show b, Bits b, Num a, Integral b)
+{-# INLINE genericBase127LEPadded #-}
+genericBase127LEPadded :: (Eq b, Show b, Bits b, Num a, Integral b)
                 => (b -> a -> b) -> b -> FixedEncoding b
-genericVarFixedBound shiftRight bound =
+genericBase127LEPadded shiftRight bound =
     fixedEncoding n0 io
   where
     n0 = max 1 $ appsUntilZero (`shiftRight` 7) bound
@@ -813,7 +812,7 @@ genericVarFixedBound shiftRight bound =
       | x0 > bound = error err
       | otherwise  = loop 0 x0
       where
-        err = "genericVarFixedBound: value " ++ show x0 ++ " > bound " ++ show bound
+        err = "genericBase127LEPadded: value " ++ show x0 ++ " > bound " ++ show bound
         loop !n !x
           | n0 <= n + 1 = do poke8 (x .&. 0x7f)
           | otherwise   = do poke8 ((x .&. 0x7f) .|. 0x80)
@@ -821,27 +820,27 @@ genericVarFixedBound shiftRight bound =
           where
             poke8 = pokeElemOff op n . fromIntegral
 
-{-# INLINE wordVarFixedBound #-}
-wordVarFixedBound :: Word -> FixedEncoding Word
-wordVarFixedBound = genericVarFixedBound shiftr_w
+{-# INLINE wordBase127LEPadded #-}
+wordBase127LEPadded :: Word -> FixedEncoding Word
+wordBase127LEPadded = genericBase127LEPadded shiftr_w
 
-{-# INLINE word64VarFixedBound #-}
-word64VarFixedBound :: Word64 -> FixedEncoding Word64
-word64VarFixedBound = genericVarFixedBound shiftr_w64
+{-# INLINE word64Base127LEPadded #-}
+word64Base127LEPadded :: Word64 -> FixedEncoding Word64
+word64Base127LEPadded = genericBase127LEPadded shiftr_w64
 
 
 -- Somehow this function doesn't really make sense, as the bound must be
 -- greater when interpreted as an unsigned integer. These conversions and
 -- decisions should be left to the user.
 --
---{-# INLINE intVarFixed #-}
---intVarFixed :: Size -> FixedEncoding Size
---intVarFixed bound = fromIntegral >$< wordVarFixed (fromIntegral bound)
+--{-# INLINE intBase127LEFixed #-}
+--intBase127LEFixed :: Size -> FixedEncoding Size
+--intBase127LEFixed bound = fromIntegral >$< wordBase127LEFixed (fromIntegral bound)
 
-{-# INLINE genHexFixedBound #-}
-genHexFixedBound :: (Num a, Bits a, Integral a)
+{-# INLINE genHexPadded #-}
+genHexPadded :: (Num a, Bits a, Integral a)
                  => (a -> Int -> a) -> Char -> a -> FixedEncoding a
-genHexFixedBound shiftr padding0 bound =
+genHexPadded shiftr padding0 bound =
     fixedEncoding n0 io
   where
     n0 = max 1 $ appsUntilZero (`shiftr` 4) bound
@@ -865,19 +864,19 @@ genHexFixedBound shiftr padding0 bound =
           | otherwise = poke op padding >> pad (op `plusPtr` (-1))
 
 
-{-# INLINE wordHexFixedBound #-}
-wordHexFixedBound :: Char -> Word -> FixedEncoding Word
-wordHexFixedBound = genHexFixedBound shiftr_w
+{-# INLINE wordHexPadded #-}
+wordHexPadded :: Char -> Word -> FixedEncoding Word
+wordHexPadded = genHexPadded shiftr_w
 
-{-# INLINE word64HexFixedBound #-}
-word64HexFixedBound :: Char -> Word64 -> FixedEncoding Word64
-word64HexFixedBound = genHexFixedBound shiftr_w64
+{-# INLINE word64HexPadded #-}
+word64HexPadded :: Char -> Word64 -> FixedEncoding Word64
+word64HexPadded = genHexPadded shiftr_w64
 
 -- | Note: Works only for positive numbers.
-{-# INLINE genDecFixedBound #-}
-genDecFixedBound :: (Num a, Bits a, Integral a)
+{-# INLINE genDecPadded #-}
+genDecPadded :: (Num a, Bits a, Integral a)
                  => Char -> a -> FixedEncoding a
-genDecFixedBound padding0 bound =
+genDecPadded padding0 bound =
     fixedEncoding n0 io
   where
     n0 = max 1 $ appsUntilZero (`div` 10) bound
@@ -900,10 +899,10 @@ genDecFixedBound padding0 bound =
           | op < op0  = return ()
           | otherwise = poke op padding >> pad (op `plusPtr` (-1))
 
-{-# INLINE wordDecFixedBound #-}
-wordDecFixedBound :: Char -> Word -> FixedEncoding Word
-wordDecFixedBound = genDecFixedBound
+{-# INLINE wordDecPadded #-}
+wordDecPadded :: Char -> Word -> FixedEncoding Word
+wordDecPadded = genDecPadded
 
-{-# INLINE word64DecFixedBound #-}
-word64DecFixedBound :: Char -> Word64 -> FixedEncoding Word64
-word64DecFixedBound = genDecFixedBound
+{-# INLINE word64DecPadded #-}
+word64DecPadded :: Char -> Word64 -> FixedEncoding Word64
+word64DecPadded = genDecPadded

@@ -232,7 +232,7 @@ benchmark bench-builder-boundscheck
   main-is:          BoundsCheckFusion.hs
   build-depends:    base
                   , deepseq
-                  , ghc-prim,
+                  , ghc-prim
                   , criterion
                   , integer-gmp
   c-sources:        cbits/fpstring.c

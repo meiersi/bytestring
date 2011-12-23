@@ -337,7 +337,7 @@ byteStringTakeB n0 =
 
 httpChunkedTransfer :: Builder -> Builder
 httpChunkedTransfer =
-    encodeChunked 32 (word64HexFixedBound '0')
+    encodeChunked 32 (word64HexPadded '0')
                      ((\_ -> ('\r',('\n',('\r','\n')))) >$< char8x4)
   where
     char8x4 = toB (char8 >*< char8 >*< char8 >*< char8)
@@ -345,7 +345,7 @@ httpChunkedTransfer =
 
 
 chunked :: Builder -> Builder
-chunked = encodeChunked 16 word64VarFixedBound emptyB
+chunked = encodeChunked 16 word64VarPadded emptyB
 
 -}
 

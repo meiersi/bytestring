@@ -7,6 +7,23 @@ TODO:
     * rewrite C code to Haskell
     * eliminate use of -fno-warn-orphans
 
+TODO before full builder release
+--------------------------------
+
+  - rename: encodeWithSize ~~> encodeSizePrefixed
+  - fix naming scheme for varInt encodings
+  - fix documentation in
+          BasicEncoding.Extras
+  - remove 'Monoidal' type-class
+  - ensure correspondance of 'Contravariant' with 'contravariant' package
+  - investigate performance of 'encodeWithListF E.word8'
+  - improve performance of varInt encodings
+      intBase127LE
+      intZigZagBase127LE
+  - merge BasicEncoding.Extras to BasicEncoding
+  - improve performance of encodeChunked and encodeWithSize
+  - investigate performance of running a one byte builder.
+  - check all documentation
 
 Todo items
 ----------

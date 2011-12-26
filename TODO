@@ -17,8 +17,16 @@ TODO before full builder release
   [DONE] ensure correspondance of 'Contravariant' with 'contravariant' package
   [DONE] merge BasicEncoding.Extras to BasicEncoding
   - add 'variable length encoding builders'
-  - add fast decimal float/double conversion based on blaze-textual
-    (also add corresponding bounded encoding)
+  [DONE] add fast decimal float/double conversion based on blaze-textual.
+    Our findings are that the 'blaze-textual' float version is always slower
+    than Haskell's built-in version due to the 'realToFrac' conversion. For
+    'Double's, Haskell's built-in conversion is sometimes faster and sometimes
+    slower than 'blaze-textual'. In no case, one function significantly
+    outperforms the other function. We therefore use Haskell's built-in
+    version instead of maintaining a complicated piece of code that is anyways
+    a lot slower than the 'double-conversion' package. The 'BoundedEncoding'
+    type will serve perfectly to wrap the functionality of the
+    'double-conversion' package.
   - consider putting builder transformers into a separate package
     'bytestring-builder-transformers'
     (its just too experimental)

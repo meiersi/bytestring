@@ -25,7 +25,7 @@ import qualified Data.ByteString.Lazy.Builder.BasicEncoding          as E
 import qualified Data.ByteString.Lazy.Builder.BasicEncoding.Internal as EI
 
 import qualified Blaze.ByteString.Builder as Blaze
-import qualified Blaze.Text.Int           as Blaze
+import qualified Blaze.Text               as Blaze
 import qualified "bytestring" Data.ByteString.Lazy as OldL
 
 import Foreign
@@ -171,6 +171,8 @@ main = do
         , benchBlaze "foldMap integerDec (large) (blaze-textual)" largeIntegerData        $ foldMap Blaze.integral
         , benchB "foldMap floatDec"        floatData          $ foldMap floatDec
         , benchB "foldMap doubleDec"       doubleData         $ foldMap doubleDec
+        , benchBlaze "foldMap floatDec (blaze-textual)"       floatData          $ foldMap Blaze.float
+        , benchBlaze "foldMap doubleDec (blaze-textual)"      doubleData         $ foldMap Blaze.double
         , benchB "byteStringHexFixed"      byteStringData     $ byteStringHexFixed
         , benchB "lazyByteStringHexFixed"  lazyByteStringData $ lazyByteStringHexFixed
         ]

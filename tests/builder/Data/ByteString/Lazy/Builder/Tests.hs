@@ -355,11 +355,11 @@ testsEncodingToBuilder =
         (
           parseChunks parseHexLen .
           parseSizePrefix parseHexLen .
-          parseChunks parseBase127LE .
+          parseChunks parseBase128LE .
           parseSizePrefix parseHexLen .
           testBuilder (
             prefixHexSize .
-            encodeBase127LE .
+            encodeBase128LE .
             prefixHexSize .
             encodeHex
           )
@@ -410,10 +410,10 @@ testBuilder f recipe =
 
 -- | Chunked encoding using base-128, variable-length encoding for the
 -- chunk-size.
-encodeBase127LE :: Builder -> Builder
-encodeBase127LE =
+encodeBase128LE :: Builder -> Builder
+encodeBase128LE =
     (`mappend` BE.encodeWithF BE.word8 0)
-  . (encodeChunked 5 int64Base127LEPadded BE.emptyB)
+  . (encodeChunked 5 int64Base128LEPadded BE.emptyB)
 
 -- | Chunked encoding using 0-padded, space-terminated hexadecimal numbers
 -- for encoding the chunk-size.

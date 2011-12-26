@@ -82,35 +82,35 @@ testsBinary =
   , testF "floatHost"   (float_list  hostEndian_list)   BE.floatHost
   , testF "doubleHost"  (double_list hostEndian_list)   BE.doubleHost
 
-  , testBoundedB "word8Base127LE"     genBase127LE_list  BE.word8Base127LE
-  , testBoundedB "word16Base127LE"    genBase127LE_list  BE.word16Base127LE
-  , testBoundedB "word32Base127LE"    genBase127LE_list  BE.word32Base127LE
-  , testBoundedB "word64Base127LE"    genBase127LE_list  BE.word64Base127LE
-  , testBoundedB "wordBase127LE"      genBase127LE_list  BE.wordBase127LE
+  , testBoundedB "word8Base128LE"     genBase128LE_list  BE.word8Base128LE
+  , testBoundedB "word16Base128LE"    genBase128LE_list  BE.word16Base128LE
+  , testBoundedB "word32Base128LE"    genBase128LE_list  BE.word32Base128LE
+  , testBoundedB "word64Base128LE"    genBase128LE_list  BE.word64Base128LE
+  , testBoundedB "wordBase128LE"      genBase128LE_list  BE.wordBase128LE
 
-  , testBoundedB "int8Base127LE"     int8Base127LE_list   BE.int8Base127LE
-  , testBoundedB "int16Base127LE"    int16Base127LE_list  BE.int16Base127LE
-  , testBoundedB "int32Base127LE"    int32Base127LE_list  BE.int32Base127LE
-  , testBoundedB "int64Base127LE"    int64Base127LE_list  BE.int64Base127LE
-  , testBoundedB "intBase127LE"      intBase127LE_list    BE.intBase127LE
+  , testBoundedB "int8Base128LE"     int8Base128LE_list   BE.int8Base128LE
+  , testBoundedB "int16Base128LE"    int16Base128LE_list  BE.int16Base128LE
+  , testBoundedB "int32Base128LE"    int32Base128LE_list  BE.int32Base128LE
+  , testBoundedB "int64Base128LE"    int64Base128LE_list  BE.int64Base128LE
+  , testBoundedB "intBase128LE"      intBase128LE_list    BE.intBase128LE
 
-  , testBoundedB "int8ZigZagBase127LE"     (int8Base127LE_list  . zigZag)  BE.int8ZigZagBase127LE
-  , testBoundedB "int16ZigZagBase127LE"    (int16Base127LE_list . zigZag)  BE.int16ZigZagBase127LE
-  , testBoundedB "int32ZigZagBase127LE"    (int32Base127LE_list . zigZag)  BE.int32ZigZagBase127LE
-  , testBoundedB "int64ZigZagBase127LE"    (int64Base127LE_list . zigZag)  BE.int64ZigZagBase127LE
-  , testBoundedB "intZigZagBase127LE"      (intBase127LE_list   . zigZag)  BE.intZigZagBase127LE
+  , testBoundedB "int8ZigZagBase128LE"     (int8Base128LE_list  . zigZag)  BE.int8ZigZagBase128LE
+  , testBoundedB "int16ZigZagBase128LE"    (int16Base128LE_list . zigZag)  BE.int16ZigZagBase128LE
+  , testBoundedB "int32ZigZagBase128LE"    (int32Base128LE_list . zigZag)  BE.int32ZigZagBase128LE
+  , testBoundedB "int64ZigZagBase128LE"    (int64Base128LE_list . zigZag)  BE.int64ZigZagBase128LE
+  , testBoundedB "intZigZagBase128LE"      (intBase128LE_list   . zigZag)  BE.intZigZagBase128LE
 
   , testGroup "parseable"
-    [ prop_zigZag_parseable  "int8ZigZagBase127LE"   unZigZagInt8  BE.int8ZigZagBase127LE
-    , prop_zigZag_parseable  "int16ZigZagBase127LE"  unZigZagInt16 BE.int16ZigZagBase127LE
-    , prop_zigZag_parseable  "int32ZigZagBase127LE"  unZigZagInt32 BE.int32ZigZagBase127LE
-    , prop_zigZag_parseable  "int64ZigZagBase127LE"  unZigZagInt64 BE.int64ZigZagBase127LE
-    , prop_zigZag_parseable  "intZigZagBase127LE"    unZigZagInt   BE.intZigZagBase127LE
+    [ prop_zigZag_parseable  "int8ZigZagBase128LE"   unZigZagInt8  BE.int8ZigZagBase128LE
+    , prop_zigZag_parseable  "int16ZigZagBase128LE"  unZigZagInt16 BE.int16ZigZagBase128LE
+    , prop_zigZag_parseable  "int32ZigZagBase128LE"  unZigZagInt32 BE.int32ZigZagBase128LE
+    , prop_zigZag_parseable  "int64ZigZagBase128LE"  unZigZagInt64 BE.int64ZigZagBase128LE
+    , prop_zigZag_parseable  "intZigZagBase128LE"    unZigZagInt   BE.intZigZagBase128LE
     ]
 
-  , testPaddedF "wordBase127LEPadded"   wordBase127LEPadded_list    wordBase127LEPadded
-  , testPaddedF "word64Base127LEPadded" word64Base127LEPadded_list  word64Base127LEPadded
-  , testPaddedF "int64Base127LEPadded"  int64Base127LEPadded_list   int64Base127LEPadded
+  , testPaddedF "wordBase128LEPadded"   wordBase128LEPadded_list    wordBase128LEPadded
+  , testPaddedF "word64Base128LEPadded" word64Base128LEPadded_list  word64Base128LEPadded
+  , testPaddedF "int64Base128LEPadded"  int64Base128LEPadded_list   int64Base128LEPadded
 
   ]
 
@@ -119,27 +119,27 @@ testsBinary =
 ----------------------------
 
 -- | Variable length encoding.
-genBase127LE_list :: (Ord a, Num a, Bits a, Integral a) => a -> [Word8]
-genBase127LE_list x
+genBase128LE_list :: (Ord a, Num a, Bits a, Integral a) => a -> [Word8]
+genBase128LE_list x
   | x <= 0x7f = sevenBits            : []
-  | otherwise = (sevenBits .|. 0x80) : genBase127LE_list (x `shiftR` 7)
+  | otherwise = (sevenBits .|. 0x80) : genBase128LE_list (x `shiftR` 7)
   where
     sevenBits = fromIntegral x .&. 0x7f
 
-int8Base127LE_list :: Int8 -> [Word8]
-int8Base127LE_list  = genBase127LE_list . (fromIntegral :: Int8 -> Word8)
+int8Base128LE_list :: Int8 -> [Word8]
+int8Base128LE_list  = genBase128LE_list . (fromIntegral :: Int8 -> Word8)
 
-int16Base127LE_list :: Int16 -> [Word8]
-int16Base127LE_list = genBase127LE_list . (fromIntegral :: Int16 -> Word16)
+int16Base128LE_list :: Int16 -> [Word8]
+int16Base128LE_list = genBase128LE_list . (fromIntegral :: Int16 -> Word16)
 
-int32Base127LE_list :: Int32 -> [Word8]
-int32Base127LE_list = genBase127LE_list . (fromIntegral :: Int32 -> Word32)
+int32Base128LE_list :: Int32 -> [Word8]
+int32Base128LE_list = genBase128LE_list . (fromIntegral :: Int32 -> Word32)
 
-int64Base127LE_list :: Int64 -> [Word8]
-int64Base127LE_list = genBase127LE_list . (fromIntegral :: Int64 -> Word64)
+int64Base128LE_list :: Int64 -> [Word8]
+int64Base128LE_list = genBase128LE_list . (fromIntegral :: Int64 -> Word64)
 
-intBase127LE_list :: Int -> [Word8]
-intBase127LE_list = genBase127LE_list . (fromIntegral :: Int -> Word)
+intBase128LE_list :: Int -> [Word8]
+intBase128LE_list = genBase128LE_list . (fromIntegral :: Int -> Word)
 
 
 -- | The so-called \"zig-zag\" encoding from Google's protocol buffers.
@@ -179,40 +179,40 @@ unZigZagInt64 = (fromIntegral :: Word64 -> Int64) . unZigZag . fromIntegral
 unZigZagInt :: Int -> Int
 unZigZagInt = (fromIntegral :: Word -> Int) . unZigZag . fromIntegral
 
--- | Check that the 'intZigZagBase127LE' encodings are parseable.
+-- | Check that the 'intZigZagBase128LE' encodings are parseable.
 prop_zigZag_parseable :: (Arbitrary t, Bits b, Show t, Eq t)
     => String -> (b -> t) -> BE.BoundedEncoding t -> Test
 prop_zigZag_parseable name unZig be =
-  compareImpls name (\x -> (x, [])) (first unZig . parseBase127LE . BE.evalB be)
+  compareImpls name (\x -> (x, [])) (first unZig . parseBase128LE . BE.evalB be)
 
 -- | Variable length encoding to a fixed number of bytes (pad / truncate).
-genBase127LEPadded_list :: (Ord a, Num a, Bits a, Integral a)
+genBase128LEPadded_list :: (Ord a, Num a, Bits a, Integral a)
                  => Int
                  -> a -> [Word8]
-genBase127LEPadded_list n x
+genBase128LEPadded_list n x
   | n <= 1    = sevenBits            : []
-  | otherwise = (sevenBits .|. 0x80) : genBase127LEPadded_list (n - 1) (x `shiftR` 7)
+  | otherwise = (sevenBits .|. 0x80) : genBase128LEPadded_list (n - 1) (x `shiftR` 7)
   where
     sevenBits = fromIntegral x .&. 0x7f
 
-wordBase127LEPadded_list :: Word -> Word -> [Word8]
-wordBase127LEPadded_list bound =
-    genBase127LEPadded_list (length $ genBase127LE_list bound)
+wordBase128LEPadded_list :: Word -> Word -> [Word8]
+wordBase128LEPadded_list bound =
+    genBase128LEPadded_list (length $ genBase128LE_list bound)
 
-word64Base127LEPadded_list :: Word64 -> Word64 -> [Word8]
-word64Base127LEPadded_list bound =
-    genBase127LEPadded_list (length $ genBase127LE_list bound)
+word64Base128LEPadded_list :: Word64 -> Word64 -> [Word8]
+word64Base128LEPadded_list bound =
+    genBase128LEPadded_list (length $ genBase128LE_list bound)
 
 -- Somehow this function doesn't really make sense, as the bound must be
 -- greater when interpreted as an unsigned integer.
 
-intBase127LEPadded_list :: Int -> Int -> [Word8]
-intBase127LEPadded_list bound =
-    wordBase127LEPadded_list (fromIntegral bound) . fromIntegral
+intBase128LEPadded_list :: Int -> Int -> [Word8]
+intBase128LEPadded_list bound =
+    wordBase128LEPadded_list (fromIntegral bound) . fromIntegral
 
-int64Base127LEPadded_list :: Int64 -> Int64 -> [Word8]
-int64Base127LEPadded_list bound =
-    wordBase127LEPadded_list (fromIntegral bound) . fromIntegral
+int64Base128LEPadded_list :: Int64 -> Int64 -> [Word8]
+int64Base128LEPadded_list bound =
+    wordBase128LEPadded_list (fromIntegral bound) . fromIntegral
 
 
 ------------------------------------------------------------------------------

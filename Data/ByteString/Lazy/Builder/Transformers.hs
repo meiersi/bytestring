@@ -300,17 +300,17 @@ buffers. The drawback of this method is that it requires a ...
 
   , encodeChunked
 
-  , wordBase127LEPadded
+  , wordBase128LEPadded
   , wordHexPadded
   , wordDecPadded
 
-  , word64Base127LEPadded
+  , word64Base128LEPadded
   , word64HexPadded
   , word64DecPadded
 
-  , intBase127LEPadded
+  , intBase128LEPadded
 
-  , int64Base127LEPadded
+  , int64Base128LEPadded
   , int64HexPadded
 
   ) where
@@ -604,10 +604,10 @@ appsUntilZero f x0 =
     count !n x = count (succ n) (f x)
 
 
-{-# INLINE genericBase127LEPadded #-}
-genericBase127LEPadded :: (Eq b, Show b, Bits b, Num a, Integral b)
+{-# INLINE genericBase128LEPadded #-}
+genericBase128LEPadded :: (Eq b, Show b, Bits b, Num a, Integral b)
                 => (b -> a -> b) -> b -> FixedEncoding b
-genericBase127LEPadded shiftRight bound =
+genericBase128LEPadded shiftRight bound =
     fixedEncoding n0 io
   where
     n0 = max 1 $ appsUntilZero (`shiftRight` 7) bound
@@ -616,7 +616,7 @@ genericBase127LEPadded shiftRight bound =
       | x0 > bound = error err
       | otherwise  = loop 0 x0
       where
-        err = "genericBase127LEPadded: value " ++ show x0 ++ " > bound " ++ show bound
+        err = "genericBase128LEPadded: value " ++ show x0 ++ " > bound " ++ show bound
         loop !n !x
           | n0 <= n + 1 = do poke8 (x .&. 0x7f)
           | otherwise   = do poke8 ((x .&. 0x7f) .|. 0x80)
@@ -624,19 +624,19 @@ genericBase127LEPadded shiftRight bound =
           where
             poke8 = pokeElemOff op n . fromIntegral
 
-{-# INLINE wordBase127LEPadded #-}
-wordBase127LEPadded :: Word -> FixedEncoding Word
-wordBase127LEPadded = genericBase127LEPadded shiftr_w
+{-# INLINE wordBase128LEPadded #-}
+wordBase128LEPadded :: Word -> FixedEncoding Word
+wordBase128LEPadded = genericBase128LEPadded shiftr_w
 
-{-# INLINE word64Base127LEPadded #-}
-word64Base127LEPadded :: Word64 -> FixedEncoding Word64
-word64Base127LEPadded = genericBase127LEPadded shiftr_w64
+{-# INLINE word64Base128LEPadded #-}
+word64Base128LEPadded :: Word64 -> FixedEncoding Word64
+word64Base128LEPadded = genericBase128LEPadded shiftr_w64
 
 
-{-# INLINE intBase127LEPadded #-}
-intBase127LEPadded :: Int64 -> FixedEncoding Int64
-intBase127LEPadded bound =
-    fromIntegral >$< wordBase127LEPadded (fromIntegral bound)
+{-# INLINE intBase128LEPadded #-}
+intBase128LEPadded :: Int64 -> FixedEncoding Int64
+intBase128LEPadded bound =
+    fromIntegral >$< wordBase128LEPadded (fromIntegral bound)
 
 {-# INLINE genHexPadded #-}
 genHexPadded :: (Num a, Bits a, Integral a)
@@ -713,8 +713,8 @@ wordDecPadded = genDecPadded
 word64DecPadded :: Char -> Word64 -> FixedEncoding Word64
 word64DecPadded = genDecPadded
 
-{-# INLINE int64Base127LEPadded #-}
-int64Base127LEPadded :: Int64 -> FixedEncoding Int64
-int64Base127LEPadded bound =
-    fromIntegral >$< word64Base127LEPadded (fromIntegral bound)
+{-# INLINE int64Base128LEPadded #-}
+int64Base128LEPadded :: Int64 -> FixedEncoding Int64
+int64Base128LEPadded bound =
+    fromIntegral >$< word64Base128LEPadded (fromIntegral bound)
 

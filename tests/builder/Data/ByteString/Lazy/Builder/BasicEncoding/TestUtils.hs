@@ -42,7 +42,7 @@ module Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils (
   , doubleHexFixed_list
 
   -- ** Binary
-  , parseBase127LE
+  , parseBase128LE
 
   , bigEndian_list
   , littleEndian_list
@@ -328,11 +328,11 @@ coerceDoubleToWord64 :: Double -> Word64
 coerceDoubleToWord64 = (.&. maxBound) . unsafeCoerce
 
 -- | Parse a variable length encoding
-parseBase127LE :: (Num a, Bits a) => [Word8] -> (a, [Word8])
-parseBase127LE =
+parseBase128LE :: (Num a, Bits a) => [Word8] -> (a, [Word8])
+parseBase128LE =
     go
   where
-    go []    = error "parseBase127LE: unterminated variable length int"
+    go []    = error "parseBase128LE: unterminated variable length int"
     go (w:ws)
       | w .&. 0x80 == 0 = (fromIntegral w, ws)
       | otherwise       = first add (go ws)

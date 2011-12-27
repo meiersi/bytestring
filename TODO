@@ -16,7 +16,7 @@ TODO before full builder release
   [DONE] remove 'Monoidal' type-class
   [DONE] ensure correspondance of 'Contravariant' with 'contravariant' package
   [DONE] merge BasicEncoding.Extras to BasicEncoding
-  - add 'variable length encoding builders'
+  [DONE] add 'variable length encoding builders'
   [DONE] add fast decimal float/double conversion based on blaze-textual.
     Our findings are that the 'blaze-textual' float version is always slower
     than Haskell's built-in version due to the 'realToFrac' conversion. For
@@ -27,21 +27,25 @@ TODO before full builder release
     a lot slower than the 'double-conversion' package. The 'BoundedEncoding'
     type will serve perfectly to wrap the functionality of the
     'double-conversion' package.
-  - consider putting builder transformers into a separate package
-    'bytestring-builder-transformers'
-    (its just too experimental)
+  - add intro documentation mentioning lazy bytestring builders
+  - fix documentation in BasicEncoding.Extras
+  - check all documentation
+  - add 'Put' documentation
+  - Make a second call for review.
+
   - investigate performance of 'encodeWithListF E.word8'
   - improve performance of varInt encodings
   - improve performance of encodeChunked and encodeWithSize
   - investigate performance of running a one byte builder.
-  - fix documentation in BasicEncoding.Extras
-  - check all documentation
-  - add 'Put' documentation
   - benchmark/test 'Put' merging
   - test 'varInt' encodings
   - test with GHC 6.12, 7.0, 7.2, 7.4
   - add version constraints to all libraries used for testing
     (check that they are referring to the newest versions.)
+  - consider putting builder transformers into a separate package
+    'bytestring-builder-transformers'
+    (its just too experimental)
+  - release library
 
 Todo items
 ----------

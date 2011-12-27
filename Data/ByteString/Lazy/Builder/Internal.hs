@@ -894,7 +894,7 @@ untrimmedStrategy :: Int -- ^ Size of the first buffer
                   -> Int -- ^ Size of successive buffers
                   -> AllocationStrategy
                   -- ^ An allocation strategy that does not trim any of the
-                  -- filled buffers before converting it to a chunk.
+                  -- filled buffers before converting it to a chunk
 untrimmedStrategy firstSize bufSize =
     AllocationStrategy (newBuffer $ sanitize firstSize) (sanitize bufSize)
                        (\_ _ -> False)
@@ -923,12 +923,12 @@ safeStrategy firstSize bufSize =
 -- defined as follows.
 --
 -- @
--- {-# NOINLINE toLazyByteString #-}
+-- {-\# NOINLINE toLazyByteString \#-}
 -- toLazyByteString =
---   toLazyByteStringWith ('safeStrategy' 'L.smallChunkSize' 'L.defaultChunkSize') empty
+--   toLazyByteStringWith ('safeStrategy' 'L.smallChunkSize' 'L.defaultChunkSize') L.empty
 -- @
 --
--- where @empty@ is the zero-length lazy 'L.ByteString'.
+-- where @L.empty@ is the zero-length lazy 'L.ByteString'.
 --
 -- In most cases, the parameters used by 'toLazyByteString' give good
 -- performance. A sub-performing case of 'toLazyByteString' is executing short

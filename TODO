@@ -31,12 +31,15 @@ TODO before full builder release
   - fix documentation in BasicEncoding.Extras
   - check all documentation
   - add 'Put' documentation
+  - also export 'Put' transformers from internals
+  - use an allocation strategy for the inner builder in 'putSizePrefixed'
   - Make a second call for review.
 
   - investigate performance of 'encodeWithListF E.word8'
   - improve performance of varInt encodings
   - improve performance of encodeChunked and encodeWithSize
   - investigate performance of running a one byte builder.
+  - simplify code of 'buildStepToCIOS'
   - benchmark/test 'Put' merging
   - test 'varInt' encodings
   - test with GHC 6.12, 7.0, 7.2, 7.4

@@ -110,6 +110,7 @@ testsBinary =
 
   , testPaddedF "wordBase128LEPadded"   wordBase128LEPadded_list    wordBase128LEPadded
   , testPaddedF "word64Base128LEPadded" word64Base128LEPadded_list  word64Base128LEPadded
+  , testPaddedF "intBase128LEPadded"    intBase128LEPadded_list     intBase128LEPadded
   , testPaddedF "int64Base128LEPadded"  int64Base128LEPadded_list   int64Base128LEPadded
 
   ]

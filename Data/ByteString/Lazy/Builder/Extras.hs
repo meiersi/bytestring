@@ -8,7 +8,7 @@
 -- Portability : GHC
 --
 -- Extra functions for creating and executing 'Builder's. They are intended
--- for application-specific fine-tuning the performance of 'Builder's.
+-- for application-specific fine-tuning of the performance of 'Builder's.
 --
 -----------------------------------------------------------------------------
 module Data.ByteString.Lazy.Builder.Extras

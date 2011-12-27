@@ -296,9 +296,9 @@ buffers. The drawback of this method is that it requires a ...
 -}
   -- , withSizeFB
   -- , withSizeBB
-    encodeSizePrefixed
-
+    PaddedEncoding
   , encodeChunked
+  , encodeSizePrefixed
 
   , wordBase128LEPadded
   , wordHexPadded
@@ -309,6 +309,7 @@ buffers. The drawback of this method is that it requires a ...
   , word64DecPadded
 
   , intBase128LEPadded
+  -- TODO: Complete this list.
 
   , int64Base128LEPadded
   , int64HexPadded
@@ -336,6 +337,138 @@ import           Data.ByteString.Lazy.Builder.BasicEncoding
 
 import           Foreign
 
+------------------------------------------------------------------------------
+-- Padded encodings
+------------------------------------------------------------------------------
+
+-- | A 'PaddedEncoding a' is a function that computes a fixed-width encoding
+-- from a given widest value to be encoded. This fixed-width encoding will pad
+-- or truncate all values being encoded.
+type PaddedEncoding a = a -> FixedEncoding a
+
+{-# INLINE appsUntilZero #-}
+appsUntilZero :: (Eq a, Num a) => (a -> a) -> a -> Int
+appsUntilZero f x0 =
+    count 0 x0
+  where
+    count !n 0 = n
+    count !n x = count (succ n) (f x)
+
+
+{-# INLINE genericBase128LEPadded #-}
+genericBase128LEPadded :: (Eq b, Show b, Bits b, Num a, Integral b)
+                => (b -> a -> b) -> b -> FixedEncoding b
+genericBase128LEPadded shiftRight bound =
+    fixedEncoding n0 io
+  where
+    n0 = max 1 $ appsUntilZero (`shiftRight` 7) bound
+
+    io !x0 !op
+      | x0 > bound = error err
+      | otherwise  = loop 0 x0
+      where
+        err = "genericBase128LEPadded: value " ++ show x0 ++ " > bound " ++ show bound
+        loop !n !x
+          | n0 <= n + 1 = do poke8 (x .&. 0x7f)
+          | otherwise   = do poke8 ((x .&. 0x7f) .|. 0x80)
+                             loop (n + 1) (x `shiftRight` 7)
+          where
+            poke8 = pokeElemOff op n . fromIntegral
+
+{-# INLINE wordBase128LEPadded #-}
+wordBase128LEPadded :: PaddedEncoding Word
+wordBase128LEPadded = genericBase128LEPadded shiftr_w
+
+{-# INLINE word64Base128LEPadded #-}
+word64Base128LEPadded :: PaddedEncoding Word64
+word64Base128LEPadded = genericBase128LEPadded shiftr_w64
+
+
+{-# INLINE intBase128LEPadded #-}
+intBase128LEPadded :: PaddedEncoding Int
+intBase128LEPadded bound =
+    fromIntegral >$< wordBase128LEPadded (fromIntegral bound)
+
+{-# INLINE genHexPadded #-}
+genHexPadded :: (Num a, Bits a, Integral a)
+                 => (a -> Int -> a) -> Char -> PaddedEncoding a
+genHexPadded shiftr padding0 bound =
+    fixedEncoding n0 io
+  where
+    n0 = max 1 $ appsUntilZero (`shiftr` 4) bound
+
+    padding = fromIntegral (ord padding0) :: Word8
+
+    io !x0 !op0 =
+        loop (op0 `plusPtr` n0) x0
+      where
+        loop !op !x = do
+           let !op' = op `plusPtr` (-1)
+           poke op' =<< encode4_as_8 lowerTable (fromIntegral $ x .&. 0xf)
+           let !x' = x `shiftr` 4
+           unless (op' <= op0) $
+             if x' == 0
+               then pad (op' `plusPtr` (-1))
+               else loop op' x'
+
+        pad !op
+          | op < op0  = return ()
+          | otherwise = poke op padding >> pad (op `plusPtr` (-1))
+
+
+{-# INLINE wordHexPadded #-}
+wordHexPadded :: Char -> PaddedEncoding Word
+wordHexPadded = genHexPadded shiftr_w
+
+{-# INLINE word64HexPadded #-}
+word64HexPadded :: Char -> PaddedEncoding Word64
+word64HexPadded = genHexPadded shiftr_w64
+
+{-# INLINE int64HexPadded #-}
+int64HexPadded :: Char -> PaddedEncoding Int64
+int64HexPadded pad bound =
+    fromIntegral >$< word64HexPadded pad (fromIntegral bound)
+
+
+-- | Note: Works only for positive numbers.
+{-# INLINE genDecPadded #-}
+genDecPadded :: (Num a, Bits a, Integral a) => Char -> PaddedEncoding a
+genDecPadded padding0 bound =
+    fixedEncoding n0 io
+  where
+    n0 = max 1 $ appsUntilZero (`div` 10) bound
+
+    padding = fromIntegral (ord padding0) :: Word8
+
+    io !x0 !op0 =
+        loop (op0 `plusPtr` n0) x0
+      where
+        loop !op !x = do
+           let !op' = op `plusPtr` (-1)
+               !x'  = x `div` 10
+           poke op' ((fromIntegral $ (x - x' * 10) + 48) :: Word8)
+           unless (op' <= op0) $
+             if x' == 0
+               then pad (op' `plusPtr` (-1))
+               else loop op' x'
+
+        pad !op
+          | op < op0  = return ()
+          | otherwise = poke op padding >> pad (op `plusPtr` (-1))
+
+{-# INLINE wordDecPadded #-}
+wordDecPadded :: Char -> PaddedEncoding Word
+wordDecPadded = genDecPadded
+
+{-# INLINE word64DecPadded #-}
+word64DecPadded :: Char -> PaddedEncoding Word64
+word64DecPadded = genDecPadded
+
+{-# INLINE int64Base128LEPadded #-}
+int64Base128LEPadded :: PaddedEncoding Int64
+int64Base128LEPadded bound =
+    fromIntegral >$< word64Base128LEPadded (fromIntegral bound)
+
 
 ------------------------------------------------------------------------------
 -- Chunked Encoding Transformer
@@ -345,10 +478,10 @@ import           Foreign
 {-# INLINE encodeChunked #-}
 encodeChunked
     :: Word                           -- ^ Minimal free-size
-    -> (Int64 -> FixedEncoding Int64)
+    -> PaddedEncoding Int64
     -- ^ Given a sizeBound on the maximal encodable size this function must return
     -- a fixed-size encoding for encoding all smaller size.
-    -> (BoundedEncoding Int64)
+    -> BoundedEncoding Int64
     -- ^ An encoding for terminating a chunk of the given size.
     -> Builder
     -- ^ Inner Builder to transform
@@ -361,10 +494,10 @@ encodeChunked minFree mkBeforeFE afterBE =
 {-# INLINE putChunked #-}
 putChunked
     :: Word                         -- ^ Minimal free-size
-    -> (Int64 -> FixedEncoding Int64)
+    -> PaddedEncoding Int64
     -- ^ Given a sizeBound on the maximal encodable size this function must return
     -- a fixed-size encoding for encoding all smaller size.
-    -> (BoundedEncoding Int64)
+    -> BoundedEncoding Int64
     -- ^ Encoding a directly inserted chunk.
     -> Put a
     -- ^ Inner Put to transform
@@ -458,7 +591,7 @@ encodeSizePrefixed
     ::
        Int
     -- ^ Inner buffer-size.
-    -> (Int64 -> FixedEncoding Int64)
+    -> PaddedEncoding Int64
     -- ^ Given a bound on the maximal size to encode, this function must return
     -- a fixed-size encoding for all smaller sizes.
     -> Builder
@@ -473,7 +606,7 @@ putSizePrefixed
     :: forall a.
        Int
     -- ^ Buffer-size for inner driver.
-    -> (Int64 -> FixedEncoding Int64)
+    -> PaddedEncoding Int64
     -- ^ Encoding the size for the fallback case.
     -> Put a
     -- ^ 'Put' to prefix with the length of its sequence of bytes.
@@ -589,132 +722,3 @@ runCIOSWithLength =
 buildStepToCIOSUntrimmedWith :: Int -> BuildStep a -> IO (ChunkIOStream a)
 buildStepToCIOSUntrimmedWith bufSize =
     buildStepToCIOS (untrimmedStrategy bufSize bufSize)
-
-
-----------------------------------------------------------------------
--- Padded versions of encodings for streamed prefixing of output sizes
-----------------------------------------------------------------------
-
-{-# INLINE appsUntilZero #-}
-appsUntilZero :: (Eq a, Num a) => (a -> a) -> a -> Int
-appsUntilZero f x0 =
-    count 0 x0
-  where
-    count !n 0 = n
-    count !n x = count (succ n) (f x)
-
-
-{-# INLINE genericBase128LEPadded #-}
-genericBase128LEPadded :: (Eq b, Show b, Bits b, Num a, Integral b)
-                => (b -> a -> b) -> b -> FixedEncoding b
-genericBase128LEPadded shiftRight bound =
-    fixedEncoding n0 io
-  where
-    n0 = max 1 $ appsUntilZero (`shiftRight` 7) bound
-
-    io !x0 !op
-      | x0 > bound = error err
-      | otherwise  = loop 0 x0
-      where
-        err = "genericBase128LEPadded: value " ++ show x0 ++ " > bound " ++ show bound
-        loop !n !x
-          | n0 <= n + 1 = do poke8 (x .&. 0x7f)
-          | otherwise   = do poke8 ((x .&. 0x7f) .|. 0x80)
-                             loop (n + 1) (x `shiftRight` 7)
-          where
-            poke8 = pokeElemOff op n . fromIntegral
-
-{-# INLINE wordBase128LEPadded #-}
-wordBase128LEPadded :: Word -> FixedEncoding Word
-wordBase128LEPadded = genericBase128LEPadded shiftr_w
-
-{-# INLINE word64Base128LEPadded #-}
-word64Base128LEPadded :: Word64 -> FixedEncoding Word64
-word64Base128LEPadded = genericBase128LEPadded shiftr_w64
-
-
-{-# INLINE intBase128LEPadded #-}
-intBase128LEPadded :: Int64 -> FixedEncoding Int64
-intBase128LEPadded bound =
-    fromIntegral >$< wordBase128LEPadded (fromIntegral bound)
-
-{-# INLINE genHexPadded #-}
-genHexPadded :: (Num a, Bits a, Integral a)
-                 => (a -> Int -> a) -> Char -> a -> FixedEncoding a
-genHexPadded shiftr padding0 bound =
-    fixedEncoding n0 io
-  where
-    n0 = max 1 $ appsUntilZero (`shiftr` 4) bound
-
-    padding = fromIntegral (ord padding0) :: Word8
-
-    io !x0 !op0 =
-        loop (op0 `plusPtr` n0) x0
-      where
-        loop !op !x = do
-           let !op' = op `plusPtr` (-1)
-           poke op' =<< encode4_as_8 lowerTable (fromIntegral $ x .&. 0xf)
-           let !x' = x `shiftr` 4
-           unless (op' <= op0) $
-             if x' == 0
-               then pad (op' `plusPtr` (-1))
-               else loop op' x'
-
-        pad !op
-          | op < op0  = return ()
-          | otherwise = poke op padding >> pad (op `plusPtr` (-1))
-
-
-{-# INLINE wordHexPadded #-}
-wordHexPadded :: Char -> Word -> FixedEncoding Word
-wordHexPadded = genHexPadded shiftr_w
-
-{-# INLINE word64HexPadded #-}
-word64HexPadded :: Char -> Word64 -> FixedEncoding Word64
-word64HexPadded = genHexPadded shiftr_w64
-
-{-# INLINE int64HexPadded #-}
-int64HexPadded :: Char -> Int64 -> FixedEncoding Int64
-int64HexPadded pad bound =
-    fromIntegral >$< word64HexPadded pad (fromIntegral bound)
-
-
--- | Note: Works only for positive numbers.
-{-# INLINE genDecPadded #-}
-genDecPadded :: (Num a, Bits a, Integral a) => Char -> a -> FixedEncoding a
-genDecPadded padding0 bound =
-    fixedEncoding n0 io
-  where
-    n0 = max 1 $ appsUntilZero (`div` 10) bound
-
-    padding = fromIntegral (ord padding0) :: Word8
-
-    io !x0 !op0 =
-        loop (op0 `plusPtr` n0) x0
-      where
-        loop !op !x = do
-           let !op' = op `plusPtr` (-1)
-               !x'  = x `div` 10
-           poke op' ((fromIntegral $ (x - x' * 10) + 48) :: Word8)
-           unless (op' <= op0) $
-             if x' == 0
-               then pad (op' `plusPtr` (-1))
-               else loop op' x'
-
-        pad !op
-          | op < op0  = return ()
-          | otherwise = poke op padding >> pad (op `plusPtr` (-1))
-
-{-# INLINE wordDecPadded #-}
-wordDecPadded :: Char -> Word -> FixedEncoding Word
-wordDecPadded = genDecPadded
-
-{-# INLINE word64DecPadded #-}
-word64DecPadded :: Char -> Word64 -> FixedEncoding Word64
-word64DecPadded = genDecPadded
-
-{-# INLINE int64Base128LEPadded #-}
-int64Base128LEPadded :: Int64 -> FixedEncoding Int64
-int64Base128LEPadded bound =
-    fromIntegral >$< word64Base128LEPadded (fromIntegral bound)
-

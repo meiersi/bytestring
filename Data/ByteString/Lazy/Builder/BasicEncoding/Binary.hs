@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, BangPatterns #-}
+{-# LANGUAGE CPP, BangPatterns, ForeignFunctionInterface #-}
 -- | Copyright   : (c) 2010-2011 Simon Meier
 -- License       : BSD3-style (see LICENSE)
 --
@@ -139,6 +139,7 @@ import Data.ByteString.Lazy.Builder.BasicEncoding.Internal.UncheckedShifts
 import Data.ByteString.Lazy.Builder.BasicEncoding.Internal.Floating
 
 import Foreign
+import Foreign.C.Types
 
 #include "MachDeps.h"
 
@@ -421,43 +422,79 @@ doubleHost = storableToF
 -- Variable-Length, Little-endian, Base-128 Encodings
 ------------------------------------------------------------------------------
 
--- | Generic variable-length, little-endian, base-128 encoder.
-{-# INLINE encodeBase128 #-}
-encodeBase128
-    :: forall a b. (Integral a, Bits a, Storable b, Integral b, Num b)
-    => (a -> Int -> a) -> BoundedEncoding b
-encodeBase128 shiftr =
-    -- We add 6 because we require the result of (`div` 7) to be rounded up.
-    boundedEncoding ((8 * sizeOf (undefined :: b) + 6) `div` 7) (io . fromIntegral)
+{- Pure Haskell implementation of variable length encoder. Test its
+ - performance once more, when GHC's code generator has improved. The
+ - performance is especially bad for encoding large values.
+ 
+{-# INLINE genericBase128LEPadded #-}
+genericBase128LEPadded :: (Eq b, Show b, Bits b, Num a, Integral b)
+                => (b -> a -> b)  -- ^ Shift function to use.
+                -> b -> FixedEncoding b
+genericBase128LEPadded shiftRight bound =
+    fixedEncoding n0 io
   where
-    io !x !op
-      | x' == 0   = do poke8 (x .&. 0x7f)
-                       return $! op `plusPtr` 1
-      | otherwise = do poke8 ((x .&. 0x7f) .|. 0x80)
-                       io x' (op `plusPtr` 1)
+    n0 = max 1 $ appsUntilZero (`shiftRight` 7) bound
+
+    io !x0 !op
+      | x0 > bound = error err
+      | otherwise  = loop 0 x0
       where
-        x'    = x `shiftr` 7
-        poke8 = poke op . fromIntegral
+        err = "genericBase128LEPadded: value " ++ show x0 ++ " > bound " ++ show bound
+        loop !n !x
+          | n0 <= n + 1 = do poke8 (x .&. 0x7f)
+          | otherwise   = do poke8 ((x .&. 0x7f) .|. 0x80)
+                             loop (n + 1) (x `shiftRight` 7)
+          where
+            poke8 = pokeElemOff op n . fromIntegral
+-}
+
+-- | GHC's code generator is not (yet) on par with gcc. We therefore use a
+-- C-based implementation.
+foreign import ccall unsafe "static _hs_bytestring_word64Base128LE"
+    c_word64Base128LE :: CULLong -> Ptr Word8 -> IO (Ptr Word8)
+
+-- | Generic variable-length, little-endian, base-128 encoder for values
+-- fitting into 64-bit integers.
+{-# INLINE encodeBase128ViaWord64 #-}
+encodeBase128ViaWord64 :: forall a. (Integral a, Storable a) => BoundedEncoding a
+encodeBase128ViaWord64 =
+    -- We add 6 because we require the result of (`div` 7) to be rounded up.
+    boundedEncoding ((8 * sizeOf (undefined :: a) + 6) `div` 7) 
+                    (c_word64Base128LE . fromIntegral)
+
+-- | A 32 bit version to speed up computations on 32-bit machines.
+foreign import ccall unsafe "static _hs_bytestring_word32Base128LE"
+    c_word32Base128LE :: CUInt -> Ptr Word8 -> IO (Ptr Word8)
+
+-- | Generic variable-length, little-endian, base-128 encoder for values
+-- fitting into 32-bit integers.
+{-# INLINE encodeBase128ViaWord32 #-}
+encodeBase128ViaWord32 :: forall a. (Integral a, Storable a) => BoundedEncoding a
+encodeBase128ViaWord32 =
+    boundedEncoding ((8 * sizeOf (undefined :: a) + 6) `div` 7) 
+                    (c_word32Base128LE . fromIntegral)
 
 -- | Variable-length, little-endian, base-128 encoding of a 'Word8'.
 {-# INLINE word8Base128LE #-}
 word8Base128LE :: BoundedEncoding Word8
-word8Base128LE = encodeBase128 shiftr_w
+word8Base128LE = 
+    ifB (< 0x80) (fromF word8) 
+                 (fromF $ (\x -> (x, 0x01)) >$< word8 `pairF` word8)
 
 -- | Variable-length, little-endian, base-128 encoding of a 'Word16'.
 {-# INLINE word16Base128LE #-}
 word16Base128LE :: BoundedEncoding Word16
-word16Base128LE = encodeBase128 shiftr_w
+word16Base128LE = encodeBase128ViaWord32
 
 -- | Variable-length, little-endian, base-128 encoding of a 'Word32'.
 {-# INLINE word32Base128LE #-}
 word32Base128LE :: BoundedEncoding Word32
-word32Base128LE = encodeBase128 shiftr_w32
+word32Base128LE = encodeBase128ViaWord32
 
 -- | Variable-length, little-endian, base-128 encoding of a 'Word64'.
 {-# INLINE word64Base128LE #-}
 word64Base128LE :: BoundedEncoding Word64
-word64Base128LE = encodeBase128 shiftr_w64
+word64Base128LE = encodeBase128ViaWord64
 
 -- | Variable-length, little-endian, base-128 encoding of a 'Word'.
 --
@@ -467,8 +504,9 @@ word64Base128LE = encodeBase128 shiftr_w64
 --   be represented using a 'Word' on all relevant machines.
 {-# INLINE wordBase128LE #-}
 wordBase128LE :: BoundedEncoding Word
-wordBase128LE = encodeBase128 shiftr_w
-
+wordBase128LE = caseWordSize_32_64 
+    (fromIntegral >$< word32Base128LE) 
+    (fromIntegral >$< word64Base128LE)
 
 -- | Variable-length, little-endian, base-128 encoding of an 'Int8'.
 -- Use 'int8ZigZagBase128LE' for encoding negative numbers.
@@ -538,5 +576,3 @@ int64ZigZagBase128LE = zigZag >$< int64Base128LE
 {-# INLINE intZigZagBase128LE #-}
 intZigZagBase128LE :: BoundedEncoding Int
 intZigZagBase128LE = zigZag >$< intBase128LE
-
-

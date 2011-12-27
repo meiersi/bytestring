@@ -52,7 +52,8 @@ nRepl = 10000
 
 {-# NOINLINE intData #-}
 intData :: [Int]
-intData = [1..nRepl]
+intData = [start..start +nRepl]
+  where start = 0
 
 {-# NOINLINE smallIntegerData #-}
 smallIntegerData :: [Integer]
@@ -147,6 +148,15 @@ main = do
   mapM_ putStrLn sanityCheckInfo
   putStrLn ""
   Criterion.Main.defaultMain
+    [ benchBInts "int8Base128LE"  (E.encodeListWithB (fromIntegral >$< E.int8Base128LE))
+    , benchBInts "int16Base128LE" (E.encodeListWithB (fromIntegral >$< E.int16Base128LE))
+    , benchBInts "int32Base128LE" (E.encodeListWithB (fromIntegral >$< E.int32Base128LE))
+    , benchBInts "int64Base128LE" (E.encodeListWithB (fromIntegral >$< E.int64Base128LE))
+    , benchBInts "intBase128LE"   (E.encodeListWithB (fromIntegral >$< E.intBase128LE))
+    , benchBInts "encodeListWithF word8" $
+        E.encodeListWithF (fromIntegral >$< E.word8)
+    ]
+    {-
     [ bgroup "Builder"
       [ bgroup "Encoding wrappers"
         [ benchBInts "foldMap word8" $
@@ -263,3 +273,4 @@ main = do
       , benchFE "doubleHexFixed"   $ fromIntegral >$< E.doubleHexFixed
       ]
     ]
+    -}

@@ -117,6 +117,7 @@ library
 
   c-sources:         cbits/fpstring.c
                      cbits/itoa.c
+                     cbits/varint.c
   include-dirs:      include
   includes:          fpstring.h
   install-includes:  fpstring.h
@@ -186,6 +187,7 @@ test-suite test-builder
 
   c-sources:        cbits/fpstring.c
                     cbits/itoa.c
+                    cbits/varint.c
   include-dirs:     include
   includes:         fpstring.h
   install-includes: fpstring.h

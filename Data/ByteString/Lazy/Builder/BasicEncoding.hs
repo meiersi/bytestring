@@ -619,19 +619,16 @@ encodeListWithB w =
     bound = sizeBound w
     makeBuilder xs0 = builder $ step xs0
       where
-        step xs1 k !(BufferRange op0 ope0) = go xs1 op0
+        step xs1 k !(BufferRange op0 ope0) = 
+            go xs1 op0
           where
-            go [] !op = do
-               let !br' = BufferRange op ope0
-               k br'
-
+            go []          !op             = k (BufferRange op ope0)
             go xs@(x':xs') !op
-              | op `plusPtr` bound <= ope0 = do
-                  !op' <- runB w x' op
-                  go xs' op'
-             | otherwise = return $ bufferFull bound op (step xs k)
+              | op `plusPtr` bound <= ope0 = runB w x' op >>= go xs'
+              | otherwise                  = 
+                 return $ bufferFull bound op (step xs k)
 
--- TODO: Add 'foldMap/encodeWith' its variants
+-- TODO: Think about adding 'foldMap/encodeWith' fusion its variants
 -- TODO: Ensure rewriting 'encodeWithB w . f = encodeWithB (w #. f)'
 
 -- | Create a 'Builder' that encodes a sequence generated from a seed value

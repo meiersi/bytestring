@@ -33,6 +33,8 @@ TODO before full builder release
   - add 'Put' documentation
   - also export 'Put' transformers from internals
   - use an allocation strategy for the inner builder in 'putSizePrefixed'
+  - remove 'intXXXBase128LE' encodings. Their semantics is unclear and must be
+    determined by the library user.
   - Make a second call for review.
 
   - investigate performance of 'encodeWithListF E.word8'

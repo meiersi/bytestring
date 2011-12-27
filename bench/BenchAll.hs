@@ -148,11 +148,11 @@ main = do
   mapM_ putStrLn sanityCheckInfo
   putStrLn ""
   Criterion.Main.defaultMain
-    [ benchBInts "int8Base128LE"  (E.encodeListWithB (fromIntegral >$< E.int8Base128LE))
-    , benchBInts "int16Base128LE" (E.encodeListWithB (fromIntegral >$< E.int16Base128LE))
-    , benchBInts "int32Base128LE" (E.encodeListWithB (fromIntegral >$< E.int32Base128LE))
-    , benchBInts "int64Base128LE" (E.encodeListWithB (fromIntegral >$< E.int64Base128LE))
-    , benchBInts "intBase128LE"   (E.encodeListWithB (fromIntegral >$< E.intBase128LE))
+    [ benchBInts "int8ZigZagBase128LE"  (E.encodeListWithB (fromIntegral >$< E.int8ZigZagBase128LE))
+    , benchBInts "int16ZigZagBase128LE" (E.encodeListWithB (fromIntegral >$< E.int16ZigZagBase128LE))
+    , benchBInts "int32ZigZagBase128LE" (E.encodeListWithB (fromIntegral >$< E.int32ZigZagBase128LE))
+    , benchBInts "int64ZigZagBase128LE" (E.encodeListWithB (fromIntegral >$< E.int64ZigZagBase128LE))
+    , benchBInts "intZigZagBase128LE"   (E.encodeListWithB (fromIntegral >$< E.intZigZagBase128LE))
     , benchBInts "encodeListWithF word8" $
         E.encodeListWithF (fromIntegral >$< E.word8)
     ]

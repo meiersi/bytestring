@@ -1,4 +1,5 @@
-{-# LANGUAGE CPP, BangPatterns, ForeignFunctionInterface #-}
+{-# LANGUAGE ScopedTypeVariables, CPP, BangPatterns #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
 -- | Copyright   : (c) 2010-2011 Simon Meier
 -- License       : BSD3-style (see LICENSE)
 --
@@ -84,22 +85,6 @@ is the last byte) and its 7-bit group is @000 0001@.
   , word64Base128LE
   , wordBase128LE
 
-{- |
-The following encodings work by casting the signed integer 
-  to the equally sized unsigned integer.
-This works well for positive integers, but for negative integers 
-  it always results in the /longest/ possible sequence of bytes,
-  as their MSB is (by definition) always set.
-Use the so-called ZigZag encoding explained below for compactly encoding both
-  negative and positive integers of small magnitude.
--}
-
-  , int8Base128LE
-  , int16Base128LE
-  , int32Base128LE
-  , int64Base128LE
-  , intBase128LE
-  
   -- **** Little-endian, base-128, zig-zag
 
 {- |
@@ -124,7 +109,8 @@ The ZigZag encoding essentially swaps the LSB with the MSB and additionally
 inverts all bits if the MSB is set.
 
 The following encodings implement the combintion of ZigZag encoding
-  together with the above variable-length, little-endian, base-128 encodings.
+  together with the above variable-length, little-endian, base-128 encodings
+  of positive integers.
 -}
   , int8ZigZagBase128LE
   , int16ZigZagBase128LE
@@ -508,30 +494,6 @@ wordBase128LE = caseWordSize_32_64
     (fromIntegral >$< word32Base128LE) 
     (fromIntegral >$< word64Base128LE)
 
--- | Variable-length, little-endian, base-128 encoding of an 'Int8'.
--- Use 'int8ZigZagBase128LE' for encoding negative numbers.
-{-# INLINE int8Base128LE #-}
-int8Base128LE :: BoundedEncoding Int8
-int8Base128LE = fromIntegral >$< word8Base128LE
-
--- | Variable-length, little-endian, base-128 encoding of an 'Int16'.
--- Use 'int16ZigZagBase128LE' for encoding negative numbers.
-{-# INLINE int16Base128LE #-}
-int16Base128LE :: BoundedEncoding Int16
-int16Base128LE = fromIntegral >$< word16Base128LE
-
--- | Variable-length, little-endian, base-128 encoding of an 'Int32'.
--- Use 'int32ZigZagBase128LE' for encoding negative numbers.
-{-# INLINE int32Base128LE #-}
-int32Base128LE :: BoundedEncoding Int32
-int32Base128LE = fromIntegral >$< word32Base128LE
-
--- | Variable-length, little-endian, base-128 encoding of an 'Int64'.
--- Use 'int64ZigZagBase128LE' for encoding negative numbers.
-{-# INLINE int64Base128LE #-}
-int64Base128LE :: BoundedEncoding Int64
-int64Base128LE = fromIntegral >$< word64Base128LE
-
 -- | Variable-length, little-endian, base-128 encoding of an 'Int'.
 -- Use 'intZigZagBase128LE' for encoding negative numbers.
 --
@@ -544,28 +506,29 @@ intBase128LE :: BoundedEncoding Int
 intBase128LE = fromIntegral >$< wordBase128LE
 
 {-# INLINE zigZag #-}
-zigZag :: (Storable a, Bits a) => a -> a
-zigZag x = (x `shiftL` 1) `xor` (x `shiftR` (8 * sizeOf x - 1))
+zigZag :: forall a b. (Storable a, Bits a, Integral a, Num b) => a -> b
+zigZag x = (fromIntegral :: a -> b) $ 
+    (x `shiftL` 1) `xor` (x `shiftR` (8 * sizeOf x - 1))
 
 -- | Variable-length, little-endian, base-128, zig-zag encoding of an 'Int8'.
 {-# INLINE int8ZigZagBase128LE #-}
 int8ZigZagBase128LE :: BoundedEncoding Int8
-int8ZigZagBase128LE = zigZag >$< int8Base128LE
+int8ZigZagBase128LE = zigZag >$< word8Base128LE
 
 -- | Variable-length, little-endian, base-128, zig-zag encoding of an 'Int16'.
 {-# INLINE int16ZigZagBase128LE #-}
 int16ZigZagBase128LE :: BoundedEncoding Int16
-int16ZigZagBase128LE = zigZag >$< int16Base128LE
+int16ZigZagBase128LE = zigZag >$< word16Base128LE
 
 -- | Variable-length, little-endian, base-128, zig-zag encoding of an 'Int32'.
 {-# INLINE int32ZigZagBase128LE #-}
 int32ZigZagBase128LE :: BoundedEncoding Int32
-int32ZigZagBase128LE = zigZag >$< int32Base128LE
+int32ZigZagBase128LE = zigZag >$< word32Base128LE
 
 -- | Variable-length, little-endian, base-128, zig-zag encoding of an 'Int64'.
 {-# INLINE int64ZigZagBase128LE #-}
 int64ZigZagBase128LE :: BoundedEncoding Int64
-int64ZigZagBase128LE = zigZag >$< int64Base128LE
+int64ZigZagBase128LE = zigZag >$< word64Base128LE
 
 -- | Variable-length, little-endian, base-128, zig-zag encoding of an 'Int'.
 --
@@ -575,4 +538,4 @@ int64ZigZagBase128LE = zigZag >$< int64Base128LE
 --   be represented using an 'Int' on all relevant machines.
 {-# INLINE intZigZagBase128LE #-}
 intZigZagBase128LE :: BoundedEncoding Int
-intZigZagBase128LE = zigZag >$< intBase128LE
+intZigZagBase128LE = zigZag >$< wordBase128LE

@@ -80,22 +80,6 @@ is the last byte) and its 7-bit group is @000 0001@.
     , word64Base128LE
     , wordBase128LE
 
-{- |
-The following encodings work by casting the signed integer 
-  to the equally sized unsigned integer.
-This works well for positive integers, but for negative integers 
-  it always results in the /longest/ possible sequence of bytes,
-  as their MSB is (by definition) always set.
-Use the so-called ZigZag encoding explained below for compactly encoding both
-  negative and positive integers of small magnitude.
--}
-
-    , int8Base128LE
-    , int16Base128LE
-    , int32Base128LE
-    , int64Base128LE
-    , intBase128LE
-  
     -- *** Little-endian, base-128, zig-zag
 
 {- |
@@ -109,7 +93,8 @@ For example,
   @0@ is encoded as @0@, @-1@ as @1@, @1@ as @2@, @-2@ as @3@, @2@ as @4@, and
   so on.
 The following encodings implement the combintion of ZigZag encoding
-  together with the above variable-length, little-endian, base-128 encodings.
+  together with the above variable-length, little-endian, base-128 encodings
+  of positive integers.
 -}
     , int8ZigZagBase128LE
     , int16ZigZagBase128LE
@@ -196,6 +181,7 @@ floatHost = E.encodeWithF E.floatHost
 doubleHost :: Double -> Builder
 doubleHost = E.encodeWithF E.doubleHost
 
+
 ------------------------------------------------------------------------------
 -- Variable-length, little-endian, base-128 encodings
 ------------------------------------------------------------------------------
@@ -230,61 +216,25 @@ word64Base128LE = E.encodeWithB E.word64Base128LE
 wordBase128LE :: Word -> Builder
 wordBase128LE = E.encodeWithB E.wordBase128LE
 
-
--- | Variable-length, little-endian, base-128 encoding of an 'Int8'.
--- Use 'int8ZigZagBase128LE' for encoding negative numbers.
-{-# INLINE int8Base128LE #-}
-int8Base128LE :: Int8 -> Builder
-int8Base128LE = E.encodeWithB E.int8Base128LE
-
--- | Variable-length, little-endian, base-128 encoding of an 'Int16'.
--- Use 'int16ZigZagBase128LE' for encoding negative numbers.
-{-# INLINE int16Base128LE #-}
-int16Base128LE :: Int16 -> Builder
-int16Base128LE = E.encodeWithB E.int16Base128LE
-
--- | Variable-length, little-endian, base-128 encoding of an 'Int32'.
--- Use 'int32ZigZagBase128LE' for encoding negative numbers.
-{-# INLINE int32Base128LE #-}
-int32Base128LE :: Int32 -> Builder
-int32Base128LE = E.encodeWithB E.int32Base128LE
-
--- | Variable-length, little-endian, base-128 encoding of an 'Int64'.
--- Use 'int64ZigZagBase128LE' for encoding negative numbers.
-{-# INLINE int64Base128LE #-}
-int64Base128LE :: Int64 -> Builder
-int64Base128LE = E.encodeWithB E.int64Base128LE
-
--- | Variable-length, little-endian, base-128 encoding of an 'Int'.
--- Use 'intZigZagBase128LE' for encoding negative numbers.
---
--- Note that in contrast to the fixed-width binary encoding of an 'Int',
---   whose width depends on the register-width of a machine,
---   this encoding is /machine-independent/ for values small enough to
---   be represented using an 'Int' on all relevant machines.
-{-# INLINE intBase128LE #-}
-intBase128LE :: Int -> Builder
-intBase128LE = E.encodeWithB E.intBase128LE
-
 -- | Variable-length, little-endian, base-128, zig-zag encoding of an 'Int8'.
 {-# INLINE int8ZigZagBase128LE #-}
 int8ZigZagBase128LE :: Int8 -> Builder
-int8ZigZagBase128LE = E.encodeWithB E.int8Base128LE
+int8ZigZagBase128LE = E.encodeWithB E.int8ZigZagBase128LE
 
 -- | Variable-length, little-endian, base-128, zig-zag encoding of an 'Int16'.
 {-# INLINE int16ZigZagBase128LE #-}
 int16ZigZagBase128LE :: Int16 -> Builder
-int16ZigZagBase128LE = E.encodeWithB E.int16Base128LE
+int16ZigZagBase128LE = E.encodeWithB E.int16ZigZagBase128LE
 
 -- | Variable-length, little-endian, base-128, zig-zag encoding of an 'Int32'.
 {-# INLINE int32ZigZagBase128LE #-}
 int32ZigZagBase128LE :: Int32 -> Builder
-int32ZigZagBase128LE = E.encodeWithB E.int32Base128LE
+int32ZigZagBase128LE = E.encodeWithB E.int32ZigZagBase128LE
 
 -- | Variable-length, little-endian, base-128, zig-zag encoding of an 'Int64'.
 {-# INLINE int64ZigZagBase128LE #-}
 int64ZigZagBase128LE :: Int64 -> Builder
-int64ZigZagBase128LE = E.encodeWithB E.int64Base128LE
+int64ZigZagBase128LE = E.encodeWithB E.int64ZigZagBase128LE
 
 -- | Variable-length, little-endian, base-128, zig-zag encoding of an 'Int'.
 --
@@ -294,6 +244,4 @@ int64ZigZagBase128LE = E.encodeWithB E.int64Base128LE
 --   be represented using an 'Int' on all relevant machines.
 {-# INLINE intZigZagBase128LE #-}
 intZigZagBase128LE :: Int -> Builder
-intZigZagBase128LE = E.encodeWithB E.intBase128LE
-
-
+intZigZagBase128LE = E.encodeWithB E.intZigZagBase128LE

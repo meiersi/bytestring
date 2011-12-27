@@ -33,12 +33,14 @@ TODO before full builder release
   - add 'Put' documentation
   - also export 'Put' transformers from internals
   - use an allocation strategy for the inner builder in 'putSizePrefixed'
-  - remove 'intXXXBase128LE' encodings. Their semantics is unclear and must be
-    determined by the library user.
+  [DONE] remove 'intXXXBase128LE' encodings. Their semantics is unclear and
+    must be determined by the library user.
   - Make a second call for review.
 
   - investigate performance of 'encodeWithListF E.word8'
-  - improve performance of varInt encodings
+  [DONE] improve performance of varInt encodings
+  - benchmark all varInt encodings
+  - improve performance of padded varInt encodings
   - improve performance of encodeChunked and encodeWithSize
   - investigate performance of running a one byte builder.
   - simplify code of 'buildStepToCIOS'

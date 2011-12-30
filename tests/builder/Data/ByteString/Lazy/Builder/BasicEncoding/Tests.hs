@@ -88,12 +88,6 @@ testsBinary =
   , testBoundedB "word64Base128LE"    genBase128LE_list  BE.word64Base128LE
   , testBoundedB "wordBase128LE"      genBase128LE_list  BE.wordBase128LE
 
-  , testBoundedB "int8Base128LE"     int8Base128LE_list   BE.int8Base128LE
-  , testBoundedB "int16Base128LE"    int16Base128LE_list  BE.int16Base128LE
-  , testBoundedB "int32Base128LE"    int32Base128LE_list  BE.int32Base128LE
-  , testBoundedB "int64Base128LE"    int64Base128LE_list  BE.int64Base128LE
-  , testBoundedB "intBase128LE"      intBase128LE_list    BE.intBase128LE
-
   , testBoundedB "int8ZigZagBase128LE"     (int8Base128LE_list  . zigZag)  BE.int8ZigZagBase128LE
   , testBoundedB "int16ZigZagBase128LE"    (int16Base128LE_list . zigZag)  BE.int16ZigZagBase128LE
   , testBoundedB "int32ZigZagBase128LE"    (int32Base128LE_list . zigZag)  BE.int32ZigZagBase128LE
@@ -108,10 +102,7 @@ testsBinary =
     , prop_zigZag_parseable  "intZigZagBase128LE"    unZigZagInt   BE.intZigZagBase128LE
     ]
 
-  , testPaddedF "wordBase128LEPadded"   wordBase128LEPadded_list    wordBase128LEPadded
   , testPaddedF "word64Base128LEPadded" word64Base128LEPadded_list  word64Base128LEPadded
-  , testPaddedF "intBase128LEPadded"    intBase128LEPadded_list     intBase128LEPadded
-  , testPaddedF "int64Base128LEPadded"  int64Base128LEPadded_list   int64Base128LEPadded
 
   ]
 
@@ -264,14 +255,8 @@ testsASCII =
   , testF "floatHexFixed"  floatHexFixed_list  BE.floatHexFixed
   , testF "doubleHexFixed" doubleHexFixed_list BE.doubleHexFixed
 
-  , testPaddedF "wordDecPadded"
-      (genDecPadded_list 'x') (wordDecPadded 'x')
-
   , testPaddedF "word64DecPadded"
       (genDecPadded_list 'x') (word64DecPadded 'x')
-
-  , testPaddedF "wordHexPadded"
-      (genHexPadded_list 'x') (wordHexPadded 'x')
 
   , testPaddedF "word64HexPadded"
       (genHexPadded_list 'x') (word64HexPadded 'x')

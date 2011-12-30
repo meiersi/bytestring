@@ -32,18 +32,24 @@ TODO before full builder release
   - check all documentation
   - add 'Put' documentation
   - also export 'Put' transformers from internals
-  - use an allocation strategy for the inner builder in 'putSizePrefixed'
+  [DONE] use an allocation strategy for the inner builder in 'putSizePrefixed'
   [DONE] remove 'intXXXBase128LE' encodings. Their semantics is unclear and
     must be determined by the library user.
   - Make a second call for review.
+  - Comment on trick of using 'ensureFree' to avoid too big closures.
+  - switch back to 'PaddedEncoding Word64' for builder transformers
 
-  - investigate performance of 'encodeWithListF E.word8'
+  [DONE] investigate performance of 'encodeWithListF E.word8'
   [DONE] improve performance of varInt encodings
-  - benchmark all varInt encodings
-  - improve performance of padded varInt encodings
-  - improve performance of encodeChunked and encodeWithSize
-  - investigate performance of running a one byte builder.
-  - simplify code of 'buildStepToCIOS'
+  [DONE] benchmark all varInt encodings
+  [DONE] improve performance of padded varInt encodings
+  [DONE] improve performance of encodeChunked and encodeWithSize
+  [DONE] investigate performance of running a one byte builder.
+  [DONE] investigate performance of bytestring insertion
+  - improve the Fixed varint encoding performance using the same construction
+    as the Google code
+  - create a big plot with all benchmarks
+  - add builder merging benchmarks to 'BenchAll.hs'
   - benchmark/test 'Put' merging
   - test 'varInt' encodings
   - test with GHC 6.12, 7.0, 7.2, 7.4

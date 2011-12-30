@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP, BangPatterns, ScopedTypeVariables #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
 {-# OPTIONS_GHC -fno-warn-unused-imports #-}
 {- | Copyright : (c) 2010-2011 Simon Meier
 License        : BSD3-style (see LICENSE)
@@ -300,18 +301,15 @@ buffers. The drawback of this method is that it requires a ...
   , encodeChunked
   , encodeSizePrefixed
 
-  , wordBase128LEPadded
-  , wordHexPadded
-  , wordDecPadded
+  , int64DecPadded
 
-  , word64Base128LEPadded
   , word64HexPadded
   , word64DecPadded
 
-  , intBase128LEPadded
+  , word64Base128LEPadded
+  , int64Base128LEPadded
   -- TODO: Complete this list.
 
-  , int64Base128LEPadded
   , int64HexPadded
 
   ) where
@@ -336,6 +334,7 @@ import           Data.ByteString.Lazy.Builder.BasicEncoding.ASCII
 import           Data.ByteString.Lazy.Builder.BasicEncoding
 
 import           Foreign
+import           Foreign.C.Types
 
 ------------------------------------------------------------------------------
 -- Padded encodings
@@ -346,128 +345,91 @@ import           Foreign
 -- or truncate all values being encoded.
 type PaddedEncoding a = a -> FixedEncoding a
 
-{-# INLINE appsUntilZero #-}
-appsUntilZero :: (Eq a, Num a) => (a -> a) -> a -> Int
-appsUntilZero f x0 =
-    count 0 x0
+-- | Count how many digits are necessary to encode a given number.
+{-# INLINE countDigits #-}
+countDigits :: (Ord a, Num a) 
+            => (a -> a)  -- ^ Shift number by one digit
+            -> (a -> a)  -- ^ Shift number by two digits
+            -> a         -- ^ Number whose of digits we want to count
+            -> Int
+countDigits shift1 shift2 x0 =
+    -- TODO: implement using CPU instruction that returns top-most set bit.
+    count 2 x0
   where
-    count !n 0 = n
-    count !n x = count (succ n) (f x)
-
-
-{-# INLINE genericBase128LEPadded #-}
-genericBase128LEPadded :: (Eq b, Show b, Bits b, Num a, Integral b)
-                => (b -> a -> b) -> b -> FixedEncoding b
-genericBase128LEPadded shiftRight bound =
-    fixedEncoding n0 io
-  where
-    n0 = max 1 $ appsUntilZero (`shiftRight` 7) bound
-
-    io !x0 !op
-      | x0 > bound = error err
-      | otherwise  = loop 0 x0
+    count !n x
+      | x' > 0        = count (n + 2) x'
+      | shift1 x == 0 = n - 1
+      | otherwise     = n
       where
-        err = "genericBase128LEPadded: value " ++ show x0 ++ " > bound " ++ show bound
-        loop !n !x
-          | n0 <= n + 1 = do poke8 (x .&. 0x7f)
-          | otherwise   = do poke8 ((x .&. 0x7f) .|. 0x80)
-                             loop (n + 1) (x `shiftRight` 7)
-          where
-            poke8 = pokeElemOff op n . fromIntegral
+        x' = shift2 x
 
-{-# INLINE wordBase128LEPadded #-}
-wordBase128LEPadded :: PaddedEncoding Word
-wordBase128LEPadded = genericBase128LEPadded shiftr_w
+base128LESize :: Word64 -> Int
+base128LESize = countDigits (`shiftr_w64` 7) (`shiftr_w64` 14)
+
+decSize :: Word64 -> Int
+decSize = countDigits (`div` 10) (`div` 100)
+
+hexSize :: Word64 -> Int
+hexSize = countDigits (`shiftr_w64` 4) (`shiftr_w64` 8)
+
+-- | GHC's code generator is not (yet) on par with gcc. We therefore use a
+-- C-based implementation.
+foreign import ccall unsafe "static _hs_bytestring_word64Base128LEFixed"
+    c_word64Base128LEFixed :: CInt -> CULLong -> Ptr Word8 -> IO ()
+
+-- | GHC's code generator is not (yet) on par with gcc. We therefore use a
+-- C-based implementation.
+foreign import ccall unsafe "static _hs_bytestring_word64DecFixed"
+    c_word64DecFixed :: CChar -> CInt -> CULLong -> Ptr Word8 -> IO ()
+
+-- | GHC's code generator is not (yet) on par with gcc. We therefore use a
+-- C-based implementation.
+foreign import ccall unsafe "static _hs_bytestring_word64HexFixed"
+    c_word64HexFixed :: CChar -> CInt -> CULLong -> Ptr Word8 -> IO ()
 
 {-# INLINE word64Base128LEPadded #-}
 word64Base128LEPadded :: PaddedEncoding Word64
-word64Base128LEPadded = genericBase128LEPadded shiftr_w64
-
-
-{-# INLINE intBase128LEPadded #-}
-intBase128LEPadded :: PaddedEncoding Int
-intBase128LEPadded bound =
-    fromIntegral >$< wordBase128LEPadded (fromIntegral bound)
-
-{-# INLINE genHexPadded #-}
-genHexPadded :: (Num a, Bits a, Integral a)
-                 => (a -> Int -> a) -> Char -> PaddedEncoding a
-genHexPadded shiftr padding0 bound =
-    fixedEncoding n0 io
+word64Base128LEPadded bound =
+    fixedEncoding len 
+                  (c_word64Base128LEFixed (fromIntegral len) . fromIntegral)
   where
-    n0 = max 1 $ appsUntilZero (`shiftr` 4) bound
+    len = base128LESize bound
 
-    padding = fromIntegral (ord padding0) :: Word8
-
-    io !x0 !op0 =
-        loop (op0 `plusPtr` n0) x0
-      where
-        loop !op !x = do
-           let !op' = op `plusPtr` (-1)
-           poke op' =<< encode4_as_8 lowerTable (fromIntegral $ x .&. 0xf)
-           let !x' = x `shiftr` 4
-           unless (op' <= op0) $
-             if x' == 0
-               then pad (op' `plusPtr` (-1))
-               else loop op' x'
-
-        pad !op
-          | op < op0  = return ()
-          | otherwise = poke op padding >> pad (op `plusPtr` (-1))
-
-
-{-# INLINE wordHexPadded #-}
-wordHexPadded :: Char -> PaddedEncoding Word
-wordHexPadded = genHexPadded shiftr_w
-
-{-# INLINE word64HexPadded #-}
-word64HexPadded :: Char -> PaddedEncoding Word64
-word64HexPadded = genHexPadded shiftr_w64
-
-{-# INLINE int64HexPadded #-}
-int64HexPadded :: Char -> PaddedEncoding Int64
-int64HexPadded pad bound =
-    fromIntegral >$< word64HexPadded pad (fromIntegral bound)
-
-
--- | Note: Works only for positive numbers.
-{-# INLINE genDecPadded #-}
-genDecPadded :: (Num a, Bits a, Integral a) => Char -> PaddedEncoding a
-genDecPadded padding0 bound =
-    fixedEncoding n0 io
-  where
-    n0 = max 1 $ appsUntilZero (`div` 10) bound
-
-    padding = fromIntegral (ord padding0) :: Word8
-
-    io !x0 !op0 =
-        loop (op0 `plusPtr` n0) x0
-      where
-        loop !op !x = do
-           let !op' = op `plusPtr` (-1)
-               !x'  = x `div` 10
-           poke op' ((fromIntegral $ (x - x' * 10) + 48) :: Word8)
-           unless (op' <= op0) $
-             if x' == 0
-               then pad (op' `plusPtr` (-1))
-               else loop op' x'
-
-        pad !op
-          | op < op0  = return ()
-          | otherwise = poke op padding >> pad (op `plusPtr` (-1))
-
-{-# INLINE wordDecPadded #-}
-wordDecPadded :: Char -> PaddedEncoding Word
-wordDecPadded = genDecPadded
-
+-- | Padding 'Char' is truncated to 8-bits.
 {-# INLINE word64DecPadded #-}
 word64DecPadded :: Char -> PaddedEncoding Word64
-word64DecPadded = genDecPadded
+word64DecPadded paddingChar bound =
+    fixedEncoding len 
+                  (c_word64DecFixed pad (fromIntegral len) . fromIntegral)
+  where
+    len = decSize bound
+    pad = fromIntegral (ord paddingChar)
+
+
+-- | Padding 'Char' is truncated to 8-bits.
+{-# INLINE word64HexPadded #-}
+word64HexPadded :: Char -> PaddedEncoding Word64
+word64HexPadded paddingChar bound =
+    fixedEncoding len 
+                  (c_word64HexFixed pad (fromIntegral len) . fromIntegral)
+  where
+    len = hexSize bound
+    pad = fromIntegral (ord paddingChar)
 
 {-# INLINE int64Base128LEPadded #-}
 int64Base128LEPadded :: PaddedEncoding Int64
 int64Base128LEPadded bound =
     fromIntegral >$< word64Base128LEPadded (fromIntegral bound)
+
+{-# INLINE int64DecPadded #-}
+int64DecPadded :: Char -> PaddedEncoding Int64
+int64DecPadded c bound =
+    fromIntegral >$< word64DecPadded c (fromIntegral bound)
+
+{-# INLINE int64HexPadded #-}
+int64HexPadded :: Char -> PaddedEncoding Int64
+int64HexPadded pad bound =
+    fromIntegral >$< word64HexPadded pad (fromIntegral bound)
 
 
 ------------------------------------------------------------------------------
@@ -520,7 +482,7 @@ putChunked minFree0 mkBeforeFE afterBE p =
       where
         fill innerStep !(BufferRange op ope)
           | outRemaining < minBufferSize =
-              return $! bufferFull minBufferSize op (fill innerStep)
+              evaluate $ bufferFull minBufferSize op (fill innerStep)
           | otherwise = do
               fillWithBuildStep innerStep doneH fullH insertChunksH brInner
           where
@@ -532,6 +494,7 @@ putChunked minFree0 mkBeforeFE afterBE p =
             opeInner       = ope `plusPtr` (-reservedAfter)
             brInner        = BufferRange opInner opeInner
 
+            {-# INLINE wrapChunk #-}
             wrapChunk :: Ptr Word8 -> IO (Ptr Word8)
             wrapChunk !opInner'
               | innerSize == 0 = return op -- no data written => no chunk to wrap
@@ -548,7 +511,7 @@ putChunked minFree0 mkBeforeFE afterBE p =
 
             fullH opInner' minSize nextInnerStep = do
                 op' <- wrapChunk opInner'
-                return $! bufferFull
+                evaluate $ bufferFull
                   (max minBufferSize (minSize + maxReserved))
                   op'
                   (fill nextInnerStep)
@@ -589,8 +552,9 @@ putChunked minFree0 mkBeforeFE afterBE p =
 {-# INLINE encodeSizePrefixed #-}
 encodeSizePrefixed
     ::
-       Int
-    -- ^ Inner buffer-size.
+       AllocationStrategy
+    -- ^ Allocation strategy for the inner 'Builder' in case it overflows the
+    -- current buffer
     -> PaddedEncoding Int64
     -- ^ Given a bound on the maximal size to encode, this function must return
     -- a fixed-size encoding for all smaller sizes.
@@ -604,15 +568,16 @@ encodeSizePrefixed innerBufSize mkSizeFE =
 {-# INLINE putSizePrefixed #-}
 putSizePrefixed
     :: forall a.
-       Int
-    -- ^ Buffer-size for inner driver.
+       AllocationStrategy
+    -- ^ Allocation strategy for the inner 'Put' in case it overflows the
+    -- current buffer
     -> PaddedEncoding Int64
     -- ^ Encoding the size for the fallback case.
     -> Put a
-    -- ^ 'Put' to prefix with the length of its sequence of bytes.
+    -- ^ 'Put' to prefix with the length of its sequence of bytes
     -> Put a
-putSizePrefixed innerBufSize mkSizeFE innerP =
-    put $ encodingStep
+putSizePrefixed strategy mkSizeFE innerP =
+    putBuilder (ensureFree minFree) >> put encodingStep
   where
     -- | The minimal free size is such that we can encode any size.
     minFree = size $ mkSizeFE maxBound
@@ -622,11 +587,8 @@ putSizePrefixed innerBufSize mkSizeFE innerP =
         fill (runPut innerP)
       where
         fill :: BuildStep a -> BufferRange -> IO (BuildSignal r)
-        fill innerStep !(BufferRange op ope)
-          | outRemaining < minFree =
-              return $! bufferFull minFree op (fill innerStep)
-          | otherwise = do
-              fillWithBuildStep innerStep doneH fullH insertChunksH brInner
+        fill innerStep !(BufferRange op ope) =
+            fillWithBuildStep innerStep doneH fullH insertChunksH brInner
           where
             outRemaining   = ope `minusPtr` op
             sizeFE         = mkSizeFE $ fromIntegral outRemaining
@@ -668,8 +630,7 @@ putSizePrefixed innerBufSize mkSizeFE innerP =
             slowPrefixSize opInner' bInner nextStep = do
                 (x, chunks@(SizedChunks lenChunks _), bufLast) <-
                     runCIOSWithLength <=<
-                    buildStepToCIOSUntrimmedWith innerBufSize $
-                        runBuilderWith bInner nextStep
+                    buildStepToCIOS strategy $ runBuilderWith bInner nextStep
 {- At this point the situation is as follows:
 
 |===============Current buffer range (BufferRange op ope)============| ... chunks ... |====Last buffer================|
@@ -717,8 +678,3 @@ runCIOSWithLength =
         io >>= go (l + fromIntegral (S.length bs)) (lbsC . L.Chunk bs)
     go !l lbsC (YieldChunks (SizedChunks n lbsC') io) = 
         io >>= go (l + n) (lbsC . lbsC')
-
--- | Run a 'BuildStep' using the untrimmed strategy.
-buildStepToCIOSUntrimmedWith :: Int -> BuildStep a -> IO (ChunkIOStream a)
-buildStepToCIOSUntrimmedWith bufSize =
-    buildStepToCIOS (untrimmedStrategy bufSize bufSize)

@@ -166,6 +166,12 @@ data Buffer = Buffer {-# UNPACK #-} !(ForeignPtr Word8)
                      {-# UNPACK #-} !BufferRange
 
 
+-- | Combined size of the filled and free space in the buffer.
+{-# INLINE bufferSize #-}
+bufferSize :: Buffer -> Int
+bufferSize (Buffer fpbuf (BufferRange _ ope)) =
+    ope `minusPtr` unsafeForeignPtrToPtr fpbuf
+
 -- | Convert the filled part of a 'Buffer' to a strict 'S.ByteString'.
 {-# INLINE byteStringFromBuffer #-}
 byteStringFromBuffer :: Buffer -> S.ByteString
@@ -228,10 +234,16 @@ data ChunkIOStream a =
 -- | Convert a 'ChunkIOStream' to a lazy 'L.ByteString' using
 -- 'unsafePerformIO'.
 {-# INLINE ciosToLazyByteString #-}
-ciosToLazyByteString :: L.ByteString -> ChunkIOStream () -> L.ByteString
-ciosToLazyByteString k = go
+ciosToLazyByteString :: AllocationStrategy 
+                     -> L.ByteString -> ChunkIOStream () -> L.ByteString
+ciosToLazyByteString (AllocationStrategy _ _ trim) k = go
   where
-    go (Finished buf _) = chunkFromBuffer buf k
+    go (Finished buf _)
+      | S.null bs                           = k
+      | trim (S.length bs) (bufferSize buf) = L.Chunk (S.copy bs) k
+      | otherwise                           = L.Chunk bs          k
+      where
+        bs = byteStringFromBuffer buf
     go (Yield1 bs io)   = L.Chunk bs $ unsafePerformIO (go <$> io)
     go (YieldChunks (SizedChunks _ lbsC) io) =
         lbsC $ unsafePerformIO (go <$> io)
@@ -284,9 +296,6 @@ bufferFull :: Int
            -> BuildSignal a
 bufferFull = BufferFull
 
--- TODO: Decide whether we should inline the bytestring constructor.
--- Therefore, making builders independent of strict bytestrings.
-
 -- | Signal that several chunks should be inserted directly.
 {-# INLINE insertChunks #-}
 insertChunks :: Ptr Word8
@@ -297,7 +306,6 @@ insertChunks :: Ptr Word8
             -- ^ 'BuildStep' to run on next 'BufferRange'
             -> BuildSignal a
 insertChunks op chunks = InsertChunks op chunks Nothing
-
 
 -- | Signal that several chunks should be inserted directly and a last buffer
 -- that was partially filled is available.
@@ -368,12 +376,16 @@ builder :: (forall r. BuildStep r -> BuildStep r)
         -> Builder
 builder = Builder
 
+-- | The final build step that returns the 'Done' signal.
+finalBuildStep :: BuildStep ()
+finalBuildStep !(BufferRange op _) = evaluate $ Done op ()
+
 -- | Run a 'Builder'.
 {-# INLINE runBuilder #-}
 runBuilder :: Builder      -- ^ 'Builder' to run
            -> BuildStep () -- ^ 'BuildStep' that writes the byte stream of this
                            -- 'Builder' and signals 'done' upon completion.
-runBuilder (Builder b) = b $ \(BufferRange op _) -> return $ done op ()
+runBuilder b = runBuilderWith b finalBuildStep
 
 -- | Run a 'Builder'.
 {-# INLINE runBuilderWith #-}
@@ -462,7 +474,7 @@ runPut :: Put a       -- ^ Put to run
        -> BuildStep a -- ^ 'BuildStep' that first writes the byte stream of
                       -- this 'Put' and then yields the computed value using
                       -- the 'done' signal.
-runPut (Put p) = p $ \x (BufferRange op _) -> return $ Done op x
+runPut (Put p) = p $ \x (BufferRange op _) -> evaluate $ Done op x
 
 instance Functor Put where
   fmap f p = Put $ \k -> unPut p (\x -> k (f x))
@@ -717,10 +729,9 @@ ensureFree minFree =
       | otherwise                   = k br
 
 -- | Copy the bytes from a 'BufferRange' into the output stream.
-{-# INLINE bytesCopyStep #-}
-bytesCopyStep :: BufferRange  -- ^ Input 'BufferRange'.
-              -> BuildStep a -> BuildStep a
-bytesCopyStep !(BufferRange ip0 ipe) k =
+wrappedBytesCopyStep :: BufferRange  -- ^ Input 'BufferRange'.
+                     -> BuildStep a -> BuildStep a
+wrappedBytesCopyStep !(BufferRange ip0 ipe) k =
     go ip0
   where
     go !ip !(BufferRange op ope)
@@ -771,7 +782,7 @@ byteStringThreshold maxCopySize =
     step !bs@(S.PS _ _ len) !k br@(BufferRange !op _)
       | len <= maxCopySize = byteStringCopyStep bs k br
       | otherwise          =
-          return $! insertChunks op (sizedChunk bs) k
+          evaluate $ insertChunks op (sizedChunk bs) k
 
 -- | Construct a 'Builder' that copies the strict 'S.ByteString'.
 --
@@ -785,9 +796,15 @@ byteStringCopy = \bs -> builder $ byteStringCopyStep bs
 
 {-# INLINE byteStringCopyStep #-}
 byteStringCopyStep :: S.ByteString -> BuildStep a -> BuildStep a
-byteStringCopyStep (S.PS ifp ioff isize) !k0 =
-    bytesCopyStep (BufferRange ip ipe) k
+byteStringCopyStep (S.PS ifp ioff isize) !k0 br0@(BufferRange op ope)
+    -- Ensure that the common case is not recursive and therefore yields
+    -- better code.
+    | op' <= ope = do copyBytes op ip isize
+                      touchForeignPtr ifp
+                      k0 (BufferRange op' ope)
+    | otherwise  = do wrappedBytesCopyStep (BufferRange ip ipe) k br0
   where
+    op'  = op `plusPtr` isize
     ip   = unsafeForeignPtrToPtr ifp `plusPtr` ioff
     ipe  = ip `plusPtr` isize
     k br = do touchForeignPtr ifp  -- input consumed: OK to release here
@@ -954,7 +971,7 @@ toLazyByteStringWith
     -> L.ByteString
        -- ^ Resulting lazy 'L.ByteString'
 toLazyByteStringWith strategy k b =
-    ciosToLazyByteString k $ unsafePerformIO $
+    ciosToLazyByteString strategy k $ unsafePerformIO $
         buildStepToCIOS strategy (runBuilder b)
 
 {-# INLINE buildStepToCIOS #-}

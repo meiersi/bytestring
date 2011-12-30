@@ -449,7 +449,7 @@ parseChunks parseLen =
 -- | Prefix with size. We use an inner buffer size of 77 (almost primes are good) to
 -- get several buffer full signals.
 prefixHexSize :: Builder -> Builder
-prefixHexSize = encodeSizePrefixed 77 hexLen
+prefixHexSize = encodeSizePrefixed (untrimmedStrategy 73 77) hexLen
 
 parseSizePrefix :: ([Word8] -> (Int, [Word8])) -> L.ByteString -> L.ByteString
 parseSizePrefix parseLen =

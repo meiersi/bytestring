@@ -10,17 +10,20 @@
 -- Benchmark all 'Builder' functions.
 module Main (main) where
 
-import Prelude hiding (words)
-import Criterion.Main
-import Data.Foldable (foldMap)
+import           Prelude hiding (words)
+import           Criterion.Main
+import           Data.Foldable (foldMap)
+import           Data.Monoid
 
 import qualified Data.ByteString                  as S
 import qualified Data.ByteString.Lazy             as L
 
 import           Data.ByteString.Lazy.Builder
+import           Data.ByteString.Lazy.Builder.Internal (ensureFree)
 import           Data.ByteString.Lazy.Builder.ASCII
+import           Data.ByteString.Lazy.Builder.Extras
 import           Data.ByteString.Lazy.Builder.BasicEncoding
-                   ( FixedEncoding, BoundedEncoding, (>$<) )
+                   ( FixedEncoding, BoundedEncoding, (>$<), pairF, fromF )
 import qualified Data.ByteString.Lazy.Builder.BasicEncoding          as E
 import qualified Data.ByteString.Lazy.Builder.BasicEncoding.Internal as EI
 
@@ -80,6 +83,10 @@ lazyByteStringData :: L.ByteString
 lazyByteStringData = case S.splitAt (nRepl `div` 2) byteStringData of
     (bs1, bs2) -> L.fromChunks [bs1, bs2]
 
+{-# NOINLINE byteStringChunksData #-}
+byteStringChunksData :: [S.ByteString]
+byteStringChunksData = map (S.pack . replicate 500 . fromIntegral) intData
+
 
 -- benchmark wrappers
 ---------------------
@@ -90,11 +97,13 @@ benchBlaze name x b =
     bench (name ++" (" ++ show nRepl ++ ")") $
         whnf (OldL.length . Blaze.toLazyByteString . b) x
 
+{-# INLINE benchB' #-}
+benchB' :: String -> a -> (a -> Builder) -> Benchmark
+benchB' name x b = bench name $ whnf (L.length . toLazyByteString . b) x
+
 {-# INLINE benchB #-}
 benchB :: String -> a -> (a -> Builder) -> Benchmark
-benchB name x b =
-    bench (name ++" (" ++ show nRepl ++ ")") $
-        whnf (L.length . toLazyByteString . b) x
+benchB name = benchB' $ name ++" (" ++ show nRepl ++ ")"
 
 {-# INLINE benchBInts #-}
 benchBInts :: String -> ([Int] -> Builder) -> Benchmark
@@ -109,7 +118,8 @@ benchFE name = benchBE name . E.fromF
 {-# INLINE benchBE #-}
 benchBE :: String -> BoundedEncoding Int -> Benchmark
 benchBE name e =
-  bench (name ++" (" ++ show nRepl ++ ")") $ benchIntEncodingB nRepl e
+    bench (name ++" (" ++ show nRepl ++ ")") $ benchIntEncodingB nRepl e
+
 
 -- We use this construction of just looping through @n,n-1,..,1@ to ensure that
 -- we measure the speed of the encoding and not the speed of generating the
@@ -128,6 +138,22 @@ benchIntEncodingB n0 w
       | n <= 0    = return op
       | otherwise = EI.runB w n op >>= loop (n - 1)
 
+-- | Benchmark a 'PaddedEncoding'. Full inlining to enable specialization.
+{-# INLINE benchPE #-}
+benchPE :: String -> PaddedEncoding Word64 -> Benchmark
+benchPE name mkEncoding =
+    bench (name ++" (" ++ show nRepl ++ ")") $ io
+  where
+    maxSize = EI.size $ mkEncoding maxBound
+
+    io | nRepl < 0 = error "benchPE: negative number of replications"
+       | otherwise = do
+           fpbuf <- mallocForeignPtrBytes (nRepl * maxSize)
+           withForeignPtr fpbuf (loop (fromIntegral nRepl)) >> return ()
+
+    loop !n !op
+      | n <= 0    = return op
+      | otherwise = EI.runB (fromF (mkEncoding n)) n op >>= loop (n - 1)
 
 
 -- benchmarks
@@ -143,22 +169,81 @@ sanityCheckInfo =
       ]
   ]
 
+{-# NOINLINE encodeChunkedBase128LE #-}
+encodeChunkedBase128LE :: Builder -> Builder
+encodeChunkedBase128LE = encodeChunked 16 int64Base128LEPadded E.emptyB
+
+{-# NOINLINE encodeSizePrefixedBase128LE #-}
+encodeSizePrefixedBase128LE :: Builder -> Builder
+encodeSizePrefixedBase128LE =
+    encodeSizePrefixed defaultUntrimmedStrategy int64Base128LEPadded
+
+{-# NOINLINE encodeChunkedHex #-}
+encodeChunkedHex :: Builder -> Builder
+encodeChunkedHex = encodeChunked 16 (int64HexPadded ' ') E.emptyB
+
+{-# NOINLINE encodeSizePrefixedHex #-}
+encodeSizePrefixedHex :: Builder -> Builder
+encodeSizePrefixedHex =
+    encodeSizePrefixed defaultUntrimmedStrategy (int64HexPadded ' ')
+
+{-# NOINLINE encodeChunkedDec #-}
+encodeChunkedDec :: Builder -> Builder
+encodeChunkedDec = encodeChunked 16 (int64DecPadded ' ') E.emptyB
+
+{-# NOINLINE encodeSizePrefixedDec #-}
+encodeSizePrefixedDec :: Builder -> Builder
+encodeSizePrefixedDec =
+    encodeSizePrefixed defaultUntrimmedStrategy (int64DecPadded ' ')
+
+{-# NOINLINE encodeChunkedIntHost #-}
+encodeChunkedIntHost :: Builder -> Builder
+encodeChunkedIntHost = encodeChunked 16 (const E.int64Host) E.emptyB
+
+{-# NOINLINE encodeSizePrefixedIntHost #-}
+encodeSizePrefixedIntHost :: Builder -> Builder
+encodeSizePrefixedIntHost =
+    encodeSizePrefixed defaultUntrimmedStrategy (const E.int64Host)
+
+{-# NOINLINE toLazyByteStringUntrimmed #-}
+toLazyByteStringUntrimmed :: Builder -> L.ByteString
+toLazyByteStringUntrimmed = toLazyByteStringWith defaultUntrimmedStrategy L.empty
+
+defaultUntrimmedStrategy = untrimmedStrategy smallChunkSize defaultChunkSize
+
 main :: IO ()
 main = do
   mapM_ putStrLn sanityCheckInfo
   putStrLn ""
   Criterion.Main.defaultMain
-    [ benchBInts "int8ZigZagBase128LE"  (E.encodeListWithB (fromIntegral >$< E.int8ZigZagBase128LE))
-    , benchBInts "int16ZigZagBase128LE" (E.encodeListWithB (fromIntegral >$< E.int16ZigZagBase128LE))
-    , benchBInts "int32ZigZagBase128LE" (E.encodeListWithB (fromIntegral >$< E.int32ZigZagBase128LE))
-    , benchBInts "int64ZigZagBase128LE" (E.encodeListWithB (fromIntegral >$< E.int64ZigZagBase128LE))
-    , benchBInts "intZigZagBase128LE"   (E.encodeListWithB (fromIntegral >$< E.intZigZagBase128LE))
-    , benchBInts "encodeListWithF word8" $
-        E.encodeListWithF (fromIntegral >$< E.word8)
-    ]
-    {-
     [ bgroup "Builder"
-      [ bgroup "Encoding wrappers"
+      [ bgroup "Small payload"
+        [ benchB' "mempty"        ()  (const mempty)
+        , benchB' "ensureFree 8"  ()  (const (ensureFree 8))
+        , benchB' "intHost 1"     1   intHost
+
+        , benchB' "encodeChunkedIntHost . intHost $ 1" 1 
+            (encodeChunkedIntHost . intHost)
+        , benchB' "encodeSizePrefixed . intHost $ 1" 1 
+            (encodeSizePrefixedIntHost . intHost)
+
+        , benchB' "encodeChunkedBase128LE intHost $ 1" 1 
+            (encodeChunkedBase128LE . intHost)
+        , benchB' "encodeSizePrefixedBase128LE intHost $ 1" 1 
+            (encodeSizePrefixedBase128LE . intHost)
+
+        , benchB' "encodeChunkedDec intHost $ 1" 1 
+            (encodeChunkedDec . intHost)
+        , benchB' "encodeSizePrefixedDec intHost $ 1" 1 
+            (encodeSizePrefixedDec . intHost)
+
+        , benchB' "encodeChunkedHex intHost $ 1" 1 
+            (encodeChunkedHex . intHost)
+        , benchB' "encodeSizePrefixedHex intHost $ 1" 1 
+            (encodeSizePrefixedHex . intHost)
+        ]
+
+      , bgroup "Encoding wrappers"
         [ benchBInts "foldMap word8" $
             foldMap (word8 . fromIntegral)
         , benchBInts "encodeListWithF word8" $
@@ -169,7 +254,39 @@ main = do
             E.encodeByteStringWithF E.word8
         , benchB     "encodeLazyByteStringWithF word8" lazyByteStringData $
             E.encodeLazyByteStringWithF E.word8
+
+        , benchBInts "foldMap (encodeChunkedIntHost . intHost)"
+            (foldMap (encodeChunkedIntHost . intHost))
+        , benchBInts "foldMap (encodeSizePrefixedIntHost . intHost)"
+            (foldMap (encodeSizePrefixedIntHost . intHost))
+
+        , benchBInts "foldMap (encodeChunkedBase128LE . intHost)"
+            (foldMap (encodeChunkedBase128LE . intHost))
+        , benchBInts "foldMap (encodeSizePrefixedBase128LE . intHost)"
+            (foldMap (encodeSizePrefixedBase128LE . intHost))
+         
+        , benchBInts "foldMap (encodeChunkedHex . intHost)"
+            (foldMap (encodeChunkedHex . intHost))
+        , benchBInts "foldMap (encodeSizePrefixedHex . intHost)"
+            (foldMap (encodeSizePrefixedHex . intHost))
+
+        , benchBInts "foldMap (encodeChunkedDec . intHost)"
+            (foldMap (encodeChunkedDec . intHost))
+        , benchBInts "foldMap (encodeSizePrefixedDec . intHost)"
+            (foldMap (encodeSizePrefixedDec . intHost))
         ]
+
+      , bgroup "ByteString insertion" $
+          let dataName = " byteStringChunks" ++ 
+                         show (S.length (head byteStringChunksData)) ++ "Data"
+          in
+            [ benchB ("foldMap byteString" ++ dataName) byteStringChunksData
+                (foldMap byteString)
+            , benchB ("foldMap byteStringCopy" ++ dataName) byteStringChunksData
+                (foldMap byteStringCopy)
+            , benchB ("foldMap byteStringInsert" ++ dataName) byteStringChunksData
+                (foldMap byteStringInsert)
+            ]
 
       , bgroup "Non-bounded encodings"
         [ benchB "foldMap intDec"                                 intData            $ foldMap intDec
@@ -185,6 +302,7 @@ main = do
         , benchBlaze "foldMap doubleDec (blaze-textual)"      doubleData         $ foldMap Blaze.double
         , benchB "byteStringHexFixed"      byteStringData     $ byteStringHexFixed
         , benchB "lazyByteStringHexFixed"  lazyByteStringData $ lazyByteStringHexFixed
+
         ]
       ]
 
@@ -234,6 +352,24 @@ main = do
 
       , benchFE "floatHost"  $ fromIntegral >$< E.floatHost
       , benchFE "doubleHost" $ fromIntegral >$< E.doubleHost
+
+      -- variable-length, little-endian, base-128
+      , benchBE "word8Base128LE"  (fromIntegral >$< E.word8Base128LE)
+      , benchBE "word16Base128LE" (fromIntegral >$< E.word16Base128LE)
+      , benchBE "word32Base128LE" (fromIntegral >$< E.word32Base128LE)
+      , benchBE "word64Base128LE" (fromIntegral >$< E.word64Base128LE)
+      , benchBE "wordBase128LE"   (fromIntegral >$< E.wordBase128LE)
+
+        -- Strange: in this benchmark it is faster than 'word64Base128LE'.
+        -- However, when serializing a list, then it is as much slower as
+        -- expected. Perhaps, some unboxing works here that doesn't otherwise.
+      , benchPE "word64Base128LEPadded"   word64Base128LEPadded
+
+      , benchBE "int8ZigZagBase128LE"  (fromIntegral >$< E.int8ZigZagBase128LE)
+      , benchBE "int16ZigZagBase128LE" (fromIntegral >$< E.int16ZigZagBase128LE)
+      , benchBE "int32ZigZagBase128LE" (fromIntegral >$< E.int32ZigZagBase128LE)
+      , benchBE "int64ZigZagBase128LE" (fromIntegral >$< E.int64ZigZagBase128LE)
+      , benchBE "intZigZagBase128LE"   (fromIntegral >$< E.intZigZagBase128LE)
       ]
 
     , bgroup "Data.ByteString.Lazy.Builder.BoundedEncoding.ASCII"
@@ -251,12 +387,16 @@ main = do
       , benchBE "word64Dec"   $ fromIntegral >$< E.word64Dec
       , benchBE "wordDec"     $ fromIntegral >$< E.wordDec
 
+      , benchPE "word64DecPadded"         (word64DecPadded '0')
+
       -- hexadecimal number
       , benchBE "word8Hex"    $ fromIntegral >$< E.word8Hex
       , benchBE "word16Hex"   $ fromIntegral >$< E.word16Hex
       , benchBE "word32Hex"   $ fromIntegral >$< E.word32Hex
       , benchBE "word64Hex"   $ fromIntegral >$< E.word64Hex
       , benchBE "wordHex"     $ fromIntegral >$< E.wordHex
+
+      , benchPE "word64HexPadded"         (word64HexPadded '0')
 
       -- fixed-width hexadecimal numbers
       , benchFE "int8HexFixed"     $ fromIntegral >$< E.int8HexFixed
@@ -273,4 +413,3 @@ main = do
       , benchFE "doubleHexFixed"   $ fromIntegral >$< E.doubleHexFixed
       ]
     ]
-    -}

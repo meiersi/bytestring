@@ -60,3 +60,14 @@ char* _hs_bytestring_word32Base128LE (unsigned int val, char *buf) {
   }
   return buf;
 }
+
+// Encodes a 64-bit varint into buf using exactly len bytes. Note that the
+// encoded value is truncated or padded to len bytes.
+void _hs_bytestring_word64Base128LEFixed (int len, unsigned long long int x, char *buf) {
+  int i;
+  for (i = 0; i < len; i++) {
+    buf[i] = (x & 0x7f) | 0x80;
+    x >>= 7;
+  }
+  buf[len - 1] &= 0x7f;
+}

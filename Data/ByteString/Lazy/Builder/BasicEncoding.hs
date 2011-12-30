@@ -566,18 +566,13 @@ encodeLazyByteStringWithF = encodeLazyByteStringWithB . toB
 --
 {-# INLINE[1] encodeWithB #-}
 encodeWithB :: BoundedEncoding a -> (a -> Builder)
-encodeWithB w =
-    mkBuilder
+encodeWithB w x =
+    ensureFree (sizeBound w) `mappend` builder step
   where
-    bound = sizeBound w
-    mkBuilder x = builder step
-      where
-        step k (BufferRange op ope)
-          | op `plusPtr` bound <= ope = do
-              op' <- runB w x op
-              let !br' = BufferRange op' ope
-              k br'
-          | otherwise = return $ bufferFull bound op (step k)
+    step k (BufferRange op ope) = do
+        op' <- runB w x op
+        let !br' = BufferRange op' ope
+        k br'
 
 {-# RULES
 
@@ -613,49 +608,42 @@ encodeWithB w =
 -- because it moves several variables out of the inner loop.
 {-# INLINE encodeListWithB #-}
 encodeListWithB :: BoundedEncoding a -> [a] -> Builder
-encodeListWithB w =
-    makeBuilder
+encodeListWithB w xs0 =
+    builder $ step xs0
   where
-    bound = sizeBound w
-    makeBuilder xs0 = builder $ step xs0
+    step xs1 k (BufferRange op0 ope0) = 
+        go xs1 op0
       where
-        step xs1 k !(BufferRange op0 ope0) = 
-            go xs1 op0
-          where
-            go []          !op             = k (BufferRange op ope0)
-            go xs@(x':xs') !op
-              | op `plusPtr` bound <= ope0 = runB w x' op >>= go xs'
-              | otherwise                  = 
-                 return $ bufferFull bound op (step xs k)
+        go []          !op             = k (BufferRange op ope0)
+        go xs@(x':xs') !op
+          | op `plusPtr` bound <= ope0 = runB w x' op >>= go xs'
+          | otherwise                  = 
+             return $ bufferFull bound op (step xs k)
+
+    bound = sizeBound w
 
 -- TODO: Think about adding 'foldMap/encodeWith' fusion its variants
--- TODO: Ensure rewriting 'encodeWithB w . f = encodeWithB (w #. f)'
+-- TODO: Think about rewriting 'encodeWithB w . f = encodeWithB (w #. f)'
 
 -- | Create a 'Builder' that encodes a sequence generated from a seed value
 -- using an 'Encoding'.
 {-# INLINE encodeUnfoldrWithB #-}
 encodeUnfoldrWithB :: BoundedEncoding b -> (a -> Maybe (b, a)) -> a -> Builder
-encodeUnfoldrWithB w =
-    makeBuilder
+encodeUnfoldrWithB w f x0 =
+    builder $ fillWith x0
   where
-    bound = sizeBound w
-    makeBuilder f x0 = builder $ step x0
+    fillWith x k !(BufferRange op0 ope0) =
+        go (f x) op0
       where
-        step x1 !k = fill x1
-          where
-            fill x !(BufferRange pf0 pe0) = go (f x) pf0
-              where
-                go !Nothing        !pf = do
-                    let !br' = BufferRange pf pe0
-                    k br'
-                go !(Just (y, x')) !pf
-                  | pf `plusPtr` bound <= pe0 = do
-                      !pf' <- runB w y pf
-                      go (f x') pf'
-                  | otherwise = return $ bufferFull bound pf $
-                      \(BufferRange pfNew peNew) -> do
-                          !pfNew' <- runB w y pfNew
-                          fill x' (BufferRange pfNew' peNew)
+        go !Nothing        !op         = do let !br' = BufferRange op ope0
+                                            k br'
+        go !(Just (y, x')) !op         
+          | op `plusPtr` bound <= ope0 = runB w y op >>= go (f x')
+          | otherwise                  = return $ bufferFull bound op $
+              \(BufferRange opNew opeNew) -> do
+                  !opNew' <- runB w y opNew
+                  fillWith x' k (BufferRange opNew' opeNew)
+    bound = sizeBound w
 
 -- | Create a 'Builder' that encodes each 'Word8' of a strict 'S.ByteString'
 -- using an 'Encoding'. For example, we can write a 'Builder' that filters

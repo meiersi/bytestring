@@ -1,5 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables, CPP, BangPatterns, Rank2Types #-}
-{-# OPTIONS_HADDOCK hide #-}
+-- {-# OPTIONS_HADDOCK hide #-}
 -- | Copyright : (c) 2010 - 2011 Simon Meier
 -- License     : BSD3-style (see LICENSE)
 --
@@ -363,11 +363,11 @@ newtype Builder = Builder (forall r. BuildStep r -> BuildStep r)
 builder :: (forall r. BuildStep r -> BuildStep r)
         -- ^ A function that fills a 'BufferRange', calls the continuation with
         -- the updated 'BufferRange' once its done, and signals its caller how
-        -- to proceed using 'done', 'bufferFull', or 'insertChunk'.
+        -- to proceed using 'done', 'bufferFull', or 'insertChunks'.
         --
         -- This function must be referentially transparent; i.e., calling it
         -- multiple times must result in the same sequence of bytes being
-        -- written. If you need mutable state, then you must allocate it newly
+        -- written. If you need mutable state, then you must allocate it anew
         -- upon each call of this function. Moroever, this function must call
         -- the continuation once its done. Otherwise, concatenation of
         -- 'Builder's does not work. Finally, this function must write to all
@@ -455,12 +455,12 @@ put :: (forall r. (a -> BuildStep r) -> BuildStep r)
        -- ^ A function that fills a 'BufferRange', calls the continuation with
        -- the updated 'BufferRange' and its computed value once its done, and
        -- signals its caller how to proceed using 'done', 'bufferFull', or
-       -- 'insertChunk'.
+       -- 'insertChunks'.
        --
        -- This function must be referentially transparent; i.e., calling it
        -- multiple times must result in the same sequence of bytes being
        -- written and the same value being computed. If you need mutable state,
-       -- then you must allocate it newly upon each call of this function.
+       -- then you must allocate it anew upon each call of this function.
        -- Moroever, this function must call the continuation once its done.
        -- Otherwise, monadic sequencing of 'Put's does not work. Finally, this
        -- function must write to all bytes that it claims it has written.

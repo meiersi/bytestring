@@ -1,7 +1,8 @@
 {-# LANGUAGE ScopedTypeVariables, CPP, BangPatterns #-}
-{-# OPTIONS_HADDOCK hide #-}
+-- {-# OPTIONS_HADDOCK hide #-}
+
 -- |
--- Copyright   : 2010-2011 Simon Meier, 2010 Jasper van der Jeugt
+-- Copyright   : 2010-2012 Simon Meier, 2010 Jasper van der Jeugt
 -- License     : BSD3-style (see LICENSE)
 --
 -- Maintainer  : Simon Meier <iridcode@gmail.com>
@@ -15,9 +16,8 @@
 --
 -- If you need to write your own primitive encoding, then be aware that you are
 -- writing code with /all saftey belts off/; i.e.,
--- *this is the code that might make your application vulnerable to buffer-overflow attacks!*
--- The "Codec.Bounded.Encoding.Internal.Test" module provides you with
--- utilities for testing your encodings thoroughly.
+-- *this is the code that might make your application vulnerable to
+-- buffer-overflow attacks!* Please test your encodings thoroughly.
 --
 module Data.ByteString.Lazy.Builder.BasicEncoding.Internal (
   -- * Fixed-size Encodings
@@ -80,11 +80,14 @@ infixl 4 >$<
 -- | An overloaded infix operator for 'contramapF' and 'contramapB'.
 --
 -- We can use it for example to prepend and/or append fixed values to an
--- encoding.
+-- encoding. The following implementation surrounds an UTF-8 encoded character
+-- with singlequotes; e.g., @'showF' singleQuotedUtf8 \'a\' = \"\'a\'\"@.
 --
--- >showEncoding ((\x -> ('\'', (x, '\''))) >$< fixed3) 'x' = "'x'"
--- >  where
--- >    fixed3 = char7 `pairF` char7 `pairF` char7
+-- @
+-- singleQuotedUtf8 :: 'FixedEncoding' 'Char'
+-- singleQuotedUtf8 =
+--   ((\x -> (\'\\\'\', (x, \'\\\'\'))) '>$<' 'pairF' 'char7' ('pairF' 'charUtf8' 'char7')
+-- @
 --
 -- Note that the rather verbose syntax for composition stems from the
 -- requirement to be able to compute the 'size's and 'sizeBound's at
@@ -305,22 +308,3 @@ byteStringTakeB n0 =
         touchForeignPtr fp
         return $! op `plusPtr` s
 -}
-
-{-
-
-httpChunkedTransfer :: Builder -> Builder
-httpChunkedTransfer =
-    encodeChunked 32 (word64HexPadded '0')
-                     ((\_ -> ('\r',('\n',('\r','\n')))) >$< char8x4)
-  where
-    char8x4 = toB (char8 >*< char8 >*< char8 >*< char8)
-
-
-
-chunked :: Builder -> Builder
-chunked = encodeChunked 16 word64VarPadded emptyB
-
--}
-
-
-

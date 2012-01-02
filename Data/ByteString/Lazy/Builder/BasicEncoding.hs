@@ -1,6 +1,6 @@
 {-# LANGUAGE CPP, BangPatterns, ScopedTypeVariables #-}
 {-# OPTIONS_GHC -fno-warn-unused-imports #-}
-{- | Copyright : (c) 2010-2011 Simon Meier
+{- | Copyright : (c) 2010-2012 Simon Meier
                    (c) 2010      Jasper van der Jeugt
 License        : BSD3-style (see LICENSE)
 Maintainer     : Simon Meier <iridcode@gmail.com>
@@ -8,8 +8,15 @@ Portability    : GHC
 
 This module provides the types of fixed-size and bounded-size encodings,
   which are the basic building blocks for constructing 'Builder's.
-These types are used to achieve
-  application-specific performance improvements of 'Builder's.
+They are used for application specific performance tuning of 'Builder's.
+For example,
+  libraries such as @blaze-html@
+  or @aeson@ use the functions provided by this module to implement efficient
+  encodings that combine escaping and character encoding.
+We explain fixed-size and bounded-size encodings in three steps.
+First, we define them formally.
+Then, we explain how they can improve the performance of a 'Builder'.
+Finally, we give two examples to illustrate their use.
 
 /Fixed(-size) encodings/ are encodings that always result in a sequence of bytes
   of a predetermined, fixed length.
@@ -19,17 +26,20 @@ An example for a fixed encoding is the big-endian encoding of a 'Word64',
   of bytes that is no larger than a predetermined bound.
 An example for a bounded encoding is the UTF-8 encoding of a 'Char',
   which results always in less or equal to 4 bytes.
-Note that every fixed encoding is also a bounded encoding.
-In the following, we therefore only refer to fixed encodings,
-  where it matters that the resulting sequence of bytes is of a
-  of a predetermined, fixed length.
-Otherwise, we just refer to bounded encodings.
 
-As said,
-  the goal of bounded encodings is to improve the performance of 'Builder's.
+Note that every fixed encoding is also a bounded encoding.
+This module does not expose functions that exploit the special
+  properties of fixed-size encodings.
+However,
+  they are exploited in the functions 'encodeSizePrefixed' and 'encodeChunked'
+  from "Data.ByteString.Lazy.Builder.Extras", which prefix a 'Builder' with
+  its (chunk) size.
+In the following,
+  we therefore only refer to bounded encodings.
+
+The goal of bounded encodings is to improve the performance of 'Builder's.
 These improvements stem from making the two
   most common steps performed by a 'Builder' more efficient.
-We explain these two steps in turn.
 
 The first most common step is the concatentation of two 'Builder's.
 Internally,
@@ -136,7 +146,7 @@ It exploits the 'Builder' internals to avoid unnecessary function
   compositions (i.e., concatentations).
 In the future,
   we would expect the compiler to perform the optimizations
-  implemented in 'encodeListWithB'.
+  implemented in 'encodeListWithB' by himself.
 However,
   it seems that the code is currently to complicated for the
   compiler to see through.
@@ -146,8 +156,8 @@ Therefore,
   like 'encodeListWithB' for lists.
 
 Note that 'BoundedEncoding's are a bit verbose, but quite versatile.
-Here is an example of a 'BoundedEncoding' for combined HTML escapng and
-UTF-8 encoding.
+Here is an example of a 'BoundedEncoding' for combined HTML escaping and
+  UTF-8 encoding.
 It exploits that the escaped character with the maximal Unicode
   codepoint is \'>\'.
 
@@ -172,198 +182,6 @@ charUtf8HtmlEscaped =
       E.char7 '>*<' E.char7 '>*<' E.char7 '>*<' E.char7 '>*<' E.char7
 @
 
-This module currently does not expose functions that require the special
-  properties of fixed-size encodings.
-They are useful for prefixing 'Builder's with their size or for
-  implementing chunked encodings.
-We will expose the corresponding functions in future releases of this
-  library.
--}
-
-
-
-{-
---
---
--- A /bounded encoding/ is an encoding that never results in a sequence
--- longer than some fixed number of bytes. This number of bytes must be
--- independent of the value being encoded. Typical examples of bounded
--- encodings are the big-endian encoding of a 'Word64', which results always
--- in exactly 8 bytes, or the UTF-8 encoding of a 'Char', which results always
--- in less or equal to 4 bytes.
---
--- Typically, encodings are implemented efficiently by allocating a buffer (an
--- array of bytes) and repeatedly executing the following two steps: (1)
--- writing to the buffer until it is full and (2) handing over the filled part
--- to the consumer of the encoded value. Step (1) is where bounded encodings
--- are used. We must use a bounded encoding, as we must check that there is
--- enough free space /before/ actually writing to the buffer.
---
--- In term of expressivity, it would be sufficient to construct all encodings
--- from the single bounded encoding that encodes a 'Word8' as-is. However,
--- this is not sufficient in terms of efficiency. It results in unnecessary
--- buffer-full checks and it complicates the program-flow for writing to the
--- buffer, as buffer-full checks are interleaved with analyzing the value to be
--- encoded (e.g., think about the program-flow for UTF-8 encoding). This has a
--- significant effect on overall encoding performance, as encoding primitive
--- Haskell values such as 'Word8's or 'Char's lies at the heart of every
--- encoding implementation.
---
--- The bounded 'Encoding's provided by this module remove this performance
--- problem. Intuitively, they consist of a tuple of the bound on the maximal
--- number of bytes written and the actual implementation of the encoding as a
--- function that modifies a mutable buffer. Hence when executing a bounded
--- 'Encoding', the buffer-full check can be done once before the actual writing
--- to the buffer. The provided 'Encoding's also take care to implement the
--- actual writing to the buffer efficiently. Moreover, combinators are
--- provided to construct new bounded encodings from the provided ones.
---
--- A typical example for using the combinators is a bounded 'Encoding' that
--- combines escaping the ' and \\ characters with UTF-8 encoding. More
--- precisely, the escaping to be done is the one implemented by the following
--- @escape@ function.
---
--- > escape :: Char -> [Char]
--- > escape '\'' = "\\'"
--- > escape '\\' = "\\\\"
--- > escape c    = [c]
---
--- The bounded 'Encoding' that combines this escaping with UTF-8 encoding is
--- the following.
---
--- > import Data.ByteString.Lazy.Builder.BasicEncoding.Utf8 (char)
--- >
--- > {-# INLINE escapeChar #-}
--- > escapeUtf8 :: BoundedEncoding Char
--- > escapeUtf8 =
--- >     encodeIf ('\'' ==) (char <#> char #. const ('\\','\'')) $
--- >     encodeIf ('\\' ==) (char <#> char #. const ('\\','\\')) $
--- >     char
---
--- The definition of 'escapeUtf8' is more complicated than 'escape', because
--- the combinators ('encodeIf', 'encodePair', '#.', and 'char') used in
--- 'escapeChar' compute both the bound on the maximal number of bytes written
--- (8 for 'escapeUtf8') as well as the low-level buffer manipulation required
--- to implement the encoding. Bounded 'Encoding's should always be inlined.
--- Otherwise, the compiler cannot compute the bound on the maximal number of
--- bytes written at compile-time. Without inlinining, it would also fail to
--- optimize the constant encoding of the escape characters in the above
--- example. Functions that execute bounded 'Encoding's also perform
--- suboptimally, if the definition of the bounded 'Encoding' is not inlined.
--- Therefore we add an 'INLINE' pragma to 'escapeUtf8'.
---
--- Currently, the only library that executes bounded 'Encoding's is the
--- 'bytestring' library (<http://hackage.haskell.org/package/bytestring>). It
--- uses bounded 'Encoding's to implement most of its lazy bytestring builders.
--- Executing a bounded encoding should be done using the corresponding
--- functions in the lazy bytestring builder 'Extras' module.
---
--- TODO: Merge with explanation/example below
---
--- Bounded 'E.Encoding's abstract encodings of Haskell values that can be implemented by
--- writing a bounded-size sequence of bytes directly to memory. They are
--- lifted to conversions from Haskell values to 'Builder's by wrapping them
--- with a bound-check. The compiler can implement this bound-check very
--- efficiently (i.e, a single comparison of the difference of two pointers to a
--- constant), because the bound of a 'E.Encoding' is always independent of the
--- value being encoded and, in most cases, a literal constant.
---
--- 'E.Encoding's are the primary means for defining conversion functions from
--- primitive Haskell values to 'Builder's. Most 'Builder' constructors
--- provided by this library are implemented that way.
--- 'E.Encoding's are also used to construct conversions that exploit the internal
--- representation of data-structures.
---
--- For example, 'encodeByteStringWith' works directly on the underlying byte
--- array and uses some tricks to reduce the number of variables in its inner
--- loop. Its efficiency is exploited for implementing the @filter@ and @map@
--- functions in "Data.ByteString.Lazy" as
---
--- > import qualified Codec.Bounded.Encoding as E
--- >
--- > filter :: (Word8 -> Bool) -> ByteString -> ByteString
--- > filter p = toLazyByteString . encodeLazyByteStringWithB write
--- >   where
--- >     write = E.encodeIf p E.word8 E.emptyEncoding
--- >
--- > map :: (Word8 -> Word8) -> ByteString -> ByteString
--- > map f = toLazyByteString . encodeLazyByteStringWithB (E.word8 E.#. f)
---
--- Compared to earlier versions of @filter@ and @map@ on lazy 'L.ByteString's,
--- these versions use a more efficient inner loop and have the additional
--- advantage that they always result in well-chunked 'L.ByteString's; i.e, they
--- also perform automatic defragmentation.
---
--- We can also use 'E.Encoding's to improve the efficiency of the following
--- 'renderString' function from our UTF-8 CSV table encoding example in
--- "Data.ByteString.Lazy.Builder".
---
--- > renderString :: String -> Builder
--- > renderString cs = charUtf8 '"' <> foldMap escape cs <> charUtf8 '"'
--- >   where
--- >     escape '\\' = charUtf8 '\\' <> charUtf8 '\\'
--- >     escape '\"' = charUtf8 '\\' <> charUtf8 '\"'
--- >     escape c    = charUtf8 c
---
--- The idea is to save on 'mappend's by implementing a 'E.Encoding' that escapes
--- characters and using 'encodeListWith', which implements writing a list of
--- values with a tighter inner loop and no 'mappend'.
---
--- > import Data.ByteString.Lazy.Builder.Extras     -- assume these three
--- > import Codec.Bounded.Encoding                  -- imports are present
--- >        ( BoundedEncoding, encodeIf, (<#>), (#.) )
--- > import Data.ByteString.Lazy.Builder.BasicEncoding.Utf8 (char)
--- >
--- > renderString :: String -> Builder
--- > renderString cs =
--- >     charUtf8 '"' <> encodeListWithB escapedUtf8 cs <> charUtf8 '"'
--- >   where
--- >     escapedUtf8 :: BoundedEncoding Char
--- >     escapedUtf8 =
--- >       encodeIf (== '\\') (char <#> char #. const ('\\', '\\')) $
--- >       encodeIf (== '\"') (char <#> char #. const ('\\', '\"')) $
--- >       char
---
--- This 'Builder' considers a buffer with less than 8 free bytes as full. As
--- all functions are inlined, the compiler is able to optimize the constant
--- 'E.Encoding's as two sequential 'poke's. Compared to the first implementation of
--- 'renderString' this implementation is 1.7x faster.
---
--}
-{-
-Internally, 'Builder's are buffer-fill operations that are
-given a continuation buffer-fill operation and a buffer-range to be filled.
-A 'Builder' first checks if the buffer-range is large enough. If that's
-the case, the 'Builder' writes the sequences of bytes to the buffer and
-calls its continuation.  Otherwise, it returns a signal that it requires a
-new buffer together with a continuation to be called on this new buffer.
-Ignoring the rare case of a full buffer-range, the execution cost of a
-'Builder' consists of three parts:
-
-  1. The time taken to read the parameters; i.e., the buffer-fill
-     operation to call after the 'Builder' is done and the buffer-range to
-     fill.
-
-  2. The time taken to check for the size of the buffer-range.
-
-  3. The time taken for the actual encoding.
-
-We can reduce cost (1) by ensuring that fewer buffer-fill function calls are
-required. We can reduce cost (2) by fusing buffer-size checks of sequential
-writes. For example, when escaping a 'String' using 'renderString', it would
-be sufficient to check before encoding a character that at least 8 bytes are
-free. We can reduce cost (3) by implementing better primitive 'Builder's.
-For example, 'renderCell' builds an intermediate list containing the decimal
-representation of an 'Int'. Implementing a direct decimal encoding of 'Int's
-to memory would be more efficient, as it requires fewer buffer-size checks
-and less allocation. It is also a planned extension of this library.
-
-The first two cost reductions are supported for user code through functions
-in "Data.ByteString.Lazy.Builder.Extras". There, we continue the above example
-and drop the generation time to 0.8ms by implementing 'renderString' more
-cleverly. The third reduction requires meddling with the internals of
-'Builder's and is not recomended in code outside of this library. However,
-patches to this library are very welcome.
 -}
 module Data.ByteString.Lazy.Builder.BasicEncoding (
 
@@ -395,6 +213,7 @@ module Data.ByteString.Lazy.Builder.BasicEncoding (
   -- implemented as follows.
   --
   -- @
+  -- {-\# NOINLINE byteStringHexFixed \#-}
   -- byteStringHexFixed :: S.ByteString -> Builder
   -- byteStringHexFixed = 'encodeByteStringWithF' 'word8HexFixed'
   -- @
@@ -421,12 +240,12 @@ module Data.ByteString.Lazy.Builder.BasicEncoding (
   , ifB
   , contramapB
 
-  -- | We provide overloaded operators for some of the above combinators to
-  -- allow for a more convenient syntax. We do not export their corresponding,
-  -- as we they are used for overloading only and should not be extended by
-  -- the user of this library. We plan to use the @contravariant@ library
-  -- <http://hackage.haskell.org/package/contravariant> once it is part of the
-  -- Haskell platform.
+  -- | We provide an overloaded operator for the 'contramapF' and 'contramapB'
+  -- combinators to allow for a more convenient syntax. The operator is
+  -- source-compatible with the one provided by the @contravariant@ library.
+  -- Once this library is part of the Haskell platform, we will make
+  -- 'FixedEncoding' and 'BoundedEncoding' instances of its 'Contravariant'
+  -- type-class.
   , (>$<)
 
   -- ** Builder construction
@@ -463,9 +282,9 @@ module Data.ByteString.Lazy.Builder.BasicEncoding (
 
   -- * Testing support
   -- | The following four functions are intended for testing use
-  -- only. They are /not/ efficient. Basic encodings are efficently executed by
-  -- creating 'Builder's from them using the @encodeXXX@ functions explained at
-  -- the top of this module.
+  -- only. They are /not/ efficient. 'FixedEncoding's and 'BoundedEncoding's
+  -- are efficently executed by creating 'Builder's from them using the
+  -- @encodeXXX@ functions explained at the top of this module.
 
   , evalF
   , evalB
@@ -484,6 +303,7 @@ import qualified Data.ByteString.Internal      as S
 import qualified Data.ByteString.Lazy.Internal as L
 
 import           Data.Monoid
+import           Data.Foldable (foldMap) -- HADDOCK ONLY
 import           Data.List (unfoldr)  -- HADDOCK ONLY
 import           Data.Char (chr, ord)
 import           Control.Monad ((<=<), unless)
@@ -524,10 +344,12 @@ encodeUnfoldrWithF = encodeUnfoldrWithB . toB
 -- example, we can use it to construct a 'Builder' that maps every byte before
 -- copying it to the buffer to be filled.
 --
--- > mapToBuilder :: (Word8 -> Word8) -> S.ByteString -> Builder
--- > mapToBuilder f = encodeByteStringWithF (contramapF f word8)
+-- @
+--mapToBuilder :: (Word8 -> Word8) -> S.ByteString -> Builder
+--mapToBuilder f = 'encodeByteStringWithF' ('contramapF' f 'word8')
+-- @
 --
--- We can also use it to hex-encode a strict 'S.ByteString' as shown by the
+-- We can also use it to hex-encode a strict 'S.ByteString' as shown in the
 -- 'byteStringHexFixed' example above.
 {-# INLINE encodeByteStringWithF #-}
 encodeByteStringWithF :: FixedEncoding Word8 -> (S.ByteString -> Builder)
@@ -546,23 +368,27 @@ encodeLazyByteStringWithF = encodeLazyByteStringWithB . toB
 -- 'encodeWithStream' can keep control over the execution.
 
 
--- | Create a 'Builder' that encodes values with the given 'Encoding'.
+-- | Encode a value with a 'BoundedEncoding'.
 --
--- We rewrite consecutive uses of 'encodeWithB' such that the bound-checks are
--- fused. For example,
+-- Note that consecutive uses of 'encodeWithB' and 'encodeWithF' are rewritten
+-- such that their bounds-checks are fused; i.e., we rewrite using the rules
 --
--- > encodeWithB (word32 c1) `mappend` encodeWithB (word32 c2)
+-- >  encodeWithF 
+-- >= encodeWithB . fromF
+--
+-- >  encodeWithB be1 x1 `mappend` (encodeWithB be2 x2)
+-- >= encodeWithB (pairB be1 be2) (x1, x2)
+--
+-- For example,
+--
+-- >encodeWithB (word32 x1) `mappend` encodeWithB (word32 x2)
 --
 -- is rewritten such that the resulting 'Builder' checks only once, if ther are
--- at least 8 free bytes, instead of checking twice, if there are 4 free bytes. This
--- optimization is not observationally equivalent in a strict sense, as it
--- influences the boundaries of the generated chunks. However, for a user of
--- this library it is observationally equivalent, as chunk boundaries of a lazy
--- 'L.ByteString' can only be observed through the internal interface.
--- Morevoer, we expect that all 'Encoding's write much fewer than 4kb (the
--- default short buffer size). Hence, it is safe to ignore the additional
--- memory spilled due to the more agressive buffer wrapping introduced by this
--- optimization.
+-- at least 8 free bytes, instead of checking twice, if there are 4 free bytes.
+-- This rewrite rule is not observationally equivalent, as it may change the
+-- boundaries of the generated chunks. We deem this acceptable, as for all
+-- use-cases of 'Builder's known to us the precise location of chunk
+-- boundaries does not matter.
 --
 {-# INLINE[1] encodeWithB #-}
 encodeWithB :: BoundedEncoding a -> (a -> Builder)
@@ -577,8 +403,8 @@ encodeWithB w x =
         let !br' = BufferRange op' ope
         k br'
 
+-- Fuse bounds-checks of concatenated 'BoundedEncoding's.
 {-# RULES
-
 "append/encodeWithB" forall w1 w2 x1 x2.
        append (encodeWithB w1 x1) (encodeWithB w2 x2)
      = encodeWithB (pairB w1 w2) (x1, x2)
@@ -592,23 +418,7 @@ encodeWithB w x =
      = append b (encodeWithB (pairB w1 w2) (x1, x2))
   #-}
 
--- TODO: The same rules for 'putBuilder (..) >> putBuilder (..)'
-
--- | Create a 'Builder' that encodes a list of values consecutively using an
--- 'Encoding'. This function is more efficient than the canonical
---
--- > filter p =
--- >  B.toLazyByteString .
--- >  E.encodeLazyByteStringWithF (E.ifF p E.word8) E.emptyF)
--- >
---
--- > mconcat . map (encodeWithB w)
---
--- or
---
--- > foldMap (encodeWithB w)
---
--- because it moves several variables out of the inner loop.
+-- | Encodes a list of values from left-to-right using a 'BoundedEncoding'.
 {-# INLINE encodeListWithB #-}
 encodeListWithB :: BoundedEncoding a -> [a] -> Builder
 encodeListWithB w xs0 =
@@ -628,8 +438,8 @@ encodeListWithB w xs0 =
 -- TODO: Think about adding 'foldMap/encodeWith' fusion its variants
 -- TODO: Think about rewriting 'encodeWithB w . f = encodeWithB (w #. f)'
 
--- | Create a 'Builder' that encodes a sequence generated from a seed value
--- using an 'Encoding'.
+-- | Create a 'Builder' that encodes a list of values represented as an
+-- 'unfoldr' with a 'BoundedEncoding'.
 {-# INLINE encodeUnfoldrWithB #-}
 encodeUnfoldrWithB :: BoundedEncoding b -> (a -> Maybe (b, a)) -> a -> Builder
 encodeUnfoldrWithB w f x0 =
@@ -648,13 +458,17 @@ encodeUnfoldrWithB w f x0 =
                   fillWith x' k (BufferRange opNew' opeNew)
     bound = sizeBound w
 
--- | Create a 'Builder' that encodes each 'Word8' of a strict 'S.ByteString'
--- using an 'Encoding'. For example, we can write a 'Builder' that filters
--- a strict 'S.ByteString' as follows.
+-- | /Heavy inlining./ Encode all bytes of a strict 'S.ByteString' from
+-- left-to-right with a 'BoundedEncoding'.
 --
--- > import Codec.Bounded.Encoding as E (encodeIf, word8, encodeNothing)
+-- For example, we can use this function to construct a 'Builder' that filters
+-- every byte before copying it to the buffer to be filled.
 --
--- > filterBS p = E.encodeIf p E.word8 E.encodeNothing
+-- @
+--filterToBuilder :: (Word8 -> Bool) -> S.ByteString -> Builder
+--filterToBuilder p =
+--  'encodeByteStringWithB' ('ifB' p ('fromF' 'word8') 'emptyB')
+-- @
 --
 {-# INLINE encodeByteStringWithB #-}
 encodeByteStringWithB :: BoundedEncoding Word8 -> S.ByteString -> Builder
@@ -689,7 +503,8 @@ encodeByteStringWithB w =
                   | otherwise =
                       goBS ip (BufferRange op ope)
 
--- | Chunk-wise application of 'encodeByteStringWith'.
+-- | /Heavy inlining./ Encode all bytes of a lazy 'L.ByteString' from
+-- left-to-right with a 'BoundedEncoding'.
 {-# INLINE encodeLazyByteStringWithB #-}
 encodeLazyByteStringWithB :: BoundedEncoding Word8 -> L.ByteString -> Builder
 encodeLazyByteStringWithB w =
@@ -735,7 +550,6 @@ charUtf8 = boundedEncoding 4 (encodeCharUtf8 f1 f2 f3 f4)
 -- acts as an abstract way of encoding characters, as it is unaware of what
 -- needs to happen with the resulting bytes: you have to specify functions to
 -- deal with those.
---
 {-# INLINE encodeCharUtf8 #-}
 encodeCharUtf8 :: (Word8 -> a)                             -- ^ 1-byte UTF-8
                -> (Word8 -> Word8 -> a)                    -- ^ 2-byte UTF-8

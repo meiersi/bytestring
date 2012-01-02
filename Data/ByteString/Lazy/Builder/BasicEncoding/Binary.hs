@@ -319,35 +319,35 @@ int64Host = storableToF
 -- IEEE Floating Point Numbers
 ------------------------------
 
--- | Encode a 'Float' in big endian format.
+-- | Encode an IEEE 'Float' in big endian format.
 {-# INLINE floatBE #-}
 floatBE :: FixedEncoding Float
 floatBE = encodeFloatViaWord32F word32BE
 
--- | Encode a 'Float' in little endian format.
+-- | Encode an IEEE 'Float' in little endian format.
 {-# INLINE floatLE #-}
 floatLE :: FixedEncoding Float
 floatLE = encodeFloatViaWord32F word32LE
 
--- | Encode a 'Double' in big endian format.
+-- | Encode an IEEE 'Double' in big endian format.
 {-# INLINE doubleBE #-}
 doubleBE :: FixedEncoding Double
 doubleBE = encodeDoubleViaWord64F word64BE
 
--- | Encode a 'Double' in little endian format.
+-- | Encode an IEEE 'Double' in little endian format.
 {-# INLINE doubleLE #-}
 doubleLE :: FixedEncoding Double
 doubleLE = encodeDoubleViaWord64F word64LE
 
 
--- | Encode a 'Float' in native host order and host endianness. Values written
+-- | Encode an IEEE 'Float' in native host order and host endianness. Values written
 -- this way are not portable to different endian machines, without conversion.
 --
 {-# INLINE floatHost #-}
 floatHost :: FixedEncoding Float
 floatHost = storableToF
 
--- | Encode a 'Double' in native host order and host endianness.
+-- | Encode an IEEE 'Double' in native host order and host endianness.
 {-# INLINE doubleHost #-}
 doubleHost :: FixedEncoding Double
 doubleHost = storableToF

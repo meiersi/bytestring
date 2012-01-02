@@ -1,3 +1,7 @@
 dist
 cabal-dev
 _darcs/
+*.hi
+*.o
+*.tix
+.hpc/

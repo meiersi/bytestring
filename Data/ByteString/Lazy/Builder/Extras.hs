@@ -7,8 +7,14 @@
 -- Maintainer  : Simon Meier <iridcode@gmail.com>
 -- Portability : GHC
 --
--- Extra functions for creating and executing 'Builder's. They are intended
--- for application-specific fine-tuning of the performance of 'Builder's.
+-- Extra functions for creating and executing 'Builder's. They allow
+-- application-specific performance tuning of 'Builder's.
+--
+-- Some of the functions are marked with \"/Heavy inling./\" They are forced
+-- to be inlined despite their heavy code size to enable fusing their
+-- configuration parameters with their function body. We recommend introducing
+-- a @{-\# NOINLINE \#-}@ top-level definition once the configuration
+-- parameters are fixed to avoid unnecessary code duplication.
 --
 -----------------------------------------------------------------------------
 module Data.ByteString.Lazy.Builder.Extras
@@ -20,6 +26,7 @@ module Data.ByteString.Lazy.Builder.Extras
     , untrimmedStrategy
     , smallChunkSize
     , defaultChunkSize
+    , chunkOverhead
 
     -- * Controlling chunk boundaries
     , byteStringCopy
@@ -49,12 +56,15 @@ module Data.ByteString.Lazy.Builder.Extras
 
     -- ** Variable-length binary encodings
     -- *** Little-endian, base-128
-  {- |
-This variable-length encoding of integers is the one used by
-Google's protocol buffer library
-<http://code.google.com/apis/protocolbuffers/docs/encoding.html#varints>. This
-encoding can be implemented efficiently and it allows small positive integers
-to be encoded using short sequences of bytes. It works as follows.
+  {- | #base128le#
+The goal of this variable length encoding is
+  to encode small integers with fewer bytes than large integers.
+Under the assumption that small integers occur more frequently,
+  using this variable length encoding is therefore more space efficient.
+The variable-length encoding implemented here is
+  the one used by Google's protocol buffer library
+<http://code.google.com/apis/protocolbuffers/docs/encoding.html#varints>.
+It works as follows.
 
 The most-significant bit (MSB) of each output byte indicates whether
 there is a following byte (MSB set to 1) or it is the last byte (MSB set to 0).
@@ -63,16 +73,19 @@ significant 7-bit group of the input, i.e., a little-endian ordering of the
 7-bit groups is used. The encoding uses always the fewest number of bytes
 possible. 
 
-This encoding is very space efficient.
+This encoding is space efficient.
 It uses @ceiling (n / 7)@ bytes for encoding an integer whose highest, set bit
 is at the @n@-th position.
-For example, the value @1 :: Int32@, is encoded as @[0x01]@.
+For example, the value @1 :: 'Int32'@, is encoded as @[0x01] :: ['Word8']@.
 The variable length encoding therefore saves @3@ bytes compared to the
 standard, fixed-width encoding.
-The value @128 :: Int32@, whose binary representation is @1000 0000@, is
-encoded as @[0x80, 0x01]@; i.e., the first byte has its MSB set and the least
-significant 7-bit group is @000 0000@, the second byte has its MSB not set (it
-is the last byte) and its 7-bit group is @000 0001@.
+The value @128 :: 'Int32'@,
+  whose binary representation is @1000 0000@,
+  is encoded as @[0x80, 0x01] :: ['Word8']@;
+  i.e., the first byte has its MSB set and
+    the least significant 7-bit group is @000 0000@,
+    the second byte has its MSB not set (it is the last byte) and
+    its 7-bit group is @000 0001@.
 -}
     , word8Base128LE
     , word16Base128LE

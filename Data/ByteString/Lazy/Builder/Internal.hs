@@ -109,6 +109,7 @@ module Data.ByteString.Lazy.Builder.Internal (
   , untrimmedStrategy
   , L.smallChunkSize
   , L.defaultChunkSize
+  , L.chunkOverhead
 
   -- * The Put monad
   , Put
@@ -930,14 +931,11 @@ safeStrategy firstSize bufSize =
     AllocationStrategy (newBuffer $ sanitize firstSize) (sanitize bufSize)
                        (\used size -> 2*used < size)
 
--- | Execute a 'Builder' with custom execution parameters.
+-- | /Heavy inlining./ Execute a 'Builder' with custom execution parameters.
 --
--- This function is forced to be inlined to allow fusing with the allocation
--- strategy despite its rather heavy code-size. We therefore recommend
--- that you introduce a top-level function once you have fixed your strategy.
--- This avoids unnecessary code duplication.
--- For example, the default 'Builder' execution function 'toLazyByteString' is
--- defined as follows.
+-- This function is inlined despite its heavy code-size to allow fusing with
+-- the allocation strategy. For example, the default 'Builder' execution
+-- function 'toLazyByteString' is defined as follows.
 --
 -- @
 -- {-\# NOINLINE toLazyByteString \#-}
@@ -953,11 +951,11 @@ safeStrategy firstSize bufSize =
 -- 4kb buffer and the trimming cost dominate the cost of executing the
 -- 'Builder'. You can avoid this problem using
 --
--- >toLazyByteStringWith (safeStrategy 128 smallChunkSize) empty
+-- >toLazyByteStringWith (safeStrategy 128 smallChunkSize) L.empty
 --
 -- This reduces the allocation and trimming overhead, as all generated
 -- 'L.ByteString's fit into the first buffer and there is no trimming
--- required, if more than 64 bytes are written.
+-- required, if more than 64 bytes and less than 128 bytes are written.
 --
 {-# INLINE toLazyByteStringWith #-}
 toLazyByteStringWith

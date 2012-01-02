@@ -54,31 +54,6 @@ module Data.ByteString.Lazy.Builder.BasicEncoding.Binary (
 
   -- *** Variable-length
   -- **** Little-endian, base-128
-  {- |
-This variable-length encoding of integers is the one used by
-Google's protocol buffer library
-<http://code.google.com/apis/protocolbuffers/docs/encoding.html#varints>. This
-encoding can be implemented efficiently and it allows small positive integers
-to be encoded using short sequences of bytes. It works as follows.
-
-The most-significant bit (MSB) of each output byte indicates whether
-there is a following byte (MSB set to 1) or it is the last byte (MSB set to 0).
-The remaining 7-bits are used to encode the input starting with the least
-significant 7-bit group of the input, i.e., a little-endian ordering of the
-7-bit groups is used. The encoding uses always the fewest number of bytes
-possible. 
-
-This encoding is very space efficient.
-It uses @ceiling (n / 7)@ bytes for encoding an integer whose highest, set bit
-is at the @n@-th position.
-For example, the value @1 :: Int32@, is encoded as @[0x01]@.
-The variable length encoding therefore saves @3@ bytes compared to the
-standard, fixed-width encoding.
-The value @128 :: Int32@, whose binary representation is @1000 0000@, is
-encoded as @[0x80, 0x01]@; i.e., the first byte has its MSB set and the least
-significant 7-bit group is @000 0000@, the second byte has its MSB not set (it
-is the last byte) and its 7-bit group is @000 0001@.
--}
   , word8Base128LE
   , word16Base128LE
   , word32Base128LE
@@ -86,32 +61,6 @@ is the last byte) and its 7-bit group is @000 0001@.
   , wordBase128LE
 
   -- **** Little-endian, base-128, zig-zag
-
-{- |
-Positive and negative integers of small magnitude can be encoded compactly
-  using the so-called ZigZag encoding
-  (<http://code.google.com/apis/protocolbuffers/docs/encoding.html#types>).
-The /ZigZag encoding/ uses
-  even numbers to encode the postive integers and
-  odd numbers to encode the negative integers.
-For example,
-  @0@ is encoded as @0@, @-1@ as @1@, @1@ as @2@, @-2@ as @3@, @2@ as @4@, and
-  so on.
-Its efficient implementation uses some bit-level magic; i.e.,
-
-@
-zigZag32 :: 'Int32' -> 'Word32'
-zigZag32 n = fromIntegral ((n \`shiftL\` 1) \`xor\` (n \`shiftR\` 31))
-@
-
-Note that the 'shiftR' is an arithmetic shift that performs sign extension.
-The ZigZag encoding essentially swaps the LSB with the MSB and additionally
-inverts all bits if the MSB is set.
-
-The following encodings implement the combintion of ZigZag encoding
-  together with the above variable-length, little-endian, base-128 encodings
-  of positive integers.
--}
   , int8ZigZagBase128LE
   , int16ZigZagBase128LE
   , int32ZigZagBase128LE
@@ -493,17 +442,6 @@ wordBase128LE :: BoundedEncoding Word
 wordBase128LE = caseWordSize_32_64 
     (fromIntegral >$< word32Base128LE) 
     (fromIntegral >$< word64Base128LE)
-
--- | Variable-length, little-endian, base-128 encoding of an 'Int'.
--- Use 'intZigZagBase128LE' for encoding negative numbers.
---
--- Note that in contrast to the fixed-width binary encoding of an 'Int',
---   whose width depends on the register-width of a machine,
---   this encoding is /machine-independent/ for values small enough to
---   be represented using an 'Int' on all relevant machines.
-{-# INLINE intBase128LE #-}
-intBase128LE :: BoundedEncoding Int
-intBase128LE = fromIntegral >$< wordBase128LE
 
 {-# INLINE zigZag #-}
 zigZag :: forall a b. (Storable a, Bits a, Integral a, Num b) => a -> b

@@ -56,8 +56,8 @@ import qualified "Data.ByteString.Lazy"               as L
 import           "Data.ByteString.Lazy.Builder"
 import           "Data.ByteString.Lazy.Builder.ASCII" ('intDec')
 import           Data.Monoid
-import           Data.Foldable                        ('foldMap')
-import           Data.List                            ('intersperse')
+import           Data.Foldable                      ('foldMap')
+import           Data.List                          ('intersperse')
 
 infixr 4 \<\>
 (\<\>) :: 'Monoid' m => m -> m -> m
@@ -247,7 +247,7 @@ module Data.ByteString.Lazy.Builder
 
     -- *** UTF-8
     -- | The UTF-8 encoding can encode /all/ Unicode codepoints. We recommend
-    -- using it always for encoding 'Char's and 'String's unless an application
+    -- always using it for encoding 'Char's and 'String's unless an application
     -- really requires another encoding. Note that you can also use the
     -- functions from "Data.ByteString.Lazy.Builder.ASCII" for UTF-8 encoding,
     -- as the ASCII encoding is equivalent to the UTF-8 encoding on the Unicode

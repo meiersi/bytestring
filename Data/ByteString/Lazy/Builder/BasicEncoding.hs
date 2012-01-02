@@ -548,13 +548,13 @@ encodeLazyByteStringWithF = encodeLazyByteStringWithB . toB
 
 -- | Create a 'Builder' that encodes values with the given 'Encoding'.
 --
--- We rewrite consecutive uses of 'encodeWith' such that the bound-checks are
+-- We rewrite consecutive uses of 'encodeWithB' such that the bound-checks are
 -- fused. For example,
 --
 -- > encodeWithB (word32 c1) `mappend` encodeWithB (word32 c2)
 --
 -- is rewritten such that the resulting 'Builder' checks only once, if ther are
--- at 8 free bytes, instead of checking twice, if there are 4 free bytes. This
+-- at least 8 free bytes, instead of checking twice, if there are 4 free bytes. This
 -- optimization is not observationally equivalent in a strict sense, as it
 -- influences the boundaries of the generated chunks. However, for a user of
 -- this library it is observationally equivalent, as chunk boundaries of a lazy
@@ -567,6 +567,9 @@ encodeLazyByteStringWithF = encodeLazyByteStringWithB . toB
 {-# INLINE[1] encodeWithB #-}
 encodeWithB :: BoundedEncoding a -> (a -> Builder)
 encodeWithB w x =
+    -- It is important to avoid recursive 'BuildStep's where possible, as
+    -- their closure allocation is expensive. Using 'ensureFree' allows the
+    -- 'step' to assume that at least 'sizeBound w' free space is available.
     ensureFree (sizeBound w) `mappend` builder step
   where
     step k (BufferRange op ope) = do

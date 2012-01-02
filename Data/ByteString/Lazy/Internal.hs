@@ -198,17 +198,21 @@ foldlChunks f z = go z
 -- The following value assumes people have something greater than 128k,
 -- and need to share the cache with other programs.
 
--- | The chunk size used for I\/O. Currently set to 32k, less the memory management overhead
+-- | The chunk size used for I\/O. Currently set to 32k, less the memory
+-- management overhead.
 defaultChunkSize :: Int
 defaultChunkSize = 32 * k - chunkOverhead
    where k = 1024
 
--- | The recommended chunk size. Currently set to 4k, less the memory management overhead
+-- | The recommended chunk size. Currently set to 4k, less the memory
+-- management overhead. This way the whole chunk fits into a single
+-- 4kb memory allocation block.
 smallChunkSize :: Int
 smallChunkSize = 4 * k - chunkOverhead
    where k = 1024
 
--- | The memory management overhead. Currently this is tuned for GHC only.
+-- | The memory management overhead of a chunk of a lazy 'ByteString'.
+-- Currently this is tuned for GHC only.
 chunkOverhead :: Int
 chunkOverhead = 2 * sizeOf (undefined :: Int)
 

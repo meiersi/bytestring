@@ -28,16 +28,20 @@ TODO before full builder release
     type will serve perfectly to wrap the functionality of the
     'double-conversion' package.
   - add intro documentation mentioning lazy bytestring builders
-  - fix documentation in BasicEncoding.Extras
+  [DONE] fix documentation in BasicEncoding.Extras
   - check all documentation
   - add 'Put' documentation
   - also export 'Put' transformers from internals
   [DONE] use an allocation strategy for the inner builder in 'putSizePrefixed'
   [DONE] remove 'intXXXBase128LE' encodings. Their semantics is unclear and
     must be determined by the library user.
+  - Upload to Github repo
   - Make a second call for review.
-  - Comment on trick of using 'ensureFree' to avoid too big closures.
-  - switch back to 'PaddedEncoding Word64' for builder transformers
+  [DONE] Comment on trick of using 'ensureFree' to avoid too big closures.
+  [DONE] switch back to 'PaddedEncoding Word64' for builder transformers
+  [DONE] Use a 'Builder' instead of a 'BoundedEncoding' for terminating chunks.
+    Not recommended, as it makes impossible reserving the new buffer size such
+    that it fits directly.
 
   [DONE] investigate performance of 'encodeWithListF E.word8'
   [DONE] improve performance of varInt encodings
@@ -46,8 +50,8 @@ TODO before full builder release
   [DONE] improve performance of encodeChunked and encodeWithSize
   [DONE] investigate performance of running a one byte builder.
   [DONE] investigate performance of bytestring insertion
-  - improve the Fixed varint encoding performance using the same construction
-    as the Google code
+  [DONE] improve the Fixed varint encoding performance using the same
+    construction as the Google code: not possible due different control flow.
   - create a big plot with all benchmarks
   - add builder merging benchmarks to 'BenchAll.hs'
   - benchmark/test 'Put' merging
@@ -55,9 +59,12 @@ TODO before full builder release
   - test with GHC 6.12, 7.0, 7.2, 7.4
   - add version constraints to all libraries used for testing
     (check that they are referring to the newest versions.)
-  - consider putting builder transformers into a separate package
-    'bytestring-builder-transformers'
-    (its just too experimental)
+  [DONE] consider putting builder transformers into a separate package
+    'bytestring-builder-transformers' (its just too experimental):
+    no they have a clean semantics, thei are well-documented and form an
+    important building block for higher-level libraries. Moreover, they
+    strongly depend on the internals of the library and must be maintained
+    jointly with it.
   - release library
 
 Todo items

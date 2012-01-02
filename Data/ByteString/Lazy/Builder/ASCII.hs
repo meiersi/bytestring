@@ -97,15 +97,6 @@ import GHC.Integer.GMP.Internals
 -- Decimal Encoding
 ------------------------------------------------------------------------------
 
--- | Encode a 'String' using 'E.char7'.
-{-# INLINE string7 #-}
-string7 :: String -> Builder
-string7 = E.encodeListWithF E.char7
-
-------------------------------------------------------------------------------
--- Decimal Encoding
-------------------------------------------------------------------------------
-
 -- Signed integers
 ------------------
 
@@ -169,16 +160,20 @@ wordDec = E.encodeWithB E.wordDec
 
 -- TODO: Use Bryan O'Sullivan's double-conversion package to speed it up.
 
--- | /Currently slow./ Decimal encoding of an IEEE 'Float'.
+-- | Decimal encoding of an IEEE 'Float'.
 {-# INLINE floatDec #-}
 floatDec :: Float -> Builder
-floatDec = string7 . show
+floatDec = string8 . show
 
--- | /Currently slow./ Decimal encoding of an IEEE 'Double'.
+-- | Decimal encoding of an IEEE 'Double'.
 {-# INLINE doubleDec #-}
 doubleDec :: Double -> Builder
-doubleDec = string7 . show
+doubleDec = string8 . show
 
+-- | Encode a 'String' using 'E.char8'.
+{-# INLINE string8 #-}
+string8 :: String -> Builder
+string8 = E.encodeListWithF E.char8
 
 ------------------------------------------------------------------------------
 -- Hexadecimal Encoding

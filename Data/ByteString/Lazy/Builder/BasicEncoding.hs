@@ -327,17 +327,17 @@ import           Foreign
 -- | Encode a value with a 'FixedEncoding'.
 {-# INLINE encodeWithF #-}
 encodeWithF :: FixedEncoding a -> (a -> Builder)
-encodeWithF = encodeWithB . toB
+encodeWithF = encodeWithB . fromF
 
 -- | Encode a list of values from left-to-right with a 'FixedEncoding'.
 {-# INLINE encodeListWithF #-}
 encodeListWithF :: FixedEncoding a -> ([a] -> Builder)
-encodeListWithF = encodeListWithB . toB
+encodeListWithF = encodeListWithB . fromF
 
 -- | Encode a list of values represented as an 'unfoldr' with a 'FixedEncoding'.
 {-# INLINE encodeUnfoldrWithF #-}
 encodeUnfoldrWithF :: FixedEncoding b -> (a -> Maybe (b, a)) -> a -> Builder
-encodeUnfoldrWithF = encodeUnfoldrWithB . toB
+encodeUnfoldrWithF = encodeUnfoldrWithB . fromF
 
 -- | /Heavy inlining./ Encode all bytes of a strict 'S.ByteString' from
 -- left-to-right with a 'FixedEncoding'. This function is quite versatile. For
@@ -353,13 +353,13 @@ encodeUnfoldrWithF = encodeUnfoldrWithB . toB
 -- 'byteStringHexFixed' example above.
 {-# INLINE encodeByteStringWithF #-}
 encodeByteStringWithF :: FixedEncoding Word8 -> (S.ByteString -> Builder)
-encodeByteStringWithF = encodeByteStringWithB . toB
+encodeByteStringWithF = encodeByteStringWithB . fromF
 
 -- | /Heavy inlining./ Encode all bytes of a lazy 'L.ByteString' from
 -- left-to-right with a 'FixedEncoding'.
 {-# INLINE encodeLazyByteStringWithF #-}
 encodeLazyByteStringWithF :: FixedEncoding Word8 -> (L.ByteString -> Builder)
-encodeLazyByteStringWithF = encodeLazyByteStringWithB . toB
+encodeLazyByteStringWithF = encodeLazyByteStringWithB . fromF
 
 -- IMPLEMENTATION NOTE: Sadly, 'encodeListWith' cannot be used for foldr/build
 -- fusion. Its performance relies on hoisting several variables out of the

@@ -42,6 +42,8 @@ TODO before full builder release
   [DONE] Use a 'Builder' instead of a 'BoundedEncoding' for terminating chunks.
     Not recommended, as it makes impossible reserving the new buffer size such
     that it fits directly.
+  - introduce a 'Put' module that exports the public interface of the 'Put'
+    monad
 
   [DONE] investigate performance of 'encodeWithListF E.word8'
   [DONE] improve performance of varInt encodings
@@ -57,6 +59,7 @@ TODO before full builder release
   - benchmark/test 'Put' merging
   - test 'varInt' encodings
   - test with GHC 6.12, 7.0, 7.2, 7.4
+  - reactivate over/under/missing-write testing of bounded encodings
   - add version constraints to all libraries used for testing
     (check that they are referring to the newest versions.)
   [DONE] consider putting builder transformers into a separate package

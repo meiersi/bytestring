@@ -425,8 +425,8 @@ putSizePrefixed strategy mkSizeFE innerP =
 
             fastPrefixSize :: Ptr Word8 -> IO (Ptr Word8)
             fastPrefixSize !opInner'
-              | innerSize == 0 = do runB (toB $ mkSizeFE 0) 0         op
-              | otherwise      = do runF (sizeFE)           innerSize op
+              | innerSize == 0 = do runB (fromF $ mkSizeFE 0) 0         op
+              | otherwise      = do runF (sizeFE)             innerSize op
                                     return opInner'
               where
                 innerSize = fromIntegral $ opInner' `minusPtr` startInner

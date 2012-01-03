@@ -63,6 +63,7 @@ module Data.ByteString.Lazy.Builder.Internal (
 
   , ChunkIOStream(..)
   , buildStepToCIOS
+  , ciosUnitToLazyByteString
   , ciosToLazyByteString
 
   -- * Build signals and steps
@@ -128,6 +129,7 @@ module Data.ByteString.Lazy.Builder.Internal (
 
 ) where
 
+import           Control.Arrow (second)
 import           Control.Applicative (Applicative(..), (<$>))
 import           Control.Exception (evaluate)
 
@@ -254,16 +256,31 @@ data ChunkIOStream a =
 
 -- | Convert a @'ChunkIOStream' ()@ to a lazy 'L.ByteString' using
 -- 'unsafePerformIO'.
-{-# INLINE ciosToLazyByteString #-}
-ciosToLazyByteString :: AllocationStrategy 
+{-# INLINE ciosUnitToLazyByteString #-}
+ciosUnitToLazyByteString :: AllocationStrategy 
                          -> L.ByteString -> ChunkIOStream () -> L.ByteString
-ciosToLazyByteString strategy k = go
+ciosUnitToLazyByteString strategy k = go
   where
     go (Finished buf _) = trimmedChunkFromBuffer strategy buf k
     go (Yield1 bs io)   = L.Chunk bs $ unsafePerformIO (go <$> io)
     go (YieldChunks (SizedChunks _ lbsC) io) =
         lbsC $ unsafePerformIO (go <$> io)
 
+-- | Convert a 'ChunkIOStream' to a lazy tuple of the result and the written
+-- 'L.ByteString' using 'unsafePerformIO'.
+{-# INLINE ciosToLazyByteString #-}
+ciosToLazyByteString :: AllocationStrategy 
+                     -> (a -> (b, L.ByteString))
+                     -> ChunkIOStream a
+                     -> (b, L.ByteString)
+ciosToLazyByteString strategy k =
+    go
+  where
+    go (Finished buf x) =
+        second (trimmedChunkFromBuffer strategy buf) $ k x
+    go (Yield1 bs io)   = second (L.Chunk bs) $ unsafePerformIO (go <$> io)
+    go (YieldChunks (SizedChunks _ lbsC) io) =
+        second lbsC $ unsafePerformIO (go <$> io)
 
 ------------------------------------------------------------------------------
 -- Build signals
@@ -992,7 +1009,7 @@ toLazyByteStringWith
     -> L.ByteString
        -- ^ Resulting lazy 'L.ByteString'
 toLazyByteStringWith strategy k b =
-    ciosToLazyByteString strategy k $ unsafePerformIO $
+    ciosUnitToLazyByteString strategy k $ unsafePerformIO $
         buildStepToCIOS strategy (runBuilder b)
 
 -- | Convert a 'BuildStep' to a 'ChunkIOStream' stream by executing it on

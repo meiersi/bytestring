@@ -52,6 +52,7 @@ module Data.ByteString.Lazy.Builder.Internal (
     Buffer(..)
   , BufferRange(..)
   , newBuffer
+  , bufferSize
   , byteStringFromBuffer
   , chunkFromBuffer
 
@@ -62,6 +63,7 @@ module Data.ByteString.Lazy.Builder.Internal (
 
   , ChunkIOStream(..)
   , buildStepToCIOS
+  , ciosUnitToLazyByteString
   , ciosToLazyByteString
 
   -- * Build signals and steps
@@ -126,6 +128,7 @@ module Data.ByteString.Lazy.Builder.Internal (
 
 ) where
 
+import           Control.Arrow (second)
 import           Control.Applicative (Applicative(..), (<$>))
 import           Control.Exception (evaluate)
 
@@ -232,12 +235,12 @@ data ChunkIOStream a =
      | YieldChunks {-# UNPACK #-} !SizedChunks (IO (ChunkIOStream a))
        -- ^ Yield several chunks together with their total size at once.
 
--- | Convert a 'ChunkIOStream' to a lazy 'L.ByteString' using
+-- | Convert a @'ChunkIOStream' ()@ to a lazy 'L.ByteString' using
 -- 'unsafePerformIO'.
-{-# INLINE ciosToLazyByteString #-}
-ciosToLazyByteString :: AllocationStrategy 
-                     -> L.ByteString -> ChunkIOStream () -> L.ByteString
-ciosToLazyByteString (AllocationStrategy _ _ trim) k = go
+{-# INLINE ciosUnitToLazyByteString #-}
+ciosUnitToLazyByteString :: AllocationStrategy 
+                         -> L.ByteString -> ChunkIOStream () -> L.ByteString
+ciosUnitToLazyByteString (AllocationStrategy _ _ trim) k = go
   where
     go (Finished buf _)
       | S.null bs                           = k
@@ -249,6 +252,29 @@ ciosToLazyByteString (AllocationStrategy _ _ trim) k = go
     go (YieldChunks (SizedChunks _ lbsC) io) =
         lbsC $ unsafePerformIO (go <$> io)
 
+
+-- | Convert a 'ChunkIOStream' to a lazy tuple of the result and the written
+-- 'L.ByteString' using 'unsafePerformIO'.
+{-# INLINE ciosToLazyByteString #-}
+ciosToLazyByteString :: AllocationStrategy 
+                     -> (a -> (b, L.ByteString))
+                     -> ChunkIOStream a
+                     -> (b, L.ByteString)
+ciosToLazyByteString (AllocationStrategy _ _ trim) k =
+    go
+  where
+    go (Finished buf x) =
+        second lbsC $ k x
+      where
+        bs = byteStringFromBuffer buf
+        -- FIXME: Share this trimming code with 'Builder' execution
+        lbsC | S.null bs                           = id
+             | trim (S.length bs) (bufferSize buf) = L.Chunk (S.copy bs)
+             | otherwise                           = L.Chunk bs
+         
+    go (Yield1 bs io)   = second (L.Chunk bs) $ unsafePerformIO (go <$> io)
+    go (YieldChunks (SizedChunks _ lbsC) io) =
+        second lbsC $ unsafePerformIO (go <$> io)
 
 ------------------------------------------------------------------------------
 -- Build signals
@@ -433,15 +459,14 @@ flush = builder step
 -- stream of bytes will always be written before the computed value is
 -- returned.
 --
--- 'Put's are a generalization of 'Builder's. They are used when values need to
--- be returned during the computation of a stream of bytes. For example, when
--- performing a block-based encoding of 'S.ByteString's like Base64 encoding,
--- there might be a left-over partial block. Using the 'Put' monad, this
--- partial block can be returned after the complete blocks have been encoded.
--- Then, in a later step when more input is known, this partial block can be
--- completed and also encoded.
+-- 'Put's are a generalization of 'Builder's. The typical use case is the
+-- implementation of an encoding that might fail (e.g., an interface to the
+-- 'zlib' compression library). For a 'Builder', the only way to handle and
+-- report such a failure is ignore it or call 'error'.  In contrast, 'Put'
+-- actions are expressive enough to allow reportng and handling such a failure
+-- in a pure fashion.
 --
--- @Put ()@ actions are isomorphic to 'Builder's. The functions 'putBuilder'
+-- @'Put' ()@ actions are isomorphic to 'Builder's. The functions 'putBuilder'
 -- and 'fromPut' convert between these two types. Where possible, you should
 -- use 'Builder's, as they are slightly cheaper than 'Put's because they do not
 -- carry a computed value.
@@ -513,12 +538,12 @@ instance Monad Put where
 -- Conversion between Put and Builder
 -------------------------------------
 
--- | Run a 'Builder' as a side-effect of a @Put ()@ action.
+-- | Run a 'Builder' as a side-effect of a @'Put' ()@ action.
 {-# INLINE[1] putBuilder #-}
 putBuilder :: Builder -> Put ()
 putBuilder (Builder b) = Put $ \k -> b (k ())
 
--- | Convert a @Put ()@ action to a 'Builder'.
+-- | Convert a @'Put' ()@ action to a 'Builder'.
 {-# INLINE fromPut #-}
 fromPut :: Put () -> Builder
 fromPut (Put p) = Builder $ \k -> p (\_ -> k)
@@ -965,11 +990,11 @@ toLazyByteStringWith
        -- ^ Lazy 'L.ByteString' to use as the tail of the generated lazy
        -- 'L.ByteString'
     -> Builder
-       -- ^ Builder to execute
+       -- ^ 'Builder' to execute
     -> L.ByteString
        -- ^ Resulting lazy 'L.ByteString'
 toLazyByteStringWith strategy k b =
-    ciosToLazyByteString strategy k $ unsafePerformIO $
+    ciosUnitToLazyByteString strategy k $ unsafePerformIO $
         buildStepToCIOS strategy (runBuilder b)
 
 {-# INLINE buildStepToCIOS #-}

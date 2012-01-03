@@ -8,23 +8,24 @@ Maintainer     : Simon Meier <iridcode@gmail.com>
 Stability      : experimental
 Portability    : GHC
 
-(Almost) zero-copy algorithms for prefixing 'Builder's with their (chunk) sizes.
+(Almost) zero-copy algorithms for prefixing 'Builder's and 'Put's with their
+(chunk) sizes.
 -}
 module Data.ByteString.Lazy.Builder.Transformers (
 
-  -- * Prefixing Builders with their (chunk) size
-{- |
-(Almost) zero-copy algorithms for prefixing 'Builder's with their (chunk) sizes.
--}
-    encodeSizePrefixed
-  , encodeChunked
-
-  , PaddedSizeEncoding
+  -- * Padded encodings
+    PaddedSizeEncoding
   , word64Base128LEPadded
   , word64HexPadded
   , word64DecPadded
 
+  -- * Prefixing Builders with their (chunk) size
+  , encodeSizePrefixed
+  , encodeChunked
 
+  -- * Prefixing Puts with their (chunk) size
+  , putSizePrefixed
+  , putChunked
 
   ) where
 
@@ -154,8 +155,8 @@ word64HexPadded paddingChar bound =
 -- Chunked Encoding Transformer
 ------------------------------------------------------------------------------
 
--- | /Heavy inlining./ A 'Builder' transformer for implementing chunked
--- transfer encodings analogous to the HTTP chunked transfer encoding
+-- | /Heavy inlining./ Transform a 'Builder' such that its chunks are wrapped
+-- with their size analogous to the HTTP chunked transfer encoding.
 -- (<http://en.wikipedia.org/wiki/Chunked_transfer_encoding>).
 -- Chunked transfer encodings allow delimiting the size of
 -- a sequence of bytes without completely buffering it.
@@ -217,24 +218,25 @@ encodeChunked
     -> BoundedEncoding Word64
     -- ^ The encoding for terminating a chunk of the given size
     -> Builder
-    -- ^ Inner Builder whose chunks must be size-prefixed
+    -- ^ Inner 'Builder' whose chunks must be size-prefixed
     -> Builder
     -- ^ Chunked 'Builder'
 encodeChunked mkBeforeFE afterBE =
     fromPut . putChunked mkBeforeFE afterBE . putBuilder
 
--- | /Heavy inlining./
+-- | /Heavy inlining./ Transform a 'Put' action such that its chunks are
+-- wrapped with their size analogous to the HTTP chunked transfer encoding.
+-- See 'encodeChunked' for more information.
 {-# INLINE putChunked #-}
 putChunked
     :: PaddedSizeEncoding
-    -- ^ Given a sizeBound on the maximal encodable size this function must return
-    -- a fixed-size encoding for encoding all smaller size.
+    -- ^ The padded size encoding for prefixing chunks with their size
     -> BoundedEncoding Word64
-    -- ^ Encoding a directly inserted chunk.
+    -- ^ The encoding for terminating a chunk of the given size
     -> Put a
-    -- ^ Inner Put to transform
+    -- ^ Inner 'Put' action whose chunks must be size-prefixed
     -> Put a
-    -- ^ 'Put' with chunked encoding.
+    -- ^ Chunked 'Put' action
 putChunked mkBeforeFE afterBE p =
     put encodingStep
   where
@@ -380,7 +382,8 @@ pbLengthDelimited body =
     -- a bit less than 2 ^ 14 bytes => at most 1 byte padding overhead
     chunkSize = 16 * 1024 - chunkOverhead
 
--- | Prefix a 'Put' with the size of its written data.
+-- | /Heavy inlining./ Prefix a 'Put' action with the number of bytes written.
+-- See 'encodeSizePrefixed' for more information.
 {-# INLINE putSizePrefixed #-}
 putSizePrefixed
     :: forall a.
@@ -388,10 +391,11 @@ putSizePrefixed
     -- ^ Allocation strategy for the inner 'Put' in case it overflows the
     -- current buffer
     -> PaddedSizeEncoding
-    -- ^ Encoding the size for the fallback case.
+    -- ^ A padded encoding for sizes
     -> Put a
-    -- ^ 'Put' to prefix with the length of its sequence of bytes
+    -- ^ Inner 'Put' action to prefix with its size
     -> Put a
+    -- ^ Size-prefixed 'Put' action
 putSizePrefixed strategy mkSizeFE innerP =
     putBuilder (ensureFree minFree) >> put encodingStep
   where

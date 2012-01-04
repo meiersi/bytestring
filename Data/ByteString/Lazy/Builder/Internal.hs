@@ -128,7 +128,6 @@ module Data.ByteString.Lazy.Builder.Internal (
 
 ) where
 
-import           Control.Arrow (second)
 import           Control.Applicative (Applicative(..), (<$>))
 import           Control.Exception (evaluate)
 

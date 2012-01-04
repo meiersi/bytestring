@@ -48,7 +48,13 @@ import           Data.ByteString.Lazy.Builder.BasicEncoding.Binary as E
 import           Data.ByteString.Lazy.Builder.BasicEncoding.ASCII as E
 import           Data.ByteString.Lazy.Builder.BasicEncoding as E
 
+#if MIN_VERSION_base(4,4,0)
+import           Foreign hiding (unsafePerformIO, unsafeForeignPtrToPtr)
+import           Foreign.ForeignPtr.Unsafe (unsafeForeignPtrToPtr)
+import           System.IO.Unsafe (unsafePerformIO)
+#else
 import           Foreign
+#endif
 import           Foreign.C.Types
 
 ------------------------------------------------------------------------------

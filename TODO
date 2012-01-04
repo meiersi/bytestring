@@ -29,9 +29,10 @@ TODO before full builder release
     'double-conversion' package.
   - add intro documentation mentioning lazy bytestring builders
   [DONE] fix documentation in BasicEncoding.Extras
-  - check all documentation
-  - add 'Put' documentation
-  - also export 'Put' transformers from internals
+  [DONE] check all documentation
+  [DONE] add 'Put' documentation
+  [DONE] also export 'Put' transformers from internals: exported from
+    hidden "Transformers"
   [DONE] use an allocation strategy for the inner builder in 'putSizePrefixed'
   [DONE] remove 'intXXXBase128LE' encodings. Their semantics is unclear and
     must be determined by the library user.
@@ -42,8 +43,6 @@ TODO before full builder release
   [DONE] Use a 'Builder' instead of a 'BoundedEncoding' for terminating chunks.
     Not recommended, as it makes impossible reserving the new buffer size such
     that it fits directly.
-  - introduce a 'Put' module that exports the public interface of the 'Put'
-    monad
 
   [DONE] investigate performance of 'encodeWithListF E.word8'
   [DONE] improve performance of varInt encodings

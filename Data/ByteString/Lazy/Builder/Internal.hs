@@ -28,8 +28,6 @@
 -- 'BuildStep' that takes a continuation 'BuildStep', which it calls with the
 -- updated 'BufferRange' after it is done. Therefore, only two pointers have
 -- to be passed in a function call to implement concatentation of 'Builder's.
--- Moreover, many 'Builder's are completely inlined, which enables the compiler
--- to sequence them without a function call and with no boxing at all.
 --
 -- This design gives the implementation of a 'Builder' full access to the 'IO'
 -- monad. Therefore, utmost care has to be taken to not overwrite anything
@@ -44,9 +42,10 @@
 -- management, 'SizedChunks', and 'ChunkIOStream's stems from the desire to
 -- implement a 'Builder' transformer that efficiently prefixes a 'Builder'
 -- with the size of its represented data both when the data is small and when
--- the data is large. As a side-effect, implementing an 'enumerator' that
--- converts 'Builder's to strict 'S.ByteString' while ensuring that all
--- buffers are filled as good as possible, becomes trivial.
+-- the data is large. See "Data.ByteString.Lazy.Builder.Transformers".
+-- As a side-effect of this implementation effort, implementing an
+-- 'enumerator' that converts 'Builder's to strict 'S.ByteString's while
+-- ensuring that all buffers are filled as good as possible, becomes trivial.
 module Data.ByteString.Lazy.Builder.Internal (
   -- * Buffer management
     Buffer(..)
@@ -55,20 +54,21 @@ module Data.ByteString.Lazy.Builder.Internal (
   , bufferSize
   , byteStringFromBuffer
   , chunkFromBuffer
+  , trimmedChunkFromBuffer
 
-  -- ** Streams of chunks interleaved with IO
+  -- * Streams of chunks interleaved with IO
   , SizedChunks(..)
   , sizedChunk
   , sizedChunks
 
   , ChunkIOStream(..)
   , buildStepToCIOS
-  , ciosUnitToLazyByteString
   , ciosToLazyByteString
 
   -- * Build signals and steps
   , BuildSignal
   , BuildStep
+  , finalBuildStep
 
   , done
   , bufferFull
@@ -86,8 +86,6 @@ module Data.ByteString.Lazy.Builder.Internal (
   -- ** Primitive combinators
   , empty
   , append
-  , ap_l
-  , ap_r
   , flush
   , ensureFree
   , sizedChunksInsert
@@ -104,7 +102,7 @@ module Data.ByteString.Lazy.Builder.Internal (
   , byteString
   , lazyByteString
 
-  -- ** Execution strategies
+  -- ** Execution
   , toLazyByteStringWith
   , AllocationStrategy
   , safeStrategy
@@ -117,13 +115,15 @@ module Data.ByteString.Lazy.Builder.Internal (
   , Put
   , put
   , runPut
+
+  -- ** Execution
   , hPut
 
   -- ** Conversion to and from Builders
   , putBuilder
   , fromPut
 
-  -- ** Lifting IO actions
+  -- -- ** Lifting IO actions
   -- , putLiftIO
 
 ) where
@@ -187,6 +187,18 @@ byteStringFromBuffer (Buffer fpbuf (BufferRange op _)) =
 chunkFromBuffer :: Buffer -> L.ByteString -> L.ByteString
 chunkFromBuffer = L.chunk . byteStringFromBuffer
 
+-- | Prepend the filled part of a 'Buffer' to a lazy 'L.ByteString'
+-- trimming it if necessary.
+{-# INLINE trimmedChunkFromBuffer #-}
+trimmedChunkFromBuffer :: AllocationStrategy -> Buffer
+                       -> L.ByteString -> L.ByteString
+trimmedChunkFromBuffer (AllocationStrategy _ _ trim) buf k
+  | S.null bs                           = k
+  | trim (S.length bs) (bufferSize buf) = L.Chunk (S.copy bs) k
+  | otherwise                           = L.Chunk bs          k
+  where
+    bs = byteStringFromBuffer buf
+
 -- | Allocate a new buffer of the given size.
 {-# INLINE newBuffer #-}
 newBuffer :: Int -> IO Buffer
@@ -194,6 +206,7 @@ newBuffer size = do
     fpbuf <- S.mallocByteString size
     let pbuf = unsafeForeignPtrToPtr fpbuf
     return $! Buffer fpbuf (BufferRange pbuf (pbuf `plusPtr` size))
+
 
 ------------------------------------------------------------------------------
 -- Chunked IO Stream
@@ -226,55 +239,32 @@ instance Monoid SizedChunks where
   mappend (SizedChunks s1 lbsC1) (SizedChunks s2 lbsC2) =
       SizedChunks (s1 + s2) (lbsC1 . lbsC2)
 
--- | A stream of /non-empty/ chunks that are constructed in the 'IO' monad.
+-- | A stream of chunks that are constructed in the 'IO' monad.
 data ChunkIOStream a =
        Finished {-# UNPACK #-} !Buffer a
        -- ^ The partially filled last buffer together with the result.
      | Yield1 S.ByteString (IO (ChunkIOStream a))
-       -- ^ Yield a single, non-empty strict 'S.ByteString'.
+       -- ^ Yield a single, /non-empty/ strict 'S.ByteString'.
      | YieldChunks {-# UNPACK #-} !SizedChunks (IO (ChunkIOStream a))
        -- ^ Yield several chunks together with their total size at once.
+       --
+       -- This signal allows complete transfer of control about chunk
+       -- generation to some other algorithm. We use it in
+       -- 'encodeSizePrefixed' in "Data.ByteString.Lazy.Builder.Transformers"
+       -- to efficiently insert a large 'Builder' prefixed with its size.
 
 -- | Convert a @'ChunkIOStream' ()@ to a lazy 'L.ByteString' using
 -- 'unsafePerformIO'.
-{-# INLINE ciosUnitToLazyByteString #-}
-ciosUnitToLazyByteString :: AllocationStrategy 
+{-# INLINE ciosToLazyByteString #-}
+ciosToLazyByteString :: AllocationStrategy 
                          -> L.ByteString -> ChunkIOStream () -> L.ByteString
-ciosUnitToLazyByteString (AllocationStrategy _ _ trim) k = go
+ciosToLazyByteString strategy k = go
   where
-    go (Finished buf _)
-      | S.null bs                           = k
-      | trim (S.length bs) (bufferSize buf) = L.Chunk (S.copy bs) k
-      | otherwise                           = L.Chunk bs          k
-      where
-        bs = byteStringFromBuffer buf
+    go (Finished buf _) = trimmedChunkFromBuffer strategy buf k
     go (Yield1 bs io)   = L.Chunk bs $ unsafePerformIO (go <$> io)
     go (YieldChunks (SizedChunks _ lbsC) io) =
         lbsC $ unsafePerformIO (go <$> io)
 
-
--- | Convert a 'ChunkIOStream' to a lazy tuple of the result and the written
--- 'L.ByteString' using 'unsafePerformIO'.
-{-# INLINE ciosToLazyByteString #-}
-ciosToLazyByteString :: AllocationStrategy 
-                     -> (a -> (b, L.ByteString))
-                     -> ChunkIOStream a
-                     -> (b, L.ByteString)
-ciosToLazyByteString (AllocationStrategy _ _ trim) k =
-    go
-  where
-    go (Finished buf x) =
-        second lbsC $ k x
-      where
-        bs = byteStringFromBuffer buf
-        -- FIXME: Share this trimming code with 'Builder' execution
-        lbsC | S.null bs                           = id
-             | trim (S.length bs) (bufferSize buf) = L.Chunk (S.copy bs)
-             | otherwise                           = L.Chunk bs
-         
-    go (Yield1 bs io)   = second (L.Chunk bs) $ unsafePerformIO (go <$> io)
-    go (YieldChunks (SizedChunks _ lbsC) io) =
-        second lbsC $ unsafePerformIO (go <$> io)
 
 ------------------------------------------------------------------------------
 -- Build signals
@@ -286,7 +276,8 @@ ciosToLazyByteString (AllocationStrategy _ _ trim) k =
 type BuildStep a = BufferRange -> IO (BuildSignal a)
 
 -- | 'BuildSignal's abstract signals to the caller of a 'BuildStep'. There are
--- exactly three signals: 'done', 'bufferFull', and 'insertChunks'.
+-- four signals: 'done', 'bufferFull', 'insertChunks', and
+-- 'insertChunksAndBuffer'.
 data BuildSignal a =
     Done {-# UNPACK #-} !(Ptr Word8) a
   | BufferFull
@@ -296,10 +287,10 @@ data BuildSignal a =
   | InsertChunks
       {-# UNPACK #-} !(Ptr Word8)
       {-# UNPACK #-} !SizedChunks
-                     !(Maybe Buffer)  -- possibly, a last buffer that was
-                                      -- partially filled. This is used in
-                                      -- 'encodeSizePrefixed' to avoid half filled
-                                      -- buffers.
+                     !(Maybe Buffer)  
+                     -- possibly, a last buffer that was partially filled.
+                     -- This is used in 'encodeSizePrefixed' to avoid half
+                     -- filled buffers.
                      !(BuildStep a)
 
 -- | Signal that the current 'BuildStep' is done and has computed a value.
@@ -328,7 +319,7 @@ bufferFull = BufferFull
 insertChunks :: Ptr Word8
             -- ^ Next free byte in current 'BufferRange'
             -> SizedChunks
-            -- ^ Chunks to insert.
+            -- ^ Chunks annotated with their size to insert.
             -> BuildStep a
             -- ^ 'BuildStep' to run on next 'BufferRange'
             -> BuildSignal a
@@ -336,11 +327,14 @@ insertChunks op chunks = InsertChunks op chunks Nothing
 
 -- | Signal that several chunks should be inserted directly and a last buffer
 -- that was partially filled is available.
+--
+-- See 'putSizePrefixed' in "Data.ByteString.Lazy.Builder.Transformers" for an
+-- example use.
 {-# INLINE insertChunksAndBuffer #-}
 insertChunksAndBuffer :: Ptr Word8
                       -- ^ Next free byte in current 'BufferRange'
                       -> SizedChunks
-                      -- ^ Chunks to insert.
+                      -- ^ Chunks annotated with their size to insert.
                       -> Buffer
                       -- ^ Last, partially filled buffer.
                       -> BuildStep a
@@ -359,11 +353,11 @@ fillWithBuildStep
     -> (Ptr Word8 -> Int -> BuildStep a -> IO b)
     -- ^ Handling the 'bufferFull' signal
     -> (Ptr Word8 -> SizedChunks -> Maybe Buffer -> BuildStep a -> IO b)
-    -- ^ Handling the 'insertChunks' signal
+    -- ^ Handling the 'insertChunks' and 'insertChunksAndBuffer' signals
     -> BufferRange
     -- ^ Buffer range to fill.
     -> IO b
-    -- ^ Value computed by filling this 'BufferRange'.
+    -- ^ Value computed while filling this 'BufferRange'.
 fillWithBuildStep step fDone fFull fChunk !br = do
     signal <- step br
     case signal of
@@ -389,25 +383,26 @@ newtype Builder = Builder (forall r. BuildStep r -> BuildStep r)
 builder :: (forall r. BuildStep r -> BuildStep r)
         -- ^ A function that fills a 'BufferRange', calls the continuation with
         -- the updated 'BufferRange' once its done, and signals its caller how
-        -- to proceed using 'done', 'bufferFull', or 'insertChunks'.
+        -- to proceed using 'done', 'bufferFull', 'insertChunks', or
+        -- 'insertChunksAndBuffer'.
         --
         -- This function must be referentially transparent; i.e., calling it
-        -- multiple times must result in the same sequence of bytes being
-        -- written. If you need mutable state, then you must allocate it anew
-        -- upon each call of this function. Moroever, this function must call
-        -- the continuation once its done. Otherwise, concatenation of
-        -- 'Builder's does not work. Finally, this function must write to all
-        -- bytes that it claims it has written. Otherwise, the resulting
-        -- 'Builder' is not guaranteed to be referentially transparent and
-        -- sensitive data might leak.
+        -- multiple times with equally sized 'BufferRange's must result in the
+        -- same sequence of bytes being written. If you need mutable state,
+        -- then you must allocate it anew upon each call of this function.
+        -- Moroever, this function must call the continuation once its done.
+        -- Otherwise, concatenation of 'Builder's does not work. Finally, this
+        -- function must write to all bytes that it claims it has written.
+        -- Otherwise, the resulting 'Builder' is not guaranteed to be
+        -- referentially transparent and sensitive data might leak.
         -> Builder
 builder = Builder
 
--- | The final build step that returns the 'Done' signal.
+-- | The final build step that returns the 'done' signal.
 finalBuildStep :: BuildStep ()
 finalBuildStep !(BufferRange op _) = evaluate $ Done op ()
 
--- | Run a 'Builder'.
+-- | Run a 'Builder' with the 'finalBuildStep'.
 {-# INLINE runBuilder #-}
 runBuilder :: Builder      -- ^ 'Builder' to run
            -> BuildStep () -- ^ 'BuildStep' that writes the byte stream of this
@@ -468,8 +463,8 @@ flush = builder step
 --
 -- @'Put' ()@ actions are isomorphic to 'Builder's. The functions 'putBuilder'
 -- and 'fromPut' convert between these two types. Where possible, you should
--- use 'Builder's, as they are slightly cheaper than 'Put's because they do not
--- carry a computed value.
+-- use 'Builder's, as sequencing them is slightly cheaper than sequencing
+-- 'Put's because they do not carry around a computed value.
 newtype Put a = Put { unPut :: forall r. (a -> BuildStep r) -> BuildStep r }
 
 -- | Construct a 'Put' action. In contrast to 'BuildStep's, 'Put's are
@@ -479,18 +474,19 @@ newtype Put a = Put { unPut :: forall r. (a -> BuildStep r) -> BuildStep r }
 put :: (forall r. (a -> BuildStep r) -> BuildStep r)
        -- ^ A function that fills a 'BufferRange', calls the continuation with
        -- the updated 'BufferRange' and its computed value once its done, and
-       -- signals its caller how to proceed using 'done', 'bufferFull', or
-       -- 'insertChunks'.
+       -- signals its caller how to proceed using 'done', 'bufferFull',
+       -- 'insertChunks', or 'insertChunksAndBuffer'.
        --
-       -- This function must be referentially transparent; i.e., calling it
-       -- multiple times must result in the same sequence of bytes being
-       -- written and the same value being computed. If you need mutable state,
-       -- then you must allocate it anew upon each call of this function.
-       -- Moroever, this function must call the continuation once its done.
-       -- Otherwise, monadic sequencing of 'Put's does not work. Finally, this
-       -- function must write to all bytes that it claims it has written.
-       -- Otherwise, the resulting 'Put' is not guaranteed to be referentially
-       -- transparent and sensitive data might leak.
+    -- This function must be referentially transparent; i.e., calling it
+    -- multiple times with equally sized 'BufferRange's must result in the
+    -- same sequence of bytes being written and the same value being
+    -- computed. If you need mutable state, then you must allocate it anew
+    -- upon each call of this function. Moroever, this function must call
+    -- the continuation once its done. Otherwise, monadic sequencing of
+    -- 'Put's does not work. Finally, this function must write to all bytes
+    -- that it claims it has written. Otherwise, the resulting 'Put' is
+    -- not guaranteed to be referentially transparent and sensitive data
+    -- might leak.
        -> Put a
 put = Put
 
@@ -506,10 +502,13 @@ instance Functor Put where
   fmap f p = Put $ \k -> unPut p (\x -> k (f x))
   {-# INLINE fmap #-}
 
+-- | Synonym for '<*' from 'Applicative'; used in rewriting rules.
 {-# INLINE[1] ap_l #-}
 ap_l :: Put a -> Put b -> Put a
 ap_l (Put a) (Put b) = Put $ \k -> a (\a' -> b (\_ -> k a'))
 
+-- | Synonym for '*>' from 'Applicative' and '>>' from 'Monad'; used in
+-- rewriting rules.
 {-# INLINE[1] ap_r #-}
 ap_r :: Put a -> Put b -> Put b
 ap_r (Put a) (Put b) = Put $ \k -> a (\_ -> b k)
@@ -994,13 +993,15 @@ toLazyByteStringWith
     -> L.ByteString
        -- ^ Resulting lazy 'L.ByteString'
 toLazyByteStringWith strategy k b =
-    ciosUnitToLazyByteString strategy k $ unsafePerformIO $
+    ciosToLazyByteString strategy k $ unsafePerformIO $
         buildStepToCIOS strategy (runBuilder b)
 
+-- | Convert a 'BuildStep' to a 'ChunkIOStream' stream by executing it on
+-- 'Buffer's allocated according to the given 'AllocationStrategy'.
 {-# INLINE buildStepToCIOS #-}
 buildStepToCIOS
     :: AllocationStrategy          -- ^ Buffer allocation strategy to use
-    -> BuildStep a                 -- ^ 'Put' to execute
+    -> BuildStep a                 -- ^ 'BuildStep' to execute
     -> IO (ChunkIOStream a)
 buildStepToCIOS (AllocationStrategy getFirstBuf bufSize trim) =
     \step -> getFirstBuf >>= fill step

@@ -75,12 +75,11 @@ library
                      Data.ByteString.Lazy.Builder.Extras
                      Data.ByteString.Lazy.Builder.ASCII
                      Data.ByteString.Lazy.Builder.Internal
-                     Data.ByteString.Lazy.Builder.Put
+                     Data.ByteString.Lazy.Builder.Transformers
                      Data.ByteString.Lazy.Builder.BasicEncoding
                      Data.ByteString.Lazy.Builder.BasicEncoding.Internal
 
-  other-modules:     Data.ByteString.Lazy.Builder.Transformers
-                     Data.ByteString.Lazy.Builder.BasicEncoding.Binary
+  other-modules:     Data.ByteString.Lazy.Builder.BasicEncoding.Binary
                      Data.ByteString.Lazy.Builder.BasicEncoding.ASCII
                      Data.ByteString.Lazy.Builder.BasicEncoding.Internal.Floating
                      Data.ByteString.Lazy.Builder.BasicEncoding.Internal.UncheckedShifts

@@ -373,15 +373,6 @@ encodeSizePrefixed
 encodeSizePrefixed innerBufSize mkSizeFE =
     fromPut . putSizePrefixed innerBufSize mkSizeFE . putBuilder
 
-{-# NOINLINE pbLengthDelimited #-}
-pbLengthDelimited :: Builder -> Builder
-pbLengthDelimited body = 
-    encodeSizePrefixed strategy word64Base128LEPadded body
-  where
-    strategy  = untrimmedStrategy chunkSize chunkSize
-    -- a bit less than 2 ^ 14 bytes => at most 1 byte padding overhead
-    chunkSize = 16 * 1024 - chunkOverhead
-
 -- | /Heavy inlining./ Prefix a 'Put' action with the number of bytes written.
 -- See 'encodeSizePrefixed' for more information.
 {-# INLINE putSizePrefixed #-}

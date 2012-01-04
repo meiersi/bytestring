@@ -99,8 +99,10 @@ Efficient encoding of 'Int's as decimal numbers is performed by @intDec@
 Optimization potential exists for the escaping of 'String's.
 The above implementation has two optimization opportunities.
 First,
-  the buffer-free checks of the 'Builder's for escaping doublequotes
-  and backslashes can be fused.
+  we can use a single buffer free check for @4@ bytes before escaping a
+  character and only then decide on how to escape the character.
+This simplifies the control flow and allows to avoid a closure construction,
+  which improves the performance of the 'Builder'.
 Second,
   the concatenations performed by 'foldMap' can be eliminated.
 The following implementation exploits these optimizations.
@@ -126,7 +128,7 @@ renderString cs =
 
 The code should be mostly self-explanatory.
 The slightly awkward syntax is because the combinators
-  are written such that the size-bound of the resulting 'BoundedEncoding'
+  are written such that the 'sizeBound' of the resulting 'BoundedEncoding'
   can be computed at compile time.
 We also explicitly inline the 'fixed2' encoding,
   which encodes a fixed tuple of characters,

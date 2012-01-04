@@ -1,5 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables, CPP, BangPatterns, Rank2Types #-}
--- {-# OPTIONS_HADDOCK hide #-}
+{-# OPTIONS_HADDOCK hide #-}
 -- | Copyright : (c) 2010 - 2011 Simon Meier
 -- License     : BSD3-style (see LICENSE)
 --

@@ -140,7 +140,7 @@ benchIntEncodingB n0 w
 
 -- | Benchmark a 'PaddedEncoding'. Full inlining to enable specialization.
 {-# INLINE benchPE #-}
-benchPE :: String -> PaddedEncoding Word64 -> Benchmark
+benchPE :: String -> PaddedSizeEncoding-> Benchmark
 benchPE name mkEncoding =
     bench (name ++" (" ++ show nRepl ++ ")") $ io
   where
@@ -171,39 +171,39 @@ sanityCheckInfo =
 
 {-# NOINLINE encodeChunkedBase128LE #-}
 encodeChunkedBase128LE :: Builder -> Builder
-encodeChunkedBase128LE = encodeChunked 16 int64Base128LEPadded E.emptyB
+encodeChunkedBase128LE = encodeChunked word64Base128LEPadded E.emptyB
 
 {-# NOINLINE encodeSizePrefixedBase128LE #-}
 encodeSizePrefixedBase128LE :: Builder -> Builder
 encodeSizePrefixedBase128LE =
-    encodeSizePrefixed defaultUntrimmedStrategy int64Base128LEPadded
+    encodeSizePrefixed defaultUntrimmedStrategy word64Base128LEPadded
 
 {-# NOINLINE encodeChunkedHex #-}
 encodeChunkedHex :: Builder -> Builder
-encodeChunkedHex = encodeChunked 16 (int64HexPadded ' ') E.emptyB
+encodeChunkedHex = encodeChunked (word64HexPadded ' ') E.emptyB
 
 {-# NOINLINE encodeSizePrefixedHex #-}
 encodeSizePrefixedHex :: Builder -> Builder
 encodeSizePrefixedHex =
-    encodeSizePrefixed defaultUntrimmedStrategy (int64HexPadded ' ')
+    encodeSizePrefixed defaultUntrimmedStrategy (word64HexPadded ' ')
 
 {-# NOINLINE encodeChunkedDec #-}
 encodeChunkedDec :: Builder -> Builder
-encodeChunkedDec = encodeChunked 16 (int64DecPadded ' ') E.emptyB
+encodeChunkedDec = encodeChunked (word64DecPadded ' ') E.emptyB
 
 {-# NOINLINE encodeSizePrefixedDec #-}
 encodeSizePrefixedDec :: Builder -> Builder
 encodeSizePrefixedDec =
-    encodeSizePrefixed defaultUntrimmedStrategy (int64DecPadded ' ')
+    encodeSizePrefixed defaultUntrimmedStrategy (word64DecPadded ' ')
 
 {-# NOINLINE encodeChunkedIntHost #-}
 encodeChunkedIntHost :: Builder -> Builder
-encodeChunkedIntHost = encodeChunked 16 (const E.int64Host) E.emptyB
+encodeChunkedIntHost = encodeChunked (const E.word64Host) E.emptyB
 
 {-# NOINLINE encodeSizePrefixedIntHost #-}
 encodeSizePrefixedIntHost :: Builder -> Builder
 encodeSizePrefixedIntHost =
-    encodeSizePrefixed defaultUntrimmedStrategy (const E.int64Host)
+    encodeSizePrefixed defaultUntrimmedStrategy (const E.word64Host)
 
 {-# NOINLINE toLazyByteStringUntrimmed #-}
 toLazyByteStringUntrimmed :: Builder -> L.ByteString

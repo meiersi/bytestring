@@ -109,7 +109,7 @@ library
   -- flags for the decimal integer serialization code
   if impl(ghc >= 6.11)
     cpp-options: -DINTEGER_GMP
-    build-depends: integer-gmp >= 0.2 && < 0.4
+    build-depends: integer-gmp >= 0.2 && < 0.5
 
   if impl(ghc >= 6.9) && impl(ghc < 6.11)
     cpp-options: -DINTEGER_GMP
@@ -152,7 +152,7 @@ test-suite prop-compiled
   -- flags for the decimal integer serialization code
   if impl(ghc >= 6.11)
     cpp-options: -DINTEGER_GMP
-    build-depends: integer-gmp >= 0.2 && < 0.4
+    build-depends: integer-gmp >= 0.2 && < 0.5
 
   if impl(ghc >= 6.9) && impl(ghc < 6.11)
     cpp-options: -DINTEGER_GMP
@@ -194,7 +194,7 @@ test-suite test-builder
   -- flags for the decimal integer serialization code
   if impl(ghc >= 6.11)
     cpp-options: -DINTEGER_GMP
-    build-depends: integer-gmp >= 0.2 && < 0.4
+    build-depends: integer-gmp >= 0.2 && < 0.5
 
   if impl(ghc >= 6.9) && impl(ghc < 6.11)
     cpp-options: -DINTEGER_GMP
@@ -220,7 +220,7 @@ benchmark bench-builder-all
   -- flags for the decimal integer serialization code
   if impl(ghc >= 6.11)
     cpp-options: -DINTEGER_GMP
-    build-depends: integer-gmp >= 0.2 && < 0.4
+    build-depends: integer-gmp >= 0.2 && < 0.5
 
   if impl(ghc >= 6.9) && impl(ghc < 6.11)
     cpp-options: -DINTEGER_GMP
@@ -246,7 +246,7 @@ benchmark bench-builder-boundscheck
   -- flags for the decimal integer serialization code
   if impl(ghc >= 6.11)
     cpp-options: -DINTEGER_GMP
-    build-depends: integer-gmp >= 0.2 && < 0.4
+    build-depends: integer-gmp >= 0.2 && < 0.5
 
   if impl(ghc >= 6.9) && impl(ghc < 6.11)
     cpp-options: -DINTEGER_GMP

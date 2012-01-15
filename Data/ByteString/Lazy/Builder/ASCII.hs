@@ -36,7 +36,7 @@ module Data.ByteString.Lazy.Builder.ASCII
       -- possible representation is used. For example,
       --
       -- >>> toLazyByteString (word16Hex 0x0a10)
-      -- Chunk "a10" Empty
+      -- "a10"
       --
       -- Note that there is no support for using upper-case characters. Please
       -- contact the maintainer, if your application cannot work without

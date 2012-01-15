@@ -116,7 +116,7 @@ foreign import ccall unsafe "static _hs_bytestring_word64HexFixed"
 -- encoding defined above.
 --
 -- >  toLazyByteString (E.encodeWithF (word64Base128LEPadded 1032) 12)
--- >= Chunk "\x8c\x00" Empty
+-- >= "\x8c\x00"
 --
 {-# INLINE word64Base128LEPadded #-}
 word64Base128LEPadded :: PaddedSizeEncoding
@@ -130,7 +130,7 @@ word64Base128LEPadded bound =
 -- at the front.
 --
 -- >  toLazyByteString (E.encodeWithF (word64DecPadded '0' 1032) 12)
--- >= Chunk "0012" Empty
+-- >= "0012"
 --
 {-# INLINE word64DecPadded #-}
 word64DecPadded :: Char             -- ^ Padding 'Char' (truncated to 8 bits)
@@ -147,7 +147,7 @@ word64DecPadded paddingChar bound =
 -- characters, padded at the front.
 --
 -- >  toLazyByteString (E.encodeWithF (word64HexPadded '0' 1032) 12)
--- >= Chunk "00c" Empty
+-- >= "00c"
 --
 {-# INLINE word64HexPadded #-}
 word64HexPadded :: Char             -- ^ Padding 'Char' (truncated to 8 bits)

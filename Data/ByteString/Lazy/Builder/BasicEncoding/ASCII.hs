@@ -228,58 +228,58 @@ wordHex = caseWordSize_32_64
 -- fixed width; leading zeroes
 ------------------------------
 
--- | Encode a 'Word8' using 2 nibbles (hexadecimal digits).
+-- | Encode a 'Word8' using 2 hexadecimal characters.
 {-# INLINE word8HexFixed #-}
 word8HexFixed :: FixedEncoding Word8
 word8HexFixed = fixedEncoding 2 $
     \x op -> poke (castPtr op) =<< encode8_as_16h lowerTable x
 
--- | Encode a 'Word16' using 4 nibbles.
+-- | Encode a 'Word16' using 4 hexadecimal characters.
 {-# INLINE word16HexFixed #-}
 word16HexFixed :: FixedEncoding Word16
 word16HexFixed =
     (\x -> (fromIntegral $ x `shiftr_w16` 8, fromIntegral x))
       >$< pairF word8HexFixed word8HexFixed
 
--- | Encode a 'Word32' using 8 nibbles.
+-- | Encode a 'Word32' using 8 hexadecimal characters.
 {-# INLINE word32HexFixed #-}
 word32HexFixed :: FixedEncoding Word32
 word32HexFixed =
     (\x -> (fromIntegral $ x `shiftr_w32` 16, fromIntegral x))
       >$< pairF word16HexFixed word16HexFixed
--- | Encode a 'Word64' using 16 nibbles.
+-- | Encode a 'Word64' using 16 hexadecimal characters.
 {-# INLINE word64HexFixed #-}
 word64HexFixed :: FixedEncoding Word64
 word64HexFixed =
     (\x -> (fromIntegral $ x `shiftr_w64` 32, fromIntegral x))
       >$< pairF word32HexFixed word32HexFixed
 
--- | Encode a 'Int8' using 2 nibbles (hexadecimal digits).
+-- | Encode a 'Int8' using 2 hexadecimal characters.
 {-# INLINE int8HexFixed #-}
 int8HexFixed :: FixedEncoding Int8
 int8HexFixed = fromIntegral >$< word8HexFixed
 
--- | Encode a 'Int16' using 4 nibbles.
+-- | Encode a 'Int16' using 4 hexadecimal characters.
 {-# INLINE int16HexFixed #-}
 int16HexFixed :: FixedEncoding Int16
 int16HexFixed = fromIntegral >$< word16HexFixed
 
--- | Encode a 'Int32' using 8 nibbles.
+-- | Encode a 'Int32' using 8 hexadecimal characters.
 {-# INLINE int32HexFixed #-}
 int32HexFixed :: FixedEncoding Int32
 int32HexFixed = fromIntegral >$< word32HexFixed
 
--- | Encode a 'Int64' using 16 nibbles.
+-- | Encode a 'Int64' using 16 hexadecimal characters.
 {-# INLINE int64HexFixed #-}
 int64HexFixed :: FixedEncoding Int64
 int64HexFixed = fromIntegral >$< word64HexFixed
 
--- | Encode an IEEE 'Float' using 8 nibbles.
+-- | Encode an IEEE 'Float' using 8 hexadecimal characters.
 {-# INLINE floatHexFixed #-}
 floatHexFixed :: FixedEncoding Float
 floatHexFixed = encodeFloatViaWord32F word32HexFixed
 
--- | Encode an IEEE 'Double' using 16 nibbles.
+-- | Encode an IEEE 'Double' using 16 hexadecimal characters.
 {-# INLINE doubleHexFixed #-}
 doubleHexFixed :: FixedEncoding Double
 doubleHexFixed = encodeDoubleViaWord64F word64HexFixed

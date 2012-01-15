@@ -118,10 +118,9 @@ table :: Table
 table = [map StringC strings, map IntC [-3..3]]
 @
 
-The expression @encodeUtf8CSV table@ results in the following lazy
-'L.ByteString'.
+The expression @encodeUtf8CSV table@ results in the following bytestring.
 
->Chunk "\"hello\",\"\\\"1\\\"\",\"\206\187-w\195\182rld\"\n-3,-2,-1,0,1,2,3\n" Empty
+> "\"hello\",\"\\\"1\\\"\",\"\206\187-w\195\182rld\"\n-3,-2,-1,0,1,2,3\n"
 
 We can clearly see that we are converting to a /binary/ format. The \'&#955;\'
 and \'&#246;\' characters, which have a Unicode codepoint above 127, are
@@ -294,9 +293,11 @@ toLazyByteString = toLazyByteStringWith
 -- 'BlockBuffering' mode. See 'hSetBinaryMode' and 'hSetBuffering'.
 --
 -- This function is more efficient than @hPut . 'toLazyByteString'@ because in
--- many cases no buffer allocation has to be done. Moreover, the results of
--- several executions of short 'Builder's are concatenated in the 'Handle's
--- buffer, therefore avoiding unnecessary buffer flushes.
+-- many cases no buffer allocation has to be done, if buffer allocation is
+-- required we try to adapt the size of the internal buffer to what is required.
+-- Additionally, the results of several executions of short 'Builder's are
+-- concatenated in the 'Handle's buffer, therefore avoiding unnecessary buffer
+-- flushes.
 hPutBuilder :: Handle -> Builder -> IO ()
 hPutBuilder h = hPut h . putBuilder
 
@@ -416,7 +417,7 @@ doubleBE = E.encodeWithF E.doubleBE
 char7 :: Char -> Builder
 char7 = E.encodeWithF E.char7
 
--- | Char7 encode a 'String'.
+-- | Char7 encode a 'String'. Equivalent to 'foldMap' 'char7'.
 {-# INLINE string7 #-}
 string7 :: String -> Builder
 string7 = E.encodeListWithF E.char7
@@ -430,7 +431,7 @@ string7 = E.encodeListWithF E.char7
 char8 :: Char -> Builder
 char8 = E.encodeWithF E.char8
 
--- | Char8 encode a 'String'.
+-- | Char8 encode a 'String'. Equivalent to 'foldMap' 'char8'.
 {-# INLINE string8 #-}
 string8 :: String -> Builder
 string8 = E.encodeListWithF E.char8
@@ -444,7 +445,7 @@ string8 = E.encodeListWithF E.char8
 charUtf8 :: Char -> Builder
 charUtf8 = E.encodeWithB E.charUtf8
 
--- | UTF-8 encode a 'String'.
+-- | UTF-8 encode a 'String'. Equivalent to 'foldMap 'charUtf8'.
 {-# INLINE stringUtf8 #-}
 stringUtf8 :: String -> Builder
 stringUtf8 = E.encodeListWithB E.charUtf8

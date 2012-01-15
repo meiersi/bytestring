@@ -413,14 +413,14 @@ testBuilder f recipe =
 encodeBase128LE :: Builder -> Builder
 encodeBase128LE =
     (`mappend` BE.encodeWithF BE.word8 0)
-  . (encodeChunked 5 word64Base128LEPadded BE.emptyB)
+  . (encodeChunked word64Base128LEPadded BE.emptyB)
 
 -- | Chunked encoding using 0-padded, space-terminated hexadecimal numbers
 -- for encoding the chunk-size.
 encodeHex :: Builder -> Builder
 encodeHex =
     (`mappend` BE.encodeWithF (hexLen 0) 0)
-  . (encodeChunked 7 hexLen BE.emptyB)
+  . (encodeChunked hexLen BE.emptyB)
 
 hexLen :: PaddedSizeEncoding
 hexLen bound =

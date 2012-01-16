@@ -285,19 +285,17 @@ toLazyByteString = toLazyByteStringWith
 -}
 
 -- | Output a 'Builder' to a 'Handle'.
--- The 'Builder' is executed directly on the buffer of the 'Handle'. If the
--- buffer is too small (or not present), then it is replaced with a large
--- enough buffer.
+-- The 'Builder' is executed directly on the buffer of the 'Handle'.
 --
 -- It is recommended that the 'Handle' is set to binary and
 -- 'BlockBuffering' mode. See 'hSetBinaryMode' and 'hSetBuffering'.
 --
 -- This function is more efficient than @hPut . 'toLazyByteString'@ because in
--- many cases no buffer allocation has to be done, if buffer allocation is
--- required we try to adapt the size of the internal buffer to what is required.
+-- many cases no buffer allocation has to be done. If buffer allocation is
+-- required, we adapt the size of the 'Handle''s buffer to what is required.
 -- Additionally, the results of several executions of short 'Builder's are
--- concatenated in the 'Handle's buffer, therefore avoiding unnecessary buffer
--- flushes.
+-- concatenated in the 'Handle''s buffer, therefore avoiding unnecessary
+-- buffer flushes.
 hPutBuilder :: Handle -> Builder -> IO ()
 hPutBuilder h = hPut h . putBuilder
 
@@ -417,7 +415,7 @@ doubleBE = E.encodeWithF E.doubleBE
 char7 :: Char -> Builder
 char7 = E.encodeWithF E.char7
 
--- | Char7 encode a 'String'. Equivalent to 'foldMap' 'char7'.
+-- | Char7 encode a 'String'. Faster than the equivalent @'foldMap' 'char7'@.
 {-# INLINE string7 #-}
 string7 :: String -> Builder
 string7 = E.encodeListWithF E.char7
@@ -431,7 +429,7 @@ string7 = E.encodeListWithF E.char7
 char8 :: Char -> Builder
 char8 = E.encodeWithF E.char8
 
--- | Char8 encode a 'String'. Equivalent to 'foldMap' 'char8'.
+-- | Char8 encode a 'String'. Faster than the equivalent @'foldMap' 'char8'@.
 {-# INLINE string8 #-}
 string8 :: String -> Builder
 string8 = E.encodeListWithF E.char8
@@ -445,7 +443,8 @@ string8 = E.encodeListWithF E.char8
 charUtf8 :: Char -> Builder
 charUtf8 = E.encodeWithB E.charUtf8
 
--- | UTF-8 encode a 'String'. Equivalent to 'foldMap 'charUtf8'.
+-- | UTF-8 encode a 'String'.
+-- Faster than the equivalent @'foldMap' 'charUtf8'@.
 {-# INLINE stringUtf8 #-}
 stringUtf8 :: String -> Builder
 stringUtf8 = E.encodeListWithB E.charUtf8

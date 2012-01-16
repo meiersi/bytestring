@@ -51,8 +51,13 @@ module Data.ByteString.Lazy.Builder.ASCII
       -- * Fixed-width hexadecimal numbers
 
       -- | Encoding integers as hexadecimal numbers using lower-case
-      -- ASCII characters. The output is of fixed width for a given
-      -- input type. For example:
+      -- ASCII characters. The width of the output is fixed and corresponds to
+      -- the bit-width of the input-type divided by 4. Zero-padding is used,
+      -- if required. For example:
+      --
+      -- >>> toLazyByteString (word16Hex 0xa10)
+      -- "0a10"
+      --
     , int8HexFixed
     , int16HexFixed
     , int32HexFixed
@@ -163,12 +168,12 @@ wordDec = E.encodeWithB E.wordDec
 
 -- TODO: Use Bryan O'Sullivan's double-conversion package to speed it up.
 
--- | Decimal encoding of an IEEE 'Float'.
+-- | Decimal encoding of an IEEE 'Float' using the ASCII digits.
 {-# INLINE floatDec #-}
 floatDec :: Float -> Builder
 floatDec = string8 . show
 
--- | Decimal encoding of an IEEE 'Double'.
+-- | Decimal encoding of an IEEE 'Double' using the ASCII digits.
 {-# INLINE doubleDec #-}
 doubleDec :: Double -> Builder
 doubleDec = string8 . show
@@ -214,22 +219,22 @@ wordHex = E.encodeWithB E.wordHex
 -- fixed width; leading zeroes
 ------------------------------
 
--- | Encode a 'Int8' using 2 hexadecimal characters.
+-- | Encode an 'Int8' using 2 hexadecimal characters.
 {-# INLINE int8HexFixed #-}
 int8HexFixed :: Int8 -> Builder
 int8HexFixed = E.encodeWithF E.int8HexFixed
 
--- | Encode a 'Int16' using 4 hexadecimal characters.
+-- | Encode an 'Int16' using 4 hexadecimal characters.
 {-# INLINE int16HexFixed #-}
 int16HexFixed :: Int16 -> Builder
 int16HexFixed = E.encodeWithF E.int16HexFixed
 
--- | Encode a 'Int32' using 8 hexadecimal characters.
+-- | Encode an 'Int32' using 8 hexadecimal characters.
 {-# INLINE int32HexFixed #-}
 int32HexFixed :: Int32 -> Builder
 int32HexFixed = E.encodeWithF E.int32HexFixed
 
--- | Encode a 'Int64' using 16 hexadecimal characters.
+-- | Encode an 'Int64' using 16 hexadecimal characters.
 {-# INLINE int64HexFixed #-}
 int64HexFixed :: Int64 -> Builder
 int64HexFixed = E.encodeWithF E.int64HexFixed
@@ -254,12 +259,14 @@ word32HexFixed = E.encodeWithF E.word32HexFixed
 word64HexFixed :: Word64 -> Builder
 word64HexFixed = E.encodeWithF E.word64HexFixed
 
--- | Encode an IEEE 'Float' using 8 hexadecimal characters.
+-- | Encode an IEEE 'Float' using 8 hexadecimal characters in big-endian
+-- order.
 {-# INLINE floatHexFixed #-}
 floatHexFixed :: Float -> Builder
 floatHexFixed = E.encodeWithF E.floatHexFixed
 
--- | Encode an IEEE 'Double' using 16 hexadecimal characters.
+-- | Encode an IEEE 'Double' using 16 hexadecimal characters in big-endian
+-- order.
 {-# INLINE doubleHexFixed #-}
 doubleHexFixed :: Double -> Builder
 doubleHexFixed = E.encodeWithF E.doubleHexFixed

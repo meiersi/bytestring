@@ -43,6 +43,8 @@ TODO before full builder release
   [DONE] Use a 'Builder' instead of a 'BoundedEncoding' for terminating chunks.
     Not recommended, as it makes impossible reserving the new buffer size such
     that it fits directly.
+  - document all functions in 'Put' module. Decide which functions to add to
+    public API.
 
   [DONE] investigate performance of 'encodeWithListF E.word8'
   [DONE] improve performance of varInt encodings

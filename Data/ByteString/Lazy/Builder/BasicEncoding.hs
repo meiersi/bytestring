@@ -110,20 +110,20 @@ The following implementation exploits these optimizations.
 @
 import qualified Data.ByteString.Lazy.Builder.BasicEncoding  as E
 import           Data.ByteString.Lazy.Builder.BasicEncoding
-                 ( 'ifB', 'fromF', ('>*<'), ('>$<') )
+                 ( 'ifB', 'fromF', 'pairF', ('>$<') )
 
 renderString :: String -\> Builder
 renderString cs =
     B.charUtf8 \'\"\' \<\> E.'encodeListWithB' escape cs \<\> B.charUtf8 \'\"\'
   where
     escape :: E.'BoundedEncoding' Char
-    escape =
+    escape = E.'charUtf8AsciiWith' $
       'ifB' (== \'\\\\\') (fixed2 (\'\\\\\', \'\\\\\')) $
       'ifB' (== \'\\\"\') (fixed2 (\'\\\\\', \'\\\"\')) $
-      E.'charUtf8'
+      ('fromF' E.'char8')
     &#160;
     {&#45;\# INLINE fixed2 \#&#45;}
-    fixed2 x = 'fromF' $ const x '>$<' E.'char7' '>*<' E.'char7'
+    fixed2 x = 'fromF' $ const x '>$<' E.'char8' `pairF` E.'char8'
 @
 
 The code should be mostly self-explanatory.
@@ -160,29 +160,29 @@ Therefore,
 Note that 'BoundedEncoding's are a bit verbose, but quite versatile.
 Here is an example of a 'BoundedEncoding' for combined HTML escaping and
   UTF-8 encoding.
-It exploits that the escaped character with the maximal Unicode
-  codepoint is \'>\'.
 
 @
 {&#45;\# INLINE charUtf8HtmlEscaped \#&#45;}
 charUtf8HtmlEscaped :: E.BoundedEncoding Char
 charUtf8HtmlEscaped =
-    'ifB' (>  \'\>\' ) E.'charUtf8' $
-    'ifB' (== \'\<\' ) (fixed4 (\'&\',(\'l\',(\'t\',\';\')))) $        -- &lt;
-    'ifB' (== \'\>\' ) (fixed4 (\'&\',(\'g\',(\'t\',\';\')))) $        -- &gt;
-    'ifB' (== \'&\' ) (fixed5 (\'&\',(\'a\',(\'m\',(\'p\',\';\'))))) $  -- &amp;
-    'ifB' (== \'\"\' ) (fixed5 (\'&\',(\'\#\',(\'3\',(\'4\',\';\'))))) $  -- &\#34;
-    'ifB' (== \'\\\'\') (fixed5 (\'&\',(\'\#\',(\'3\',(\'9\',\';\'))))) $  -- &\#39;
-    ('fromF' E.'char7')         -- fallback for 'Char's smaller than \'\>\'
+    E.'charUtf8AsciiWith' $
+      'ifB' (== \'\<\' ) (fixed4 (\'&\',(\'l\',(\'t\',\';\')))) $        -- &lt;
+      'ifB' (== \'\>\' ) (fixed4 (\'&\',(\'g\',(\'t\',\';\')))) $        -- &gt;
+      'ifB' (== \'&\' ) (fixed5 (\'&\',(\'a\',(\'m\',(\'p\',\';\'))))) $  -- &amp;
+      'ifB' (== \'\"\' ) (fixed5 (\'&\',(\'\#\',(\'3\',(\'4\',\';\'))))) $  -- &\#34;
+      ('fromF' E.'char8')         -- unescaped ASCII characters
   where
     {&#45;\# INLINE fixed4 \#&#45;}
     fixed4 x = 'fromF' $ const x '>$<'
-      E.char7 '>*<' E.char7 '>*<' E.char7 '>*<' E.char7
+      E.char8 '>*<' E.char8 '>*<' E.char8 '>*<' E.char8
     &#160;
     {&#45;\# INLINE fixed5 \#&#45;}
     fixed5 x = 'fromF' $ const x '>$<'
-      E.char7 '>*<' E.char7 '>*<' E.char7 '>*<' E.char7 '>*<' E.char7
+      E.char8 '>*<' E.char8 '>*<' E.char8 '>*<' E.char8 '>*<' E.char8
 @
+
+Note that this HTML escaping is only suitable for HTML attribute values that
+are /double-quoted/ and for HTML content.
 
 -}
 module Data.ByteString.Lazy.Builder.BasicEncoding (
@@ -281,6 +281,7 @@ module Data.ByteString.Lazy.Builder.BasicEncoding (
   -- Hence, functions such as 'intDec' can also be used for encoding 'Int's as
   -- a decimal number with UTF-8 encoded characters.
   , charUtf8
+  , charUtf8AsciiWith
 
   -- * Testing support
   -- | The following four functions are intended for testing use
@@ -530,9 +531,47 @@ char8 = (fromIntegral . ord) >$< word8
 -- | UTF-8 encode a 'Char'.
 {-# INLINE charUtf8 #-}
 charUtf8 :: BoundedEncoding Char
-charUtf8 = 
-  (ord >$<) $
-    ifB (<= 0x7F) (fromF $ fromIntegral >$< word8) $
+charUtf8 = charUtf8AsciiWith (fromF char8)
+
+-- | UTF-8 encode all 'Char's with codepoints greater or equal to 128 and
+-- use a special encoding for the ASCII characters.
+--
+-- This function is typically used to implement UTF-8 encoding combined with
+-- escaping. For example, escaping the \" and the \\ characters as in
+-- Haskell 'String's works follows.
+--
+-- @
+--{&#45;\# INLINE charUtf8Escaped \#&#45;}
+--charUtf8Escaped :: 'BoundedEncoding' Char
+--charUtf8Escaped = 'charUtf8AsciiWith' $
+--    'ifB' (== \'\\\\\') (fixed2 (\'\\\\\', \'\\\\\')) $
+--    'ifB' (== \'\\\"\') (fixed2 (\'\\\\\', \'\\\"\')) $
+--    ('fromF' 'char8')
+--  where
+--    {&#45;\# INLINE fixed2 \#&#45;}
+--    fixed2 x = 'fromF' $ const x '>$<' 'char8' \`pairF\` 'char8'
+-- @
+--
+-- The following function would then escape 'String's.
+--
+-- @
+--escapeString :: String -> 'Builder'
+--escapeString = 'encodeListWithB' charUtf8Escaped
+-- @
+--
+-- For example, 
+-- @toLazyByteString (escapeString \"\\\"&#955;-w&#246;rld\\\"\") == \"\\\"\\206\\187-w\\195\\182rld\\\"\"@.
+--
+{-# INLINE charUtf8AsciiWith #-}
+charUtf8AsciiWith
+  :: BoundedEncoding Char 
+     -- ^ Encoding for the ASCII characters. It is guaranteed
+     -- to be called only with 'Char's with codepoint less than 128.
+  -> BoundedEncoding Char
+     -- ^ Resulting 'BoundedEncoding' that combines UTF-8 encoding with
+     -- the special encoding for the ASCII characters.
+charUtf8AsciiWith ascii = 
+    ifB (<= '\x7F') ascii $ (ord >$<) $
     ifB (<= 0x07FF)
       (fromF (
         (\x -> 
@@ -558,7 +597,6 @@ charUtf8 =
           , fromIntegral $ (x .&. 0x3F) + 0x80                )
         ) >$< (word8 `pairF` word8 `pairF` word8 `pairF` word8)
       ) )
-
 
 ------------------------------------------------------------------------------
 -- Testing encodings

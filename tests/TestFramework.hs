@@ -16,6 +16,7 @@ module TestFramework where
 
 import Test.QuickCheck (Testable(..))
 import Test.QuickCheck.Test
+import Test.HUnit.Lang  ( Assertion, performTestCase )
 
 import Text.Printf
 import System.Environment
@@ -31,7 +32,22 @@ type TestName = String
 type Test     = [(TestName, Int -> IO (Bool, Int))]
 
 testGroup :: String -> [Test] -> Test
-testGroup _ = concat
+testGroup group tss = do
+    (name, io) <- concat tss
+    return (group ++ "/" ++ name, io)
+
+testHUnit :: String -> Assertion -> Test
+testHUnit name assertion = return $
+  ( name
+  , const $ do res <- performTestCase assertion
+               case res of
+                 Nothing             -> do putStrLn "+++ OK, passed test."
+                                           return (True, 1)
+                 Just (failure, msg) -> do
+                   let status | failure = "FAIL" | otherwise = "ERROR"
+                   putStrLn $ status ++ ", " ++ msg
+                   return (False, 1)
+  )
 
 testProperty :: Testable a => String -> a -> Test
 testProperty name p = [(name, runQcTest)]

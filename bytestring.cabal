@@ -130,8 +130,9 @@ test-suite prop-compiled
   type:             exitcode-stdio-1.0
   main-is:          Properties.hs
   hs-source-dirs:   . tests
-  build-depends:    base, deepseq, random, directory,
-                    QuickCheck >= 2.3 && < 3
+  build-depends:    base, deepseq, random, directory
+                  , QuickCheck                 >= 2.3 && < 3
+                  , HUnit                      == 1.2.*
   if impl(ghc >= 6.10)
     build-depends:  ghc-prim
   c-sources:        cbits/fpstring.c
@@ -165,13 +166,15 @@ test-suite test-builder
   hs-source-dirs:   . tests tests/builder
   main-is:          TestSuite.hs
 
-  build-depends:    base, ghc-prim, integer-gmp,
-                    deepseq,
-                    QuickCheck                 >= 2.4 && < 3,
-                    byteorder                  == 1.0.*,
-                    dlist                      == 0.5.*,
-                    directory                  >= 1.0 && < 1.2,
-                    mtl                        == 2.0.*
+  build-depends:    base, ghc-prim, integer-gmp
+                  , deepseq
+                  , QuickCheck                 >= 2.4 && < 3
+                  , HUnit                      == 1.2.*
+                  , byteorder                  == 1.0.*
+                  , dlist                      == 0.5.*
+                  , directory                  >= 1.0 && < 1.2
+                  , mtl                        == 2.0.*
+                  , deepseq                    == 1.2.*
 
 
   ghc-options:      -Wall -fwarn-tabs

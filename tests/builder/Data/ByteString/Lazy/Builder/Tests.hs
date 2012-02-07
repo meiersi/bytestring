@@ -13,10 +13,12 @@
 
 module Data.ByteString.Lazy.Builder.Tests (tests) where
 
+import           Prelude hiding (catch)
 
 import           Control.Applicative
 import           Control.Monad.State
 import           Control.Monad.Writer
+import           Control.DeepSeq (rnf)
 
 import           Foreign (Word, Word8, minusPtr)
 import           System.IO.Unsafe (unsafePerformIO)
@@ -39,7 +41,7 @@ import           Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils
 
 import           Numeric (readHex)
 
-import           Control.Exception (evaluate)
+import           Control.Exception (SomeException, catch, evaluate)
 import           System.IO (openTempFile, hPutStr, hClose, hSetBinaryMode)
 #if MIN_VERSION_base(4,2,0)
 import           System.IO (hSetEncoding, utf8)
@@ -50,10 +52,13 @@ import           TestFramework
 import           Test.QuickCheck
                    ( Arbitrary(..), oneof, choose, listOf, elements )
 import           Test.QuickCheck.Property (printTestCase)
+import           Test.HUnit
+                   ( assertEqual, assertFailure, Assertion )
 
 
 tests :: [Test]
 tests =
+  [ testsLaziness ]++
   [ testBuilderRecipe
 #if MIN_VERSION_base(4,2,0)
   , testHandlePutBuilder
@@ -639,3 +644,46 @@ testsUtf8 =
   [ testBuilderConstr "charUtf8" charUtf8_list charUtf8
   , testBuilderConstr "stringUtf8" (concatMap charUtf8_list) stringUtf8
   ]
+
+------------------------------------------------------------------------------
+-- Testing the laziness properties
+------------------------------------------------------------------------------
+
+testsLaziness :: Test
+testsLaziness = testGroup "laziness"
+  [ testHUnit "does not ignore undefined chunk" $ expectErrorCall $ 
+      toLazyByteString undefinedSecondChunk
+  , testHUnit "head of undefined chunk" $
+      assertEqual "" 1 $
+      L.head $ toLazyByteString undefinedSecondChunk
+  , testHUnit "infinite repetition" $
+      assertEqual "" (L.pack (take 100 (1 : repeat 33))) $
+      L.take 100 $ toLazyByteString infiniteSecondChunk
+  ]
+
+expectErrorCall :: Show a => a -> Assertion
+expectErrorCall x = do 
+       let cs = show x
+       sucess <- (evaluate (rnf cs) >> return False) `catch` handler
+       unless sucess $ assertFailure $ 
+           "expectFailure: successfully computed `" ++ cs ++ "'"
+  where
+    handler :: SomeException -> IO Bool
+    handler = const $ return True
+
+undefinedSecondChunk :: Builder
+undefinedSecondChunk = word8 1 `mappend` (flush `mappend` word8 undefined)
+
+infiniteSecondChunk :: Builder
+infiniteSecondChunk = 
+  word8 1 `mappend` (flush `mappend` foldMap word8 (repeat 33))
+
+{-
+test1 = head $ L.toChunks $ toLazyByteString $ undefinedSecondChunk
+
+test2 = head $ L.toChunks $ snd $ P.toLazyByteString $ P.putBuilder $
+  undefinedSecondChunk
+
+
+test3 = fst $ P.toLazyByteString $ P.putBuilder $ undefinedSecondChunk
+-}

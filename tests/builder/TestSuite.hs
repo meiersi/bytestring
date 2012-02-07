@@ -12,10 +12,10 @@ main = defaultMain tests
 
 tests :: [Test]
 tests =
-  [ testGroup "Data.ByteString.Lazy.Builder"
+  [ testGroup "Builder"
        Data.ByteString.Lazy.Builder.Tests.tests
 
-  , testGroup "Data.ByteString.Lazy.Builder.BasicEncoding"
+  , testGroup "BasicEncoding"
        Data.ByteString.Lazy.Builder.BasicEncoding.Tests.tests
   ]
 

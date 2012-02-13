@@ -29,6 +29,7 @@ import qualified Data.ByteString.Lazy.Builder.BasicEncoding.Internal as EI
 
 import qualified Blaze.ByteString.Builder as Blaze
 import qualified Blaze.Text               as Blaze
+import qualified "bytestring" Data.ByteString      as OldS
 import qualified "bytestring" Data.ByteString.Lazy as OldL
 
 import Foreign
@@ -85,7 +86,11 @@ lazyByteStringData = case S.splitAt (nRepl `div` 2) byteStringData of
 
 {-# NOINLINE byteStringChunksData #-}
 byteStringChunksData :: [S.ByteString]
-byteStringChunksData = map (S.pack . replicate 500 . fromIntegral) intData
+byteStringChunksData = map (S.pack . replicate 1 . fromIntegral) intData
+
+{-# NOINLINE oldByteStringChunksData #-}
+oldByteStringChunksData :: [OldS.ByteString]
+oldByteStringChunksData = map (OldS.pack . replicate 1 . fromIntegral) intData
 
 
 -- benchmark wrappers
@@ -280,7 +285,11 @@ main = do
           let dataName = " byteStringChunks" ++ 
                          show (S.length (head byteStringChunksData)) ++ "Data"
           in
-            [ benchB ("foldMap byteString" ++ dataName) byteStringChunksData
+            [ benchBlaze ("foldMap Blaze.insertByteString" ++ dataName) oldByteStringChunksData
+                (foldMap Blaze.insertByteString)
+            , benchBlaze ("foldMap Blaze.fromByteString" ++ dataName) oldByteStringChunksData
+                (foldMap Blaze.insertByteString)
+            , benchB ("foldMap byteString" ++ dataName) byteStringChunksData
                 (foldMap byteString)
             , benchB ("foldMap byteStringCopy" ++ dataName) byteStringChunksData
                 (foldMap byteStringCopy)

@@ -245,7 +245,7 @@ putChunked
     -- ^ Inner 'Put' action whose chunks must be size-prefixed
     -> Put a
     -- ^ Chunked 'Put' action
-putChunked mkBeforeFE afterBE p =
+putChunked mkBeforeFE afterBE p = undefined {-
     put encodingStep
   where
     reservedAfter, maxReserved, minBufferSize :: Int
@@ -317,6 +317,7 @@ putChunked mkBeforeFE afterBE p =
             insertChunksH opInner' chunks (Just buf) nextInnerStep = do
                 let chunk = sizedChunk $ byteStringFromBuffer buf
                 insertChunksH opInner' (chunks `mappend` chunk) Nothing nextInnerStep
+-}
 
 
 -- | /Heavy inlining./ Prefix a 'Builder' with its size.
@@ -395,7 +396,8 @@ putSizePrefixed
     -- ^ Inner 'Put' action to prefix with its size
     -> Put a
     -- ^ Size-prefixed 'Put' action
-putSizePrefixed strategy mkSizeFE innerP =
+putSizePrefixed strategy mkSizeFE innerP = undefined
+{-
     putBuilder (ensureFree minFree) >> put encodingStep
   where
     -- | The minimal free size is such that we can encode any size.
@@ -497,3 +499,4 @@ runCIOSWithLength =
         io >>= go (l + fromIntegral (S.length bs)) (lbsC . L.Chunk bs)
     go !l lbsC (YieldChunks (SizedChunks n lbsC') io) = 
         io >>= go (l + n) (lbsC . lbsC')
+        -}

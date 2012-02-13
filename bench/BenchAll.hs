@@ -86,11 +86,11 @@ lazyByteStringData = case S.splitAt (nRepl `div` 2) byteStringData of
 
 {-# NOINLINE byteStringChunksData #-}
 byteStringChunksData :: [S.ByteString]
-byteStringChunksData = map (S.pack . replicate 1 . fromIntegral) intData
+byteStringChunksData = map (S.pack . replicate (4 ) . fromIntegral) intData
 
 {-# NOINLINE oldByteStringChunksData #-}
 oldByteStringChunksData :: [OldS.ByteString]
-oldByteStringChunksData = map (OldS.pack . replicate 1 . fromIntegral) intData
+oldByteStringChunksData = map (OldS.pack . replicate (4 ) . fromIntegral) intData
 
 
 -- benchmark wrappers
@@ -227,6 +227,7 @@ main = do
         , benchB' "ensureFree 8"  ()  (const (ensureFree 8))
         , benchB' "intHost 1"     1   intHost
 
+        {-
         , benchB' "encodeChunkedIntHost . intHost $ 1" 1 
             (encodeChunkedIntHost . intHost)
         , benchB' "encodeSizePrefixed . intHost $ 1" 1 
@@ -246,6 +247,7 @@ main = do
             (encodeChunkedHex . intHost)
         , benchB' "encodeSizePrefixedHex intHost $ 1" 1 
             (encodeSizePrefixedHex . intHost)
+        -}
         ]
 
       , bgroup "Encoding wrappers"
@@ -260,6 +262,7 @@ main = do
         , benchB     "encodeLazyByteStringWithF word8" lazyByteStringData $
             E.encodeLazyByteStringWithF E.word8
 
+        {-
         , benchBInts "foldMap (encodeChunkedIntHost . intHost)"
             (foldMap (encodeChunkedIntHost . intHost))
         , benchBInts "foldMap (encodeSizePrefixedIntHost . intHost)"
@@ -279,22 +282,23 @@ main = do
             (foldMap (encodeChunkedDec . intHost))
         , benchBInts "foldMap (encodeSizePrefixedDec . intHost)"
             (foldMap (encodeSizePrefixedDec . intHost))
+        -}
         ]
 
       , bgroup "ByteString insertion" $
           let dataName = " byteStringChunks" ++ 
                          show (S.length (head byteStringChunksData)) ++ "Data"
           in
-            [ benchBlaze ("foldMap Blaze.insertByteString" ++ dataName) oldByteStringChunksData
+            [ benchB ("foldMap byteStringInsert" ++ dataName) byteStringChunksData
+                (foldMap byteStringInsert)
+            , benchBlaze ("foldMap Blaze.insertByteString" ++ dataName) oldByteStringChunksData
                 (foldMap Blaze.insertByteString)
             , benchBlaze ("foldMap Blaze.fromByteString" ++ dataName) oldByteStringChunksData
-                (foldMap Blaze.insertByteString)
+                (foldMap Blaze.fromByteString)
             , benchB ("foldMap byteString" ++ dataName) byteStringChunksData
                 (foldMap byteString)
             , benchB ("foldMap byteStringCopy" ++ dataName) byteStringChunksData
                 (foldMap byteStringCopy)
-            , benchB ("foldMap byteStringInsert" ++ dataName) byteStringChunksData
-                (foldMap byteStringInsert)
             ]
 
       , bgroup "Non-bounded encodings"

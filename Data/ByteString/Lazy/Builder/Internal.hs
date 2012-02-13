@@ -53,13 +53,6 @@ module Data.ByteString.Lazy.Builder.Internal (
   , newBuffer
   , bufferSize
   , byteStringFromBuffer
-  , chunkFromBuffer
-  , trimmedChunkFromBuffer
-
-  -- * Streams of chunks interleaved with IO
-  , SizedChunks(..)
-  , sizedChunk
-  , sizedChunks
 
   , ChunkIOStream(..)
   , buildStepToCIOS
@@ -73,8 +66,7 @@ module Data.ByteString.Lazy.Builder.Internal (
 
   , done
   , bufferFull
-  , insertChunks
-  , insertChunksAndBuffer
+  , insertChunk
 
   , fillWithBuildStep
 
@@ -89,7 +81,7 @@ module Data.ByteString.Lazy.Builder.Internal (
   , append
   , flush
   , ensureFree
-  , sizedChunksInsert
+  -- , sizedChunksInsert
 
   , byteStringCopy
   , byteStringInsert
@@ -131,7 +123,7 @@ module Data.ByteString.Lazy.Builder.Internal (
 
 import           Control.Arrow (second)
 import           Control.Applicative (Applicative(..), (<$>))
-import           Control.Exception (evaluate)
+-- import           Control.Exception (return)
 
 import           Data.Monoid
 import qualified Data.ByteString               as S
@@ -177,19 +169,22 @@ bufferSize :: Buffer -> Int
 bufferSize (Buffer fpbuf (BufferRange _ ope)) =
     ope `minusPtr` unsafeForeignPtrToPtr fpbuf
 
+-- | Allocate a new buffer of the given size.
+{-# INLINE newBuffer #-}
+newBuffer :: Int -> IO Buffer
+newBuffer size = do
+    fpbuf <- S.mallocByteString size
+    let pbuf = unsafeForeignPtrToPtr fpbuf
+    return $! Buffer fpbuf (BufferRange pbuf (pbuf `plusPtr` size))
+
 -- | Convert the filled part of a 'Buffer' to a strict 'S.ByteString'.
 {-# INLINE byteStringFromBuffer #-}
 byteStringFromBuffer :: Buffer -> S.ByteString
 byteStringFromBuffer (Buffer fpbuf (BufferRange op _)) =
     S.PS fpbuf 0 (op `minusPtr` unsafeForeignPtrToPtr fpbuf)
 
--- | Prepend the filled part of a 'Buffer' to a lazy 'L.ByteString'.
-{-# INLINE chunkFromBuffer #-}
-chunkFromBuffer :: Buffer -> L.ByteString -> L.ByteString
-chunkFromBuffer = L.chunk . byteStringFromBuffer
-
--- | Prepend the filled part of a 'Buffer' to a lazy 'L.ByteString'
--- trimming it if necessary.
+--- | Prepend the filled part of a 'Buffer' to a lazy 'L.ByteString'
+--- trimming it if necessary.
 {-# INLINE trimmedChunkFromBuffer #-}
 trimmedChunkFromBuffer :: AllocationStrategy -> Buffer
                        -> L.ByteString -> L.ByteString
@@ -200,59 +195,23 @@ trimmedChunkFromBuffer (AllocationStrategy _ _ trim) buf k
   where
     bs = byteStringFromBuffer buf
 
--- | Allocate a new buffer of the given size.
-{-# INLINE newBuffer #-}
-newBuffer :: Int -> IO Buffer
-newBuffer size = do
-    fpbuf <- S.mallocByteString size
-    let pbuf = unsafeForeignPtrToPtr fpbuf
-    return $! Buffer fpbuf (BufferRange pbuf (pbuf `plusPtr` size))
-
-
 ------------------------------------------------------------------------------
 -- Chunked IO Stream
 ------------------------------------------------------------------------------
 
--- | Chunks of a lazy 'L.ByteString' represented as a difference list together
--- with their total length.
-data SizedChunks =
-         SizedChunks {-# UNPACK #-} !Int64 (L.ByteString -> L.ByteString)
-
--- | Create a 'SizedChunks' from a strict 'S.ByteString'.
-{-# INLINE sizedChunk #-}
-sizedChunk :: S.ByteString -> SizedChunks
-sizedChunk bs = SizedChunks (fromIntegral $ S.length bs) (L.chunk bs)
-
--- | Create 'SizedChunks' from a lazy 'L.ByteString'.
-sizedChunks :: L.ByteString -> SizedChunks
-sizedChunks =
-    go 0 id
-  where
-    go !n lbsC L.Empty          = SizedChunks n lbsC
-    go !n lbsC (L.Chunk bs lbs) =
-        go (n + fromIntegral (S.length bs)) (lbsC . L.Chunk bs) lbs
-
-instance Monoid SizedChunks where
-  {-# INLINE mempty #-}
-  mempty = SizedChunks 0 id
-
-  {-# INLINE mappend #-}
-  mappend (SizedChunks s1 lbsC1) (SizedChunks s2 lbsC2) =
-      SizedChunks (s1 + s2) (lbsC1 . lbsC2)
-
 -- | A stream of chunks that are constructed in the 'IO' monad.
 data ChunkIOStream a =
-       Finished {-# UNPACK #-} !Buffer a
+       Finished Buffer a
        -- ^ The partially filled last buffer together with the result.
      | Yield1 S.ByteString (IO (ChunkIOStream a))
        -- ^ Yield a single, /non-empty/ strict 'S.ByteString'.
-     | YieldChunks {-# UNPACK #-} !SizedChunks (IO (ChunkIOStream a))
-       -- ^ Yield several chunks together with their total size at once.
-       --
-       -- This signal allows complete transfer of control about chunk
-       -- generation to some other algorithm. We use it in
-       -- 'encodeSizePrefixed' in "Data.ByteString.Lazy.Builder.Transformers"
-       -- to efficiently insert a large 'Builder' prefixed with its size.
+
+-- | A smart constructor for yielding one chunk that ignores the chunk if
+-- it is empty.
+{-# INLINE yield1 #-}
+yield1 :: S.ByteString -> IO (ChunkIOStream a) -> IO (ChunkIOStream a)
+yield1 bs cios | S.null bs = cios
+               | otherwise = return $ Yield1 bs cios
 
 -- | Convert a @'ChunkIOStream' ()@ to a lazy 'L.ByteString' using
 -- 'unsafePerformIO'.
@@ -261,10 +220,8 @@ ciosUnitToLazyByteString :: AllocationStrategy
                          -> L.ByteString -> ChunkIOStream () -> L.ByteString
 ciosUnitToLazyByteString strategy k = go
   where
-    go (Finished buf _) = trimmedChunkFromBuffer strategy buf k
-    go (Yield1 bs io)   = L.Chunk bs $ unsafePerformIO (go <$> io)
-    go (YieldChunks (SizedChunks _ lbsC) io) =
-        lbsC $ unsafePerformIO (go <$> io)
+    go (Finished buf _)   = trimmedChunkFromBuffer strategy buf k
+    go (Yield1 bs io) = L.Chunk bs $ unsafePerformIO (go <$> io)
 
 -- | Convert a 'ChunkIOStream' to a lazy tuple of the result and the written
 -- 'L.ByteString' using 'unsafePerformIO'.
@@ -279,8 +236,6 @@ ciosToLazyByteString strategy k =
     go (Finished buf x) =
         second (trimmedChunkFromBuffer strategy buf) $ k x
     go (Yield1 bs io)   = second (L.Chunk bs) $ unsafePerformIO (go <$> io)
-    go (YieldChunks (SizedChunks _ lbsC) io) =
-        second lbsC $ unsafePerformIO (go <$> io)
 
 ------------------------------------------------------------------------------
 -- Build signals
@@ -292,22 +247,17 @@ ciosToLazyByteString strategy k =
 type BuildStep a = BufferRange -> IO (BuildSignal a)
 
 -- | 'BuildSignal's abstract signals to the caller of a 'BuildStep'. There are
--- four signals: 'done', 'bufferFull', 'insertChunks', and
--- 'insertChunksAndBuffer'.
+-- three signals: 'done', 'bufferFull', or 'insertChunks signals
 data BuildSignal a =
     Done {-# UNPACK #-} !(Ptr Word8) a
   | BufferFull
       {-# UNPACK #-} !Int
       {-# UNPACK #-} !(Ptr Word8)
-                     !(BuildStep a)
-  | InsertChunks
+                     (BuildStep a)
+  | InsertChunk
       {-# UNPACK #-} !(Ptr Word8)
-      {-# UNPACK #-} !SizedChunks
-                     !(Maybe Buffer)  
-                     -- possibly, a last buffer that was partially filled.
-                     -- This is used in 'encodeSizePrefixed' to avoid half
-                     -- filled buffers.
-                     !(BuildStep a)
+                     S.ByteString
+                     (BuildStep a)
 
 -- | Signal that the current 'BuildStep' is done and has computed a value.
 {-# INLINE done #-}
@@ -330,33 +280,17 @@ bufferFull :: Int
            -> BuildSignal a
 bufferFull = BufferFull
 
--- | Signal that several chunks should be inserted directly.
-{-# INLINE insertChunks #-}
-insertChunks :: Ptr Word8
+
+-- | Signal that a 'S.ByteString' chunk should be inserted directly.
+{-# INLINE insertChunk #-}
+insertChunk :: Ptr Word8
             -- ^ Next free byte in current 'BufferRange'
-            -> SizedChunks
-            -- ^ Chunks annotated with their size to insert.
+            -> S.ByteString
+            -- ^ Chunk to insert.
             -> BuildStep a
             -- ^ 'BuildStep' to run on next 'BufferRange'
             -> BuildSignal a
-insertChunks op chunks = InsertChunks op chunks Nothing
-
--- | Signal that several chunks should be inserted directly and a last buffer
--- that was partially filled is available.
---
--- See 'putSizePrefixed' in "Data.ByteString.Lazy.Builder.Transformers" for an
--- example use.
-{-# INLINE insertChunksAndBuffer #-}
-insertChunksAndBuffer :: Ptr Word8
-                      -- ^ Next free byte in current 'BufferRange'
-                      -> SizedChunks
-                      -- ^ Chunks annotated with their size to insert.
-                      -> Buffer
-                      -- ^ Last, partially filled buffer.
-                      -> BuildStep a
-                      -- ^ 'BuildStep' to run on next 'BufferRange'
-                      -> BuildSignal a
-insertChunksAndBuffer op chunks buf = InsertChunks op chunks (Just buf)
+insertChunk op bs = InsertChunk op bs
 
 
 -- | Fill a 'BufferRange' using a 'BuildStep'.
@@ -368,8 +302,8 @@ fillWithBuildStep
     -- ^ Handling the 'done' signal
     -> (Ptr Word8 -> Int -> BuildStep a -> IO b)
     -- ^ Handling the 'bufferFull' signal
-    -> (Ptr Word8 -> SizedChunks -> Maybe Buffer -> BuildStep a -> IO b)
-    -- ^ Handling the 'insertChunks' and 'insertChunksAndBuffer' signals
+    -> (Ptr Word8 -> S.ByteString -> BuildStep a -> IO b)
+    -- ^ Handling the 'insertChunk' signal
     -> BufferRange
     -- ^ Buffer range to fill.
     -> IO b
@@ -377,10 +311,9 @@ fillWithBuildStep
 fillWithBuildStep step fDone fFull fChunk !br = do
     signal <- step br
     case signal of
-        Done op x                              -> fDone op x
-        BufferFull minSize op nextStep         -> fFull op minSize nextStep
-        InsertChunks op chunks mayBuf nextStep ->
-              fChunk op chunks mayBuf nextStep
+        Done op x                      -> fDone op x
+        BufferFull minSize op nextStep -> fFull op minSize nextStep
+        InsertChunk op bs nextStep     -> fChunk op bs nextStep
 
 
 ------------------------------------------------------------------------------
@@ -399,8 +332,7 @@ newtype Builder = Builder (forall r. BuildStep r -> BuildStep r)
 builder :: (forall r. BuildStep r -> BuildStep r)
         -- ^ A function that fills a 'BufferRange', calls the continuation with
         -- the updated 'BufferRange' once its done, and signals its caller how
-        -- to proceed using 'done', 'bufferFull', 'insertChunks', or
-        -- 'insertChunksAndBuffer'.
+        -- to proceed using 'done', 'bufferFull', or 'insertChunk'.
         --
         -- This function must be referentially transparent; i.e., calling it
         -- multiple times with equally sized 'BufferRange's must result in the
@@ -416,7 +348,7 @@ builder = Builder
 
 -- | The final build step that returns the 'done' signal.
 finalBuildStep :: BuildStep ()
-finalBuildStep !(BufferRange op _) = evaluate $ Done op ()
+finalBuildStep !(BufferRange op _) = return $ Done op ()
 
 -- | Run a 'Builder' with the 'finalBuildStep'.
 {-# INLINE runBuilder #-}
@@ -453,12 +385,11 @@ instance Monoid Builder where
   mconcat = foldr mappend mempty
 
 -- | Flush the current buffer. This introduces a chunk boundary.
---
 {-# INLINE flush #-}
 flush :: Builder
 flush = builder step
   where
-    step k !(BufferRange op _) = return $ insertChunks op mempty k
+    step k !(BufferRange op _) = return $ insertChunk op S.empty k
 
 
 ------------------------------------------------------------------------------
@@ -490,8 +421,8 @@ newtype Put a = Put { unPut :: forall r. (a -> BuildStep r) -> BuildStep r }
 put :: (forall r. (a -> BuildStep r) -> BuildStep r)
        -- ^ A function that fills a 'BufferRange', calls the continuation with
        -- the updated 'BufferRange' and its computed value once its done, and
-       -- signals its caller how to proceed using 'done', 'bufferFull',
-       -- 'insertChunks', or 'insertChunksAndBuffer'.
+       -- signals its caller how to proceed using 'done', 'bufferFull', or
+       -- 'insertChunk' signals.
        --
     -- This function must be referentially transparent; i.e., calling it
     -- multiple times with equally sized 'BufferRange's must result in the
@@ -512,7 +443,7 @@ runPut :: Put a       -- ^ Put to run
        -> BuildStep a -- ^ 'BuildStep' that first writes the byte stream of
                       -- this 'Put' and then yields the computed value using
                       -- the 'done' signal.
-runPut (Put p) = p $ \x (BufferRange op _) -> evaluate $ Done op x
+runPut (Put p) = p $ \x (BufferRange op _) -> return $ Done op x
 
 instance Functor Put where
   fmap f p = Put $ \k -> unPut p (\x -> k (f x))
@@ -701,7 +632,7 @@ hPut h p = do
                     ]
               | otherwise = do
                   let !br = BufferRange op (pBuf `plusPtr` IO.bufSize buf)
-                  res <- fillWithBuildStep step doneH fullH insertChunksH br
+                  res <- fillWithBuildStep step doneH fullH insertChunkH br
                   touchForeignPtr fpBuf
                   return res
               where
@@ -733,12 +664,10 @@ hPut h p = do
                     -- really less than 'minSize' space left) before executing
                     -- the 'nextStep'.
 
-                insertChunksH op' (SizedChunks _ lbsC) mayBuf nextStep = do
+                insertChunkH op' bs nextStep = do
                     updateBufR op'
                     return $ do
-                        L.foldrChunks (\c rest -> S.hPut h c >> rest) (return ())
-                                      (lbsC L.Empty)
-                        maybe (return ()) (S.hPut h . byteStringFromBuffer) mayBuf
+                        S.hPut h bs
                         fillHandle 1 nextStep
 #else
 hPut h p =
@@ -748,8 +677,6 @@ hPut h p =
 
     go (Finished buf x) = S.hPut h (byteStringFromBuffer buf) >> return x
     go (Yield1 bs io)   = S.hPut h bs >> io >>= go
-    go (YieldChunks (SizedChunks _ lbsC) io) =
-        L.hPut h (lbsC L.Empty) >> io >>= go
 #endif
 
 ------------------------------------------------------------------------------
@@ -789,19 +716,6 @@ wrappedBytesCopyStep !(BufferRange ip0 ipe) k =
         inpRemaining = ipe `minusPtr` ip
 
 
--- Sized chunks insertion
-------------------------------------------------------------------------------
-
--- | Insert some 'SizedChunks' directly.
-{-# INLINE sizedChunksInsert #-}
-sizedChunksInsert :: SizedChunks -> Maybe Buffer -> Builder
-sizedChunksInsert =
-    \chunks mayBuf -> builder $ step chunks mayBuf
-  where
-    step chunks mayBuf k !(BufferRange op _) = 
-        return $ InsertChunks op chunks mayBuf k
-
-
 -- Strict ByteStrings
 ------------------------------------------------------------------------------
 
@@ -822,8 +736,7 @@ byteStringThreshold maxCopySize =
   where
     step !bs@(S.PS _ _ len) !k br@(BufferRange !op _)
       | len <= maxCopySize = byteStringCopyStep bs k br
-      | otherwise          =
-          evaluate $ insertChunks op (sizedChunk bs) k
+      | otherwise          = return $ insertChunk op bs k
 
 -- | Construct a 'Builder' that copies the strict 'S.ByteString'.
 --
@@ -861,7 +774,8 @@ byteStringCopyStep (S.PS ifp ioff isize) !k0 br0@(BufferRange op ope)
 --
 {-# INLINE byteStringInsert #-}
 byteStringInsert :: S.ByteString -> Builder
-byteStringInsert = flip sizedChunksInsert Nothing . sizedChunk
+byteStringInsert = 
+    \bs -> builder $ \k (BufferRange op _) -> return $ insertChunk op bs k
 
 
 -- Lazy bytestrings
@@ -889,7 +803,8 @@ lazyByteStringCopy =
 --
 {-# INLINE lazyByteStringInsert #-}
 lazyByteStringInsert :: L.ByteString -> Builder
-lazyByteStringInsert = flip sizedChunksInsert Nothing . sizedChunks
+lazyByteStringInsert =
+    L.foldrChunks (\bs b -> byteStringInsert bs `mappend` b) mempty
 
 -- | Create a 'Builder' denoting the same sequence of bytes as a strict
 -- 'S.ByteString'.
@@ -935,7 +850,11 @@ maximalCopySize = 2 * L.smallChunkSize
 -- are of size @bufSize@, and a buffer of size @n@ filled with @k@ bytes should
 -- be trimmed iff @trim k n@ is 'True'.
 data AllocationStrategy = AllocationStrategy
-         (IO Buffer)          -- provider of the first buffer
+         (Maybe (Buffer, Int) -> IO Buffer)
+         -- Provide a new buffer. If 'Nothing' is given, then a new first
+         -- buffer should be allocated. If 'Just (oldBuf, minSize)' is
+         -- given, then a buffer with minimal size 'minSize' needs to be
+         -- returned. The 'oldBuffer' may be reused in an unsafe strategy.
          {-# UNPACK #-} !Int  -- buffer size
          (Int -> Int -> Bool) -- trim
 
@@ -954,8 +873,11 @@ untrimmedStrategy :: Int -- ^ Size of the first buffer
                   -- ^ An allocation strategy that does not trim any of the
                   -- filled buffers before converting it to a chunk
 untrimmedStrategy firstSize bufSize =
-    AllocationStrategy (newBuffer $ sanitize firstSize) (sanitize bufSize)
-                       (\_ _ -> False)
+    AllocationStrategy nextBuffer (sanitize bufSize) (\_ _ -> False)
+  where
+    {-# INLINE nextBuffer #-}
+    nextBuffer Nothing             = newBuffer $ sanitize firstSize
+    nextBuffer (Just (_, minSize)) = newBuffer minSize
 
 
 -- | Use this strategy for generating lazy 'L.ByteString's whose chunks are
@@ -968,8 +890,12 @@ safeStrategy :: Int  -- ^ Size of first buffer
              -- ^ An allocation strategy that guarantees that at least half
              -- of the allocated memory is used for live data
 safeStrategy firstSize bufSize =
-    AllocationStrategy (newBuffer $ sanitize firstSize) (sanitize bufSize)
-                       (\used size -> 2*used < size)
+    AllocationStrategy nextBuffer (sanitize bufSize) trim
+  where
+    trim used size                 = 2 * used < size
+    {-# INLINE nextBuffer #-}
+    nextBuffer Nothing             = newBuffer $ sanitize firstSize
+    nextBuffer (Just (_, minSize)) = newBuffer minSize
 
 -- | /Heavy inlining./ Execute a 'Builder' with custom execution parameters.
 --
@@ -1019,44 +945,42 @@ buildStepToCIOS
     :: AllocationStrategy          -- ^ Buffer allocation strategy to use
     -> BuildStep a                 -- ^ 'BuildStep' to execute
     -> IO (ChunkIOStream a)
-buildStepToCIOS (AllocationStrategy getFirstBuf bufSize trim) =
-    \step -> getFirstBuf >>= fill step
+buildStepToCIOS !strategy@(AllocationStrategy nextBuffer bufSize trim) =
+    \step -> nextBuffer Nothing >>= fill step
   where
-    fill !step !buf@(Buffer fpbuf br@(BufferRange _ pe)) = do
-        res <- fillWithBuildStep step doneH fullH insertChunksH br
+    fill !step !buf@(Buffer fpbuf br@(BufferRange op pe)) = do
+        res <- fillWithBuildStep step doneH fullH insertChunkH br
         touchForeignPtr fpbuf
         return res
       where
         pbuf = unsafeForeignPtrToPtr fpbuf
 
-        doneH op' x = evaluate $
+        doneH op' x = return $
             Finished (Buffer fpbuf (BufferRange op' pe)) x
 
         fullH op' minSize nextStep =
-            wrapChunk op' (const $ newBuffer (max minSize bufSize) >>=
-                                   fill nextStep)
+            wrapChunk op' $ const $ 
+                nextBuffer (Just (buf, max minSize bufSize)) >>= fill nextStep
 
-        insertChunksH op' chunks mayBuf nextStep =
-            wrapChunk op' $ \isEmpty -> evaluate $ YieldChunks chunks $
+        insertChunkH op' bs nextStep =
+            wrapChunk op' $ \isEmpty -> yield1 bs $
                 -- Checking for empty case avoids allocating 'n-1' empty
-                -- buffers for 'n' insertChunksH right after each other.
-                case mayBuf of
-                  Nothing | isEmpty   -> fill nextStep buf
-                          | otherwise -> newBuffer bufSize >>= fill nextStep
-                  Just buf'           -> fill nextStep buf'
+                -- buffers for 'n' insertChunkH right after each other.
+                if isEmpty 
+                  then fill nextStep buf
+                  else do buf' <- nextBuffer (Just (buf, bufSize))
+                          fill nextStep buf'
 
-        -- Yield a chunk, trimming it if necesary
+        -- Wrap and yield a chunk, trimming it if necesary
         {-# INLINE wrapChunk #-}
         wrapChunk !op' mkCIOS
-          | pe < op'            = error $
-              "buildStepToCIOS: overwrite by " ++ show (op' `minusPtr` pe) ++ " bytes"
           | chunkSize == 0      = mkCIOS True
           | trim chunkSize size = do
               bs <- S.create chunkSize $ \pbuf' ->
                         copyBytes pbuf' pbuf chunkSize
-              evaluate $ Yield1 bs (mkCIOS False)
+              return $ Yield1 bs (mkCIOS False)
           | otherwise            =
-              evaluate $ Yield1 (S.PS fpbuf 0 chunkSize) (mkCIOS False)
+              return $ Yield1 (S.PS fpbuf 0 chunkSize) (mkCIOS False)
           where
             chunkSize = op' `minusPtr` pbuf
             size      = pe  `minusPtr` pbuf

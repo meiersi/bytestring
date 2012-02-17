@@ -35,11 +35,8 @@ import           Data.ByteString.Lazy.Builder.Extras
 import           Data.ByteString.Lazy.Builder.ASCII
 import           Data.ByteString.Lazy.Builder.Internal (Put, putBuilder, fromPut)
 import qualified Data.ByteString.Lazy.Builder.Internal             as BI
-import           Data.ByteString.Lazy.Builder.BasicEncoding ((>$<), pairF)
 import qualified Data.ByteString.Lazy.Builder.BasicEncoding        as BE
 import           Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils
-
-import           Numeric (readHex)
 
 import           Control.Exception (SomeException, catch, evaluate)
 import           System.IO (openTempFile, hPutStr, hClose, hSetBinaryMode)
@@ -354,22 +351,6 @@ testsEncodingToBuilder :: [Test]
 testsEncodingToBuilder =
   [ test_encodeUnfoldrF
   , test_encodeUnfoldrB
-
-  , compareImpls "encodeSize/Chunked/Size/Chunked (recipe)"
-        (testBuilder id)
-        (
-          parseChunks parseHexLen .
-          parseSizePrefix parseHexLen .
-          parseChunks parseBase128LE .
-          parseSizePrefix parseHexLen .
-          testBuilder (
-            prefixHexSize .
-            encodeBase128LE .
-            prefixHexSize .
-            encodeHex
-          )
-        )
-
   ]
 
 
@@ -398,73 +379,6 @@ test_encodeUnfoldrB =
       where
         go []     = Nothing
         go (c:cs) = Just (c, cs)
-
-
--- Chunked encoding and size prefix
------------------------------------
-
-testBuilder :: (Builder -> Builder) -> Recipe -> L.ByteString
-testBuilder f recipe =
-    toLBS (f b)
-  where
-    (b, toLBS) = recipeComponents $ clearTail recipe
-    -- need to remove tail of recipe to have a tighter
-    -- check on encodeSizePrefixed
-    clearTail (Recipe how firstSize otherSize _ as) =
-        Recipe how firstSize otherSize L.empty as
-
--- | Chunked encoding using base-128, variable-length encoding for the
--- chunk-size.
-encodeBase128LE :: Builder -> Builder
-encodeBase128LE =
-    (`mappend` BE.encodeWithF BE.word8 0)
-  . (encodeChunked word64Base128LEPadded BE.emptyB)
-
--- | Chunked encoding using 0-padded, space-terminated hexadecimal numbers
--- for encoding the chunk-size.
-encodeHex :: Builder -> Builder
-encodeHex =
-    (`mappend` BE.encodeWithF (hexLen 0) 0)
-  . (encodeChunked hexLen BE.emptyB)
-
-hexLen :: PaddedSizeEncoding
-hexLen bound =
-  (\x -> (x, ' ')) >$< (word64HexPadded '0' bound `pairF` BE.char8)
-
-parseHexLen :: [Word8] -> (Int, [Word8])
-parseHexLen ws = case span (/= 32) ws of
-  (lenWS, 32:ws') -> case readHex (map (chr . fromIntegral) lenWS) of
-    [(len, [])] -> (len, ws')
-    _          -> error $ "hex parse failed: " ++ show ws
-  (_,   _) -> error $ "unterminated hex-length:" ++ show ws
-
-parseChunks :: ([Word8] -> (Int, [Word8])) -> L.ByteString -> L.ByteString
-parseChunks parseLen =
-    L.pack . go . L.unpack
-  where
-    go ws
-      | chunkLen == 0          = rest
-      | chunkLen <= length ws' = chunk ++ go rest
-      | otherwise              = error $ "too few bytes: " ++ show ws
-      where
-        (chunkLen, ws') = parseLen ws
-        (chunk, rest)   = splitAt chunkLen ws'
-
-
--- | Prefix with size. We use an inner buffer size of 77 (almost primes are good) to
--- get several buffer full signals.
-prefixHexSize :: Builder -> Builder
-prefixHexSize = encodeSizePrefixed (untrimmedStrategy 73 77) hexLen
-
-parseSizePrefix :: ([Word8] -> (Int, [Word8])) -> L.ByteString -> L.ByteString
-parseSizePrefix parseLen =
-    L.pack . go . L.unpack
-  where
-    go ws
-      | len <= length ws'  = take len ws'
-      | otherwise          = error $ "too few bytes: " ++ show (len, ws, ws')
-      where
-        (len, ws') = parseLen ws
 
 
 ------------------------------------------------------------------------------

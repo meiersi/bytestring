@@ -17,12 +17,9 @@ import           Control.Arrow (first)
 import           Data.Char  (ord)
 import qualified Data.ByteString.Lazy                                 as L
 import           Data.ByteString.Lazy.Builder
-import           Data.ByteString.Lazy.Builder.Extras
 import           Data.ByteString.Lazy.Builder.BasicEncoding ((>$<), pairB)
 import qualified Data.ByteString.Lazy.Builder.BasicEncoding           as BE
 import           Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils
-
-import           Numeric (showHex)
 
 import           Foreign
 
@@ -102,8 +99,6 @@ testsBinary =
     , prop_zigZag_parseable  "intZigZagBase128LE"    unZigZagInt   BE.intZigZagBase128LE
     ]
 
-  , testPaddedF "word64Base128LEPadded" word64Base128LEPadded_list  word64Base128LEPadded
-
   ]
 
 
@@ -177,35 +172,6 @@ prop_zigZag_parseable :: (Arbitrary t, Bits b, Show t, Eq t)
 prop_zigZag_parseable name unZig be =
   compareImpls name (\x -> (x, [])) (first unZig . parseBase128LE . BE.evalB be)
 
--- | Variable length encoding to a fixed number of bytes (pad / truncate).
-genBase128LEPadded_list :: (Ord a, Num a, Bits a, Integral a)
-                 => Int
-                 -> a -> [Word8]
-genBase128LEPadded_list n x
-  | n <= 1    = sevenBits            : []
-  | otherwise = (sevenBits .|. 0x80) : genBase128LEPadded_list (n - 1) (x `shiftR` 7)
-  where
-    sevenBits = fromIntegral x .&. 0x7f
-
-wordBase128LEPadded_list :: Word -> Word -> [Word8]
-wordBase128LEPadded_list bound =
-    genBase128LEPadded_list (length $ genBase128LE_list bound)
-
-word64Base128LEPadded_list :: Word64 -> Word64 -> [Word8]
-word64Base128LEPadded_list bound =
-    genBase128LEPadded_list (length $ genBase128LE_list bound)
-
--- Somehow this function doesn't really make sense, as the bound must be
--- greater when interpreted as an unsigned integer.
-
-intBase128LEPadded_list :: Int -> Int -> [Word8]
-intBase128LEPadded_list bound =
-    wordBase128LEPadded_list (fromIntegral bound) . fromIntegral
-
-int64Base128LEPadded_list :: Int64 -> Int64 -> [Word8]
-int64Base128LEPadded_list bound =
-    wordBase128LEPadded_list (fromIntegral bound) . fromIntegral
-
 
 ------------------------------------------------------------------------------
 -- Latin-1  aka  Char8
@@ -255,36 +221,7 @@ testsASCII =
   , testF "floatHexFixed"  floatHexFixed_list  BE.floatHexFixed
   , testF "doubleHexFixed" doubleHexFixed_list BE.doubleHexFixed
 
-  , testPaddedF "word64DecPadded"
-      (genDecPadded_list 'x') (word64DecPadded 'x')
-
-  , testPaddedF "word64HexPadded"
-      (genHexPadded_list 'x') (word64HexPadded 'x')
   ]
-
--- | PRE: positive bound and value.
-genDecPadded_list :: (Show a, Integral a)
-                      => Char    -- ^ Padding character.
-                      -> a       -- ^ Max value to be encoded.
-                      -> a       -- ^ Value to encode.
-                      -> [Word8]
-genDecPadded_list padChar bound =
-    encodeASCII . pad . show
-  where
-    n      = length $ show bound
-    pad cs = replicate (n - length cs) padChar ++ cs
-
--- | PRE: positive bound and value.
-genHexPadded_list :: (Show a, Integral a)
-                      => Char    -- ^ Padding character.
-                      -> a       -- ^ Max value to be encoded.
-                      -> a       -- ^ Value to encode.
-                      -> [Word8]
-genHexPadded_list padChar bound =
-    encodeASCII . pad . (`showHex` "")
-  where
-    n      = length $ (`showHex` "") bound
-    pad cs = replicate (n - length cs) padChar ++ cs
 
 
 ------------------------------------------------------------------------------

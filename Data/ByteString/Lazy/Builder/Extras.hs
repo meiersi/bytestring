@@ -115,23 +115,10 @@ The following encodings implement the combintion of ZigZag encoding
     , int64ZigZagBase128LE
     , intZigZagBase128LE
 
-    -- * Prefixing Builders with their (chunk) size
-    -- | (Almost) zero-copy algorithms for prefixing 'Builder's with their
-    -- (chunk) sizes.
-
-    , encodeSizePrefixed
-    , encodeChunked
-
-    , PaddedSizeEncoding
-    , word64Base128LEPadded
-    , word64HexPadded
-    , word64DecPadded
-
     ) where
 
 
 import           Data.ByteString.Lazy.Builder.Internal
-import           Data.ByteString.Lazy.Builder.Transformers
 import qualified Data.ByteString.Lazy.Builder.BasicEncoding as E
 
 import           Foreign

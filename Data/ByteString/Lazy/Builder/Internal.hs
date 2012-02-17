@@ -1,5 +1,4 @@
 {-# LANGUAGE ScopedTypeVariables, CPP, BangPatterns, Rank2Types #-}
-{-# OPTIONS_HADDOCK hide #-}
 -- | Copyright : (c) 2010 - 2011 Simon Meier
 -- License     : BSD3-style (see LICENSE)
 --
@@ -945,10 +944,10 @@ buildStepToCIOS
     :: AllocationStrategy          -- ^ Buffer allocation strategy to use
     -> BuildStep a                 -- ^ 'BuildStep' to execute
     -> IO (ChunkIOStream a)
-buildStepToCIOS !strategy@(AllocationStrategy nextBuffer bufSize trim) =
+buildStepToCIOS !(AllocationStrategy nextBuffer bufSize trim) =
     \step -> nextBuffer Nothing >>= fill step
   where
-    fill !step !buf@(Buffer fpbuf br@(BufferRange op pe)) = do
+    fill !step !buf@(Buffer fpbuf br@(BufferRange _ pe)) = do
         res <- fillWithBuildStep step doneH fullH insertChunkH br
         touchForeignPtr fpbuf
         return res

@@ -173,44 +173,6 @@ void _hs_bytestring_long_long_int_dec_padded18 (long long int x, char* buf)
     while (buf < ptr) { *(--ptr) = '0'; }
 }
 
-// Fixed-width, decimal, positive integers for chunking/size-prefixing
-//////////////////////////////////////////////////////////////////////
-
-// Encode 'x' as a decimal number of width 'len'. If padding is required, then
-// pad_char is used. If the number would overflow, then its topmost digits are
-// truncated.
-// PRE: len >= 1
-void _hs_bytestring_word64DecFixed (char pad_char, int len, unsigned long long int x, char* buf)
-{
-    unsigned long long int x_tmp;
-
-    // encode number 
-    do {
-        x_tmp = x;
-        x /= 10;
-        buf[--len] = digits[x_tmp - x * 10];
-    } while (x > 0 && len > 0);
-
-    // pad the remaining characters
-    while (len > 0) buf[--len] = pad_char;
-}
-
-// Encode 'x' as a decimal number of width 'len'. If padding is required, then
-// pad_char is used. If the number would overflow, then its topmost digits are
-// truncated.
-// PRE: len >= 1
-void _hs_bytestring_word64HexFixed (char pad_char, int len, unsigned long long int x, char* buf)
-{
-    // encode number 
-    do {
-        buf[--len] = digits[x & 0xf];
-        x >>= 4;
-    } while (x > 0 && len > 0);
-
-    // pad the remaining characters
-    while (len > 0) buf[--len] = pad_char;
-}
-
 ///////////////////////
 // Hexadecimal encoding
 ///////////////////////

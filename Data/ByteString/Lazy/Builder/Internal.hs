@@ -36,15 +36,6 @@
 -- Note that there are /no safety belts/ at all, when implementing a 'Builder'
 -- using an 'IO' action: you are writing code that might enable the next
 -- buffer-overlow attack on a Haskell server!
---
--- Note that the main motivation behind the infrastructure for 'Buffer'
--- management, 'SizedChunks', and 'ChunkIOStream's stems from the desire to
--- implement a 'Builder' transformer that efficiently prefixes a 'Builder'
--- with the size of its represented data both when the data is small and when
--- the data is large. See "Data.ByteString.Lazy.Builder.Transformers".
--- As a side-effect of this implementation effort, implementing an
--- 'enumerator' that converts 'Builder's to strict 'S.ByteString's while
--- ensuring that all buffers are filled as good as possible, becomes trivial.
 module Data.ByteString.Lazy.Builder.Internal (
   -- * Buffer management
     Buffer(..)
@@ -99,6 +90,7 @@ module Data.ByteString.Lazy.Builder.Internal (
   , AllocationStrategy
   , safeStrategy
   , untrimmedStrategy
+  , customStrategy
   , L.smallChunkSize
   , L.defaultChunkSize
   , L.chunkOverhead
@@ -201,11 +193,16 @@ trimmedChunkFromBuffer (AllocationStrategy _ _ trim) buf k
 ------------------------------------------------------------------------------
 
 -- | A stream of chunks that are constructed in the 'IO' monad.
+--
+-- This datatype serves as the common interface for the buffer-by-buffer
+-- execution of a 'BuildStep' by 'buildStepToCIOS'. Typical users of this
+-- interface are 'ciosToLazyByteString' or iteratee-style libraries like
+-- @enumerator@.
 data ChunkIOStream a =
        Finished Buffer a
        -- ^ The partially filled last buffer together with the result.
      | Yield1 S.ByteString (IO (ChunkIOStream a))
-       -- ^ Yield a single, /non-empty/ strict 'S.ByteString'.
+       -- ^ Yield a /non-empty/ strict 'S.ByteString'.
 
 -- | A smart constructor for yielding one chunk that ignores the chunk if
 -- it is empty.
@@ -221,8 +218,8 @@ ciosUnitToLazyByteString :: AllocationStrategy
                          -> L.ByteString -> ChunkIOStream () -> L.ByteString
 ciosUnitToLazyByteString strategy k = go
   where
-    go (Finished buf _)   = trimmedChunkFromBuffer strategy buf k
-    go (Yield1 bs io) = L.Chunk bs $ unsafePerformIO (go <$> io)
+    go (Finished buf _) = trimmedChunkFromBuffer strategy buf k
+    go (Yield1 bs io)   = L.Chunk bs $ unsafePerformIO (go <$> io)
 
 -- | Convert a 'ChunkIOStream' to a lazy tuple of the result and the written
 -- 'L.ByteString' using 'unsafePerformIO'.
@@ -932,12 +929,26 @@ maximalCopySize = 2 * L.smallChunkSize
 -- be trimmed iff @trim k n@ is 'True'.
 data AllocationStrategy = AllocationStrategy
          (Maybe (Buffer, Int) -> IO Buffer)
-         -- Provide a new buffer. If 'Nothing' is given, then a new first
-         -- buffer should be allocated. If 'Just (oldBuf, minSize)' is
-         -- given, then a buffer with minimal size 'minSize' needs to be
-         -- returned. The 'oldBuffer' may be reused in an unsafe strategy.
-         {-# UNPACK #-} !Int  -- buffer size
-         (Int -> Int -> Bool) -- trim
+         {-# UNPACK #-} !Int 
+         (Int -> Int -> Bool)
+
+-- | Create a custom allocation strategy. See the code for 'safeStrategy' and
+-- 'untrimmedStrategy' for examples.
+{-# INLINE customStrategy #-}
+customStrategy
+  :: (Maybe (Buffer, Int) -> IO Buffer)
+     -- ^ Buffer allocation function. If 'Nothing' is given, then a new first
+     -- buffer should be allocated. If @'Just' (oldBuf, minSize)@ is given,
+     -- then a buffer with minimal size 'minSize' must be returned. The
+     -- strategy may reuse the 'oldBuffer', if it can guarantee that this
+     -- referentially transparent and 'oldBuffer' is large enough.
+  -> Int
+     -- ^ Default buffer size.
+  -> (Int -> Int -> Bool)
+     -- ^ A predicate @trim used allocated@ returning 'True', if the buffer
+     -- should be trimmed before it is returned.
+  -> AllocationStrategy
+customStrategy = AllocationStrategy
 
 -- | Sanitize a buffer size; i.e., make it at least the size of an 'Int'.
 {-# INLINE sanitize #-}
@@ -1059,6 +1070,7 @@ buildStepToCIOS !(AllocationStrategy nextBuffer bufSize trim) =
           | trim chunkSize size = do
               bs <- S.create chunkSize $ \pbuf' ->
                         copyBytes pbuf' pbuf chunkSize
+              -- FIXME: We could reuse the trimmed buffer here.
               return $ Yield1 bs (mkCIOS False)
           | otherwise            =
               return $ Yield1 (S.PS fpbuf 0 chunkSize) (mkCIOS False)

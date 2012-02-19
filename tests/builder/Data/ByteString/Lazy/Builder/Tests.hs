@@ -573,6 +573,9 @@ testsLaziness = testGroup "laziness"
   , testHUnit "infinite repetition" $
       assertEqual "" (L.pack (take 100 (1 : repeat 33))) $
       L.take 100 $ toLazyByteString infiniteSecondChunk
+  , testHUnit "infinite put" $
+      assertEqual "" (L.pack (take 100 (1 : repeat 33))) $
+      L.take 100 $ snd $ BI.putToLazyByteString infinitePut
   ]
 
 expectErrorCall :: Show a => a -> Assertion
@@ -592,12 +595,8 @@ infiniteSecondChunk :: Builder
 infiniteSecondChunk = 
   word8 1 `mappend` (flush `mappend` foldMap word8 (repeat 33))
 
-{-
-test1 = head $ L.toChunks $ toLazyByteString $ undefinedSecondChunk
-
-test2 = head $ L.toChunks $ snd $ P.toLazyByteString $ P.putBuilder $
-  undefinedSecondChunk
-
-
-test3 = fst $ P.toLazyByteString $ P.putBuilder $ undefinedSecondChunk
--}
+infinitePut :: BI.Put Word8
+infinitePut = do
+    BI.putBuilder (word8 1)
+    sequence_ (repeat (BI.putBuilder (word8 33)))
+    return 0

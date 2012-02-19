@@ -685,7 +685,7 @@ hPut h p =
 -- the bytes. For example, given
 --
 -- @
---infinitePut = mapM_ (repeat (putBuilder (word8 1))) >> return 0
+--infinitePut = sequence_ (repeat (putBuilder (word8 1))) >> return 0
 -- @
 --
 -- evaluating the expression

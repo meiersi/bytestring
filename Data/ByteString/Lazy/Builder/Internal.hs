@@ -109,6 +109,8 @@ module Data.ByteString.Lazy.Builder.Internal (
   , runPut
 
   -- ** Execution
+  , putToLazyByteString
+  , putToLazyByteStringWith
   , hPut
 
   -- ** Conversion to and from Builders
@@ -402,10 +404,11 @@ flush = builder step
 --
 -- 'Put's are a generalization of 'Builder's. The typical use case is the
 -- implementation of an encoding that might fail (e.g., an interface to the
--- 'zlib' compression library). For a 'Builder', the only way to handle and
--- report such a failure is ignore it or call 'error'.  In contrast, 'Put'
--- actions are expressive enough to allow reportng and handling such a failure
--- in a pure fashion.
+-- 'zlib' compression library or the conversion from Base64 encoded data to
+-- 8-bit data). For a 'Builder', the only way to handle and report such a
+-- failure is ignore it or call 'error'.  In contrast, 'Put' actions are
+-- expressive enough to allow reportng and handling such a failure in a pure
+-- fashion.
 --
 -- @'Put' ()@ actions are isomorphic to 'Builder's. The functions 'putBuilder'
 -- and 'fromPut' convert between these two types. Where possible, you should
@@ -677,6 +680,85 @@ hPut h p =
     go (Finished buf x) = S.hPut h (byteStringFromBuffer buf) >> return x
     go (Yield1 bs io)   = S.hPut h bs >> io >>= go
 #endif
+
+-- | Execute a 'Put' and return the computed result and the bytes
+-- written during the computation as a lazy 'L.ByteString'.
+-- 
+-- This function is strict in the computed result and lazy in the writing of
+-- the bytes. For example, given
+--
+-- @
+--infinitePut = mapM_ (repeat (putBuilder (word8 1))) >> return 0
+-- @
+--
+-- evaluating the expression
+--
+-- @
+--fst $ putToLazyByteString infinitePut
+-- @
+--
+-- does not terminate, while evaluating the expression
+--
+-- @
+--L.head $ snd $ putToLazyByteString infinitePut
+-- @
+--
+-- does terminate and yields the value @1 :: Word8@.
+--
+-- An illustrative example for these strictness properties is the
+-- implementation of Base64 decoding (<http://en.wikipedia.org/wiki/Base64>).
+--
+-- @
+--type DecodingState = ...
+--
+--decodeBase64 :: 'S.ByteString' -> DecodingState -> 'Put' (Maybe DecodingState)
+--decodeBase64 = ...
+-- @
+--
+-- The above function takes a strict 'S.ByteString' supposed to represent
+-- Base64 encoded data and the current decoding state.
+-- It writes the decoded bytes as the side-effect of the 'Put' and returns the
+-- new decoding state, if the decoding of all data in the 'S.ByteString' was
+-- successful. The checking if the strict 'S.ByteString' represents Base64
+-- encoded data and the actual decoding are fused. This makes the common case,
+-- where all data represents Base64 encoded data, more efficient. It also
+-- implies that all data must be decoded before the final decoding
+-- state can be returned. 'Put's are intended for implementing such fused
+-- checking and decoding/encoding, which is reflected in their strictness
+-- properties.
+{-# NOINLINE putToLazyByteString #-}
+putToLazyByteString 
+    :: Put a              -- ^ 'Put' to execute
+    -> (a, L.ByteString)  -- ^ Result and lazy 'L.ByteString'
+                          -- written as its side-effect
+putToLazyByteString = putToLazyByteStringWith 
+    (safeStrategy L.smallChunkSize L.defaultChunkSize) (\x -> (x, L.Empty))
+
+
+-- | Execute a 'Put' with a buffer-allocation strategy and a continuation. For
+-- example, 'putToLazyByteString' is implemented as follows.
+--
+-- @
+--putToLazyByteString = 'putToLazyByteStringWith' 
+--    ('safeStrategy' 'L.smallChunkSize' 'L.defaultChunkSize') (\x -> (x, L.empty))
+-- @
+--
+{-# INLINE putToLazyByteStringWith #-}
+putToLazyByteStringWith
+    :: AllocationStrategy
+       -- ^ Buffer allocation strategy to use
+    -> (a -> (b, L.ByteString))
+       -- ^ Continuation to use for computing the final result and the tail of
+       -- its side-effect (the written bytes).
+    -> Put a
+       -- ^ 'Put' to execute
+    -> (b, L.ByteString)
+       -- ^ Resulting lazy 'L.ByteString'
+putToLazyByteStringWith strategy k p =
+    ciosToLazyByteString strategy k $ unsafePerformIO $
+        buildStepToCIOS strategy (runPut p)
+
+
 
 ------------------------------------------------------------------------------
 -- ByteString insertion / controlling chunk boundaries

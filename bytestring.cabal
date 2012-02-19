@@ -49,8 +49,7 @@ Maintainer:          Don Stewart <dons00@gmail.com>,
                      Simon Meier <iridcode@gmail.com>
 Bug-reports:         dons00@gmail.com,
                      duncan@community.haskell.org
-Tested-With:         GHC==7.2.1, GHC==7.0.2, GHC==6.12.3,
-                     GHC==6.10.4, GHC ==6.8.2
+Tested-With:         GHC==7.4.1, GHC==7.2.1, GHC==7.0.4, GHC==6.12.3
 Build-Type:          Simple
 Cabal-Version:       >= 1.8
 extra-source-files:  README TODO

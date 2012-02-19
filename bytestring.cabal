@@ -1,23 +1,23 @@
 Name:                bytestring
 Version:             0.10.0.0
-Synopsis:            Fast, compact, strict and lazy byte strings with a list interface
+Synopsis:            Time and space efficient manipulation of sequences of bytes.
+
 Description:
-    An efficient compact, immutable byte string type (both strict and lazy)
-    suitable for binary or 8-bit character data.
+    Data structures for the time and space efficient manipulation of sequences
+    of bytes.
     .
-    The 'ByteString' type represents sequences of bytes or 8-bit characters.
-    It is suitable for high performance use, both in terms of large data
-    quantities, or high speed requirements. The 'ByteStrin'g functions follow
-    the same style as Haskell\'s ordinary lists, so it is easy to convert code
-    from using 'String' to 'ByteString'.
+    Three data structures are provided:
     .
-    Two 'ByteString' variants are provided:
-    .
-      * Strict 'ByteString's keep the string as a single large array. This
+      * Strict 'ByteString's keep the bytes as a single large array. This
         makes them convenient for passing data between C and Haskell.
     .
-      * Lazy 'ByteStrings' use a lazy list of strict chunks which makes it
-        suitable for I\/O streaming tasks.
+      * Lazy 'ByteString's use a lazy list of strict bytestrings which makes
+        them suitable for I\/O streaming tasks.
+    .
+      * Lazy bytestring 'Builder's represent sequences of bytes and support
+        an /O(1)/ append operations. This makes them well-suited for
+        incrementally constructing lazy 'ByteString's from pieces, e.g.,
+        constructing a HTTP response.
     .
     The @Char8@ modules provide a character-based view of the same
     underlying 'ByteString' types. This makes it convenient to handle mixed
@@ -39,12 +39,14 @@ Copyright:           Copyright (c) Don Stewart          2005-2009,
                                (c) Duncan Coutts        2006-2011,
                                (c) David Roundy         2003-2005,
                                (c) Jasper Van der Jeugt 2010,
-                               (c) Simon Meier          2010-2011.
+                               (c) Simon Meier          2010-2012.
 
 Author:              Don Stewart,
-                     Duncan Coutts
+                     Duncan Coutts,
+                     Simon Meier
 Maintainer:          Don Stewart <dons00@gmail.com>,
-                     Duncan Coutts <duncan@community.haskell.org>
+                     Duncan Coutts <duncan@community.haskell.org>,
+                     Simon Meier <iridcode@gmail.com>
 Bug-reports:         dons00@gmail.com,
                      duncan@community.haskell.org
 Tested-With:         GHC==7.2.1, GHC==7.0.2, GHC==6.12.3,

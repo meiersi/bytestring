@@ -85,7 +85,7 @@ import           Data.ByteString.Lazy.Builder.BasicEncoding.Internal.UncheckedSh
 import           Data.Monoid (mappend)
 
 import           Foreign
-import           Foreign.C.Types (CInt(..), CLLong(..))
+import           Foreign.C.Types
 
 
 #ifdef  __GLASGOW_HASKELL__

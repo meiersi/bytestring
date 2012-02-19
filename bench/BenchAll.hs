@@ -143,23 +143,6 @@ benchIntEncodingB n0 w
       | n <= 0    = return op
       | otherwise = EI.runB w n op >>= loop (n - 1)
 
--- | Benchmark a 'PaddedEncoding'. Full inlining to enable specialization.
-{-# INLINE benchPE #-}
-benchPE :: String -> PaddedSizeEncoding-> Benchmark
-benchPE name mkEncoding =
-    bench (name ++" (" ++ show nRepl ++ ")") $ io
-  where
-    maxSize = EI.size $ mkEncoding maxBound
-
-    io | nRepl < 0 = error "benchPE: negative number of replications"
-       | otherwise = do
-           fpbuf <- mallocForeignPtrBytes (nRepl * maxSize)
-           withForeignPtr fpbuf (loop (fromIntegral nRepl)) >> return ()
-
-    loop !n !op
-      | n <= 0    = return op
-      | otherwise = EI.runB (fromF (mkEncoding n)) n op >>= loop (n - 1)
-
 
 -- benchmarks
 -------------
@@ -173,42 +156,6 @@ sanityCheckInfo =
       , S.length byteStringData, fromIntegral (L.length lazyByteStringData)
       ]
   ]
-
-{-# NOINLINE encodeChunkedBase128LE #-}
-encodeChunkedBase128LE :: Builder -> Builder
-encodeChunkedBase128LE = encodeChunked word64Base128LEPadded E.emptyB
-
-{-# NOINLINE encodeSizePrefixedBase128LE #-}
-encodeSizePrefixedBase128LE :: Builder -> Builder
-encodeSizePrefixedBase128LE =
-    encodeSizePrefixed defaultUntrimmedStrategy word64Base128LEPadded
-
-{-# NOINLINE encodeChunkedHex #-}
-encodeChunkedHex :: Builder -> Builder
-encodeChunkedHex = encodeChunked (word64HexPadded ' ') E.emptyB
-
-{-# NOINLINE encodeSizePrefixedHex #-}
-encodeSizePrefixedHex :: Builder -> Builder
-encodeSizePrefixedHex =
-    encodeSizePrefixed defaultUntrimmedStrategy (word64HexPadded ' ')
-
-{-# NOINLINE encodeChunkedDec #-}
-encodeChunkedDec :: Builder -> Builder
-encodeChunkedDec = encodeChunked (word64DecPadded ' ') E.emptyB
-
-{-# NOINLINE encodeSizePrefixedDec #-}
-encodeSizePrefixedDec :: Builder -> Builder
-encodeSizePrefixedDec =
-    encodeSizePrefixed defaultUntrimmedStrategy (word64DecPadded ' ')
-
-{-# NOINLINE encodeChunkedIntHost #-}
-encodeChunkedIntHost :: Builder -> Builder
-encodeChunkedIntHost = encodeChunked (const E.word64Host) E.emptyB
-
-{-# NOINLINE encodeSizePrefixedIntHost #-}
-encodeSizePrefixedIntHost :: Builder -> Builder
-encodeSizePrefixedIntHost =
-    encodeSizePrefixed defaultUntrimmedStrategy (const E.word64Host)
 
 {-# NOINLINE toLazyByteStringUntrimmed #-}
 toLazyByteStringUntrimmed :: Builder -> L.ByteString
@@ -226,28 +173,6 @@ main = do
         [ benchB' "mempty"        ()  (const mempty)
         , benchB' "ensureFree 8"  ()  (const (ensureFree 8))
         , benchB' "intHost 1"     1   intHost
-
-        {-
-        , benchB' "encodeChunkedIntHost . intHost $ 1" 1 
-            (encodeChunkedIntHost . intHost)
-        , benchB' "encodeSizePrefixed . intHost $ 1" 1 
-            (encodeSizePrefixedIntHost . intHost)
-
-        , benchB' "encodeChunkedBase128LE intHost $ 1" 1 
-            (encodeChunkedBase128LE . intHost)
-        , benchB' "encodeSizePrefixedBase128LE intHost $ 1" 1 
-            (encodeSizePrefixedBase128LE . intHost)
-
-        , benchB' "encodeChunkedDec intHost $ 1" 1 
-            (encodeChunkedDec . intHost)
-        , benchB' "encodeSizePrefixedDec intHost $ 1" 1 
-            (encodeSizePrefixedDec . intHost)
-
-        , benchB' "encodeChunkedHex intHost $ 1" 1 
-            (encodeChunkedHex . intHost)
-        , benchB' "encodeSizePrefixedHex intHost $ 1" 1 
-            (encodeSizePrefixedHex . intHost)
-        -}
         ]
 
       , bgroup "Encoding wrappers"
@@ -261,28 +186,6 @@ main = do
             E.encodeByteStringWithF E.word8
         , benchB     "encodeLazyByteStringWithF word8" lazyByteStringData $
             E.encodeLazyByteStringWithF E.word8
-
-        {-
-        , benchBInts "foldMap (encodeChunkedIntHost . intHost)"
-            (foldMap (encodeChunkedIntHost . intHost))
-        , benchBInts "foldMap (encodeSizePrefixedIntHost . intHost)"
-            (foldMap (encodeSizePrefixedIntHost . intHost))
-
-        , benchBInts "foldMap (encodeChunkedBase128LE . intHost)"
-            (foldMap (encodeChunkedBase128LE . intHost))
-        , benchBInts "foldMap (encodeSizePrefixedBase128LE . intHost)"
-            (foldMap (encodeSizePrefixedBase128LE . intHost))
-         
-        , benchBInts "foldMap (encodeChunkedHex . intHost)"
-            (foldMap (encodeChunkedHex . intHost))
-        , benchBInts "foldMap (encodeSizePrefixedHex . intHost)"
-            (foldMap (encodeSizePrefixedHex . intHost))
-
-        , benchBInts "foldMap (encodeChunkedDec . intHost)"
-            (foldMap (encodeChunkedDec . intHost))
-        , benchBInts "foldMap (encodeSizePrefixedDec . intHost)"
-            (foldMap (encodeSizePrefixedDec . intHost))
-        -}
         ]
 
       , bgroup "ByteString insertion" $
@@ -373,11 +276,6 @@ main = do
       , benchBE "word64Base128LE" (fromIntegral >$< E.word64Base128LE)
       , benchBE "wordBase128LE"   (fromIntegral >$< E.wordBase128LE)
 
-        -- Strange: in this benchmark it is faster than 'word64Base128LE'.
-        -- However, when serializing a list, then it is as much slower as
-        -- expected. Perhaps, some unboxing works here that doesn't otherwise.
-      , benchPE "word64Base128LEPadded"   word64Base128LEPadded
-
       , benchBE "int8ZigZagBase128LE"  (fromIntegral >$< E.int8ZigZagBase128LE)
       , benchBE "int16ZigZagBase128LE" (fromIntegral >$< E.int16ZigZagBase128LE)
       , benchBE "int32ZigZagBase128LE" (fromIntegral >$< E.int32ZigZagBase128LE)
@@ -400,16 +298,12 @@ main = do
       , benchBE "word64Dec"   $ fromIntegral >$< E.word64Dec
       , benchBE "wordDec"     $ fromIntegral >$< E.wordDec
 
-      , benchPE "word64DecPadded"         (word64DecPadded '0')
-
       -- hexadecimal number
       , benchBE "word8Hex"    $ fromIntegral >$< E.word8Hex
       , benchBE "word16Hex"   $ fromIntegral >$< E.word16Hex
       , benchBE "word32Hex"   $ fromIntegral >$< E.word32Hex
       , benchBE "word64Hex"   $ fromIntegral >$< E.word64Hex
       , benchBE "wordHex"     $ fromIntegral >$< E.wordHex
-
-      , benchPE "word64HexPadded"         (word64HexPadded '0')
 
       -- fixed-width hexadecimal numbers
       , benchFE "int8HexFixed"     $ fromIntegral >$< E.int8HexFixed

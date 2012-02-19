@@ -85,14 +85,13 @@ import           Data.ByteString.Lazy.Builder.BasicEncoding.Internal.UncheckedSh
 import           Data.Monoid (mappend)
 
 import           Foreign
-import           Foreign.C.Types (CInt, CLLong)
+import           Foreign.C.Types (CInt(..), CLLong(..))
 
--- TODO: This doesn't seem as if it would work outside GHC. Adapt conditional
--- compilation.
+
+#ifdef  __GLASGOW_HASKELL__
 import           GHC.Num     (quotRemInteger)
 import           GHC.Types   (Int(..))
 
-#ifdef  __GLASGOW_HASKELL__
 # if __GLASGOW_HASKELL__ < 611
 import GHC.Integer.Internals
 # else
@@ -286,6 +285,7 @@ lazyByteStringHexFixed = E.encodeLazyByteStringWithF E.word8HexFixed
 -- Fast decimal 'Integer' encoding.
 ------------------------------------------------------------------------------
 
+#ifdef  __GLASGOW_HASKELL__
 -- An optimized version of the integer serialization code
 -- in blaze-textual (c) 2011 MailRank, Inc. Bryan O'Sullivan
 -- <bos@mailrank.com>. It is 2.5x faster on Int-sized integers and 4.5x faster
@@ -364,3 +364,11 @@ intDecPadded :: E.FixedEncoding Int
 intDecPadded = caseWordSize_32_64
     (E.fixedEncoding  9 $ c_int_dec_padded9            . fromIntegral)
     (E.fixedEncoding 18 $ c_long_long_int_dec_padded18 . fromIntegral)
+
+#else
+-- compilers other than GHC
+
+-- | Decimal encoding of an 'Integer' using the ASCII digits.
+integerDec :: Integer -> Builder
+integerDec = string8 . show
+#endif

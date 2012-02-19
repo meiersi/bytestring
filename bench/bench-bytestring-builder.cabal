@@ -31,8 +31,8 @@ executable bench-bytestring-builder
 
   build-depends:     base >= 4 && < 5
                    , ghc-prim
-                   , deepseq       == 1.2.*
-                   , criterion     == 0.5.*
+                   , deepseq       >= 1.2 && < 2.0
+                   , criterion     == 0.6.*
                    , blaze-textual == 0.2.*
                    , blaze-builder == 0.3.*
                    -- we require bytestring due to benchmarking against
@@ -55,7 +55,7 @@ executable bench-bytestring-builder
 
   if impl(ghc >= 6.11)
     cpp-options: -DINTEGER_GMP
-    build-depends: integer-gmp >= 0.2 && < 0.4
+    build-depends: integer-gmp >= 0.2 && < 0.5
 
   if impl(ghc >= 6.9) && impl(ghc < 6.11)
     cpp-options: -DINTEGER_GMP

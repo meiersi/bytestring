@@ -27,7 +27,7 @@ TODO before full builder release
     a lot slower than the 'double-conversion' package. The 'BoundedEncoding'
     type will serve perfectly to wrap the functionality of the
     'double-conversion' package.
-  - add intro documentation mentioning lazy bytestring builders
+  [DONE] add intro documentation mentioning lazy bytestring builders
   [DONE] fix documentation in BasicEncoding.Extras
   [DONE] check all documentation
   [DONE] add 'Put' documentation
@@ -43,7 +43,7 @@ TODO before full builder release
   [DONE] Use a 'Builder' instead of a 'BoundedEncoding' for terminating chunks.
     Not recommended, as it makes impossible reserving the new buffer size such
     that it fits directly.
-  - document all functions in 'Put' module. Decide which functions to add to
+  [DONE] document all functions in 'Put' module. Decide which functions to add to
     public API.
 
   [DONE] investigate performance of 'encodeWithListF E.word8'
@@ -55,14 +55,8 @@ TODO before full builder release
   [DONE] investigate performance of bytestring insertion
   [DONE] improve the Fixed varint encoding performance using the same
     construction as the Google code: not possible due different control flow.
-  - create a big plot with all benchmarks
-  - add builder merging benchmarks to 'BenchAll.hs'
-  - benchmark/test 'Put' merging
-  - test 'varInt' encodings
+  [DONE] test 'varInt' encodings
   - test with GHC 6.12, 7.0, 7.2, 7.4
-  - reactivate over/under/missing-write testing of bounded encodings
-  - add version constraints to all libraries used for testing
-    (check that they are referring to the newest versions.)
   [DONE] consider putting builder transformers into a separate package
     'bytestring-builder-transformers' (its just too experimental):
     no they have a clean semantics, thei are well-documented and form an

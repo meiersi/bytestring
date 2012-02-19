@@ -1,5 +1,9 @@
-^dist(/|$)
+^(bench/|tests/|)dist(/|$)
+^.git(/|$)
+^(bench/|tests/|)cabal-dev(/|$)
 ^setup(/|$)
 ^GNUmakefile$
 ^Makefile.local$
 ^.depend(.bak)?$
+.hi$
+.o$

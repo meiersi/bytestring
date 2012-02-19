@@ -36,8 +36,8 @@ TODO before full builder release
   [DONE] use an allocation strategy for the inner builder in 'putSizePrefixed'
   [DONE] remove 'intXXXBase128LE' encodings. Their semantics is unclear and
     must be determined by the library user.
-  - Upload to Github repo
-  - Make a second call for review.
+  [DONE] Upload to Github repo
+  [DONE] Make a second call for review.
   [DONE] Comment on trick of using 'ensureFree' to avoid too big closures.
   [DONE] switch back to 'PaddedEncoding Word64' for builder transformers
   [DONE] Use a 'Builder' instead of a 'BoundedEncoding' for terminating chunks.

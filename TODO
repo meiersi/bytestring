@@ -63,7 +63,10 @@ TODO before full builder release
     important building block for higher-level libraries. Moreover, they
     strongly depend on the internals of the library and must be maintained
     jointly with it.
+  - Reread documentation and check if it guides the user well-enough with
+    respect what to expect from what module.
   - release library
+
 
 Todo items
 ----------

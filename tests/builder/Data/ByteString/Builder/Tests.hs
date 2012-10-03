@@ -11,7 +11,7 @@
 --
 -- Testing composition of 'Builders'.
 
-module Data.ByteString.Lazy.Builder.Tests (tests) where
+module Data.ByteString.Builder.Tests (tests) where
 
 import           Prelude hiding (catch)
 
@@ -30,13 +30,14 @@ import           Data.Foldable (asum, foldMap)
 import qualified Data.ByteString      as S
 import qualified Data.ByteString.Lazy as L
 
-import           Data.ByteString.Lazy.Builder
-import           Data.ByteString.Lazy.Builder.Extras
-import           Data.ByteString.Lazy.Builder.ASCII
-import           Data.ByteString.Lazy.Builder.Internal (Put, putBuilder, fromPut)
-import qualified Data.ByteString.Lazy.Builder.Internal             as BI
-import qualified Data.ByteString.Lazy.Builder.BasicEncoding        as BE
-import           Data.ByteString.Lazy.Builder.BasicEncoding.TestUtils
+import           Data.ByteString.Builder
+import           Data.ByteString.Builder.Extra
+import           Data.ByteString.Builder.ASCII
+import           Data.ByteString.Builder.Internal (Put, putBuilder, fromPut)
+import qualified Data.ByteString.Builder.Internal   as BI
+import qualified Data.ByteString.Builder.Prim       as BP
+import qualified Data.ByteString.Builder.Prim.Extra as BP
+import           Data.ByteString.Builder.Prim.TestUtils
 
 import           Control.Exception (SomeException, catch, evaluate)
 import           System.IO (openTempFile, hPutStr, hClose, hSetBinaryMode)
@@ -222,18 +223,18 @@ renderRecipe (Recipe _ firstSize _ cont as) =
     hexWord8  = D.fromList . wordHexFixed_list
 
 buildAction :: Action -> StateT Int Put ()
-buildAction (SBS Hex bs)            = lift $ putBuilder $ byteStringHexFixed bs
+buildAction (SBS Hex bs)            = lift $ putBuilder $ byteStringHex bs
 buildAction (SBS Smart bs)          = lift $ putBuilder $ byteString bs
 buildAction (SBS Copy bs)           = lift $ putBuilder $ byteStringCopy bs
 buildAction (SBS Insert bs)         = lift $ putBuilder $ byteStringInsert bs
 buildAction (SBS (Threshold i) bs)  = lift $ putBuilder $ byteStringThreshold i bs
-buildAction (LBS Hex lbs)           = lift $ putBuilder $ lazyByteStringHexFixed lbs
+buildAction (LBS Hex lbs)           = lift $ putBuilder $ lazyByteStringHex lbs
 buildAction (LBS Smart lbs)         = lift $ putBuilder $ lazyByteString lbs
 buildAction (LBS Copy lbs)          = lift $ putBuilder $ lazyByteStringCopy lbs
 buildAction (LBS Insert lbs)        = lift $ putBuilder $ lazyByteStringInsert lbs
 buildAction (LBS (Threshold i) lbs) = lift $ putBuilder $ lazyByteStringThreshold i lbs
 buildAction (W8 w)                  = lift $ putBuilder $ word8 w
-buildAction (W8S ws)                = lift $ putBuilder $ BE.encodeListWithF BE.word8 ws
+buildAction (W8S ws)                = lift $ putBuilder $ BP.primMapListFixed BP.word8 ws
 buildAction (String cs)             = lift $ putBuilder $ stringUtf8 cs
 buildAction (FDec f)                = lift $ putBuilder $ floatDec f
 buildAction (DDec d)                = lift $ putBuilder $ doubleDec d
@@ -363,7 +364,7 @@ test_encodeUnfoldrF =
   where
     toLBS = toLazyByteStringWith (safeStrategy 23 101) L.empty
     encode =
-        L.unpack . toLBS . BE.encodeUnfoldrWithF BE.word8 go
+        L.unpack . toLBS . BP.primUnfoldrFixed BP.word8 go
       where
         go []     = Nothing
         go (w:ws) = Just (w, ws)
@@ -375,7 +376,7 @@ test_encodeUnfoldrB =
   where
     toLBS = toLazyByteStringWith (safeStrategy 23 101) L.empty
     encode =
-        L.unpack . toLBS . BE.encodeUnfoldrWithB BE.charUtf8 go
+        L.unpack . toLBS . BP.primUnfoldrBounded BP.charUtf8 go
       where
         go []     = Nothing
         go (c:cs) = Just (c, cs)

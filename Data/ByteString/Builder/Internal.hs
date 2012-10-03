@@ -1,10 +1,16 @@
 {-# LANGUAGE ScopedTypeVariables, CPP, BangPatterns, Rank2Types #-}
+{-# OPTIONS_HADDOCK hide #-}
 -- | Copyright : (c) 2010 - 2011 Simon Meier
 -- License     : BSD3-style (see LICENSE)
 --
 -- Maintainer  : Simon Meier <iridcode@gmail.com>
--- Stability   : experimental
+-- Stability   : unstable, private
 -- Portability : GHC
+--
+-- *Warning:* this module is internal. If you find that you need it then please
+-- contact the maintainers and explain what you are trying to do and discuss
+-- what you would need in the public API. It is important that you do this as
+-- the module may not be exposed at all in future releases.
 --
 -- Core types and functions for the 'Builder' monoid and its generalization,
 -- the 'Put' monad.
@@ -36,7 +42,7 @@
 -- Note that there are /no safety belts/ at all, when implementing a 'Builder'
 -- using an 'IO' action: you are writing code that might enable the next
 -- buffer-overlow attack on a Haskell server!
-module Data.ByteString.Lazy.Builder.Internal (
+module Data.ByteString.Builder.Internal (
   -- * Buffer management
     Buffer(..)
   , BufferRange(..)
@@ -382,7 +388,17 @@ instance Monoid Builder where
   {-# INLINE mconcat #-}
   mconcat = foldr mappend mempty
 
+instance Show Builder where
+  show = show . showBuilder
+
+{-# NOINLINE showBuilder #-} -- ensure code is shared
+showBuilder :: Builder -> L.ByteString
+showBuilder = toLazyByteStringWith
+    (safeStrategy L.smallChunkSize L.smallChunkSize) L.Empty
+
+
 -- | Flush the current buffer. This introduces a chunk boundary.
+--
 {-# INLINE flush #-}
 flush :: Builder
 flush = builder step
@@ -423,16 +439,16 @@ put :: (forall r. (a -> BuildStep r) -> BuildStep r)
        -- signals its caller how to proceed using 'done', 'bufferFull', or
        -- 'insertChunk' signals.
        --
-    -- This function must be referentially transparent; i.e., calling it
-    -- multiple times with equally sized 'BufferRange's must result in the
-    -- same sequence of bytes being written and the same value being
-    -- computed. If you need mutable state, then you must allocate it anew
-    -- upon each call of this function. Moroever, this function must call
-    -- the continuation once its done. Otherwise, monadic sequencing of
-    -- 'Put's does not work. Finally, this function must write to all bytes
-    -- that it claims it has written. Otherwise, the resulting 'Put' is
-    -- not guaranteed to be referentially transparent and sensitive data
-    -- might leak.
+       -- This function must be referentially transparent; i.e., calling it
+       -- multiple times with equally sized 'BufferRange's must result in the
+       -- same sequence of bytes being written and the same value being
+       -- computed. If you need mutable state, then you must allocate it newly
+       -- upon each call of this function. Moroever, this function must call
+       -- the continuation once its done. Otherwise, monadic sequencing of
+       -- 'Put's does not work. Finally, this function must write to all bytes
+       -- that it claims it has written. Otherwise, the resulting 'Put' is
+       -- not guaranteed to be referentially transparent and sensitive data
+       -- might leak.
        -> Put a
 put = Put
 
@@ -587,7 +603,7 @@ hPut h p = do
         --
         --   1. GHC.IO.Handle.Internals mentions in "Note [async]" that
         --      we should never do any side-effecting operations before
-        --      an interuptible operation that may raise an async. exception
+        --      an interruptible operation that may raise an async. exception
         --      as long as we are inside 'wantWritableHandle' and the like.
         --      We possibly run the interuptible 'flushWriteBuffer' right at
         --      the start of 'fillHandle', hence entering it a second time is
@@ -624,7 +640,7 @@ hPut h p = do
             fillBuffer buf
               | freeSpace buf < minFree =
                   error $ unlines
-                    [ "Data.ByteString.Lazy.Builder.Internal.hPut: internal error."
+                    [ "Data.ByteString.Builder.Internal.hPut: internal error."
                     , "  Not enough space after flush."
                     , "    required: " ++ show minFree
                     , "    free: "     ++ show (freeSpace buf)
@@ -792,6 +808,7 @@ wrappedBytesCopyStep !(BufferRange ip0 ipe) k =
       where
         outRemaining = ope `minusPtr` op
         inpRemaining = ipe `minusPtr` ip
+
 
 
 -- Strict ByteStrings
@@ -989,19 +1006,22 @@ safeStrategy firstSize bufSize =
     nextBuffer Nothing             = newBuffer $ sanitize firstSize
     nextBuffer (Just (_, minSize)) = newBuffer minSize
 
--- | /Heavy inlining./ Execute a 'Builder' with custom execution parameters.
+-- | Execute a 'Builder' with custom execution parameters.
 --
--- This function is inlined despite its heavy code-size to allow fusing with
--- the allocation strategy. For example, the default 'Builder' execution
--- function 'toLazyByteString' is defined as follows.
+-- This function is forced to be inlined to allow fusing with the allocation
+-- strategy despite its rather heavy code-size. We therefore recommend
+-- that you introduce a top-level function once you have fixed your strategy.
+-- This avoids unnecessary code duplication.
+-- For example, the default 'Builder' execution function 'toLazyByteString' is
+-- defined as follows.
 --
 -- @
--- {-\# NOINLINE toLazyByteString \#-}
+-- {-# NOINLINE toLazyByteString #-}
 -- toLazyByteString =
---   toLazyByteStringWith ('safeStrategy' 'L.smallChunkSize' 'L.defaultChunkSize') L.empty
+--   toLazyByteStringWith ('safeStrategy' 'L.smallChunkSize' 'L.defaultChunkSize') empty
 -- @
 --
--- where @L.empty@ is the zero-length lazy 'L.ByteString'.
+-- where @empty@ is the zero-length lazy 'L.ByteString'.
 --
 -- In most cases, the parameters used by 'toLazyByteString' give good
 -- performance. A sub-performing case of 'toLazyByteString' is executing short
@@ -1009,11 +1029,11 @@ safeStrategy firstSize bufSize =
 -- 4kb buffer and the trimming cost dominate the cost of executing the
 -- 'Builder'. You can avoid this problem using
 --
--- >toLazyByteStringWith (safeStrategy 128 smallChunkSize) L.empty
+-- >toLazyByteStringWith (safeStrategy 128 smallChunkSize) empty
 --
 -- This reduces the allocation and trimming overhead, as all generated
 -- 'L.ByteString's fit into the first buffer and there is no trimming
--- required, if more than 64 bytes and less than 128 bytes are written.
+-- required, if more than 64 bytes are written.
 --
 {-# INLINE toLazyByteStringWith #-}
 toLazyByteStringWith
@@ -1051,8 +1071,14 @@ buildStepToCIOS !(AllocationStrategy nextBuffer bufSize trim) =
             Finished (Buffer fpbuf (BufferRange op' pe)) x
 
         fullH op' minSize nextStep =
-            wrapChunk op' $ const $ 
-                nextBuffer (Just (buf, max minSize bufSize)) >>= fill nextStep
+            wrapChunk op' $ \unused ->
+                if minSize <= bufSize
+                  then
+                    if unused -- reuse buffer if large enough and unused
+                       then fill nextStep buf
+                       else nextBuffer (Just (buf, bufSize)) >>= fill nextStep
+                  else
+                    nextBuffer (Just (buf, minSize)) >>= fill nextStep
 
         insertChunkH op' bs nextStep =
             wrapChunk op' $ \isEmpty -> yield1 bs $
@@ -1070,8 +1096,8 @@ buildStepToCIOS !(AllocationStrategy nextBuffer bufSize trim) =
           | trim chunkSize size = do
               bs <- S.create chunkSize $ \pbuf' ->
                         copyBytes pbuf' pbuf chunkSize
-              -- FIXME: We could reuse the trimmed buffer here.
-              return $ Yield1 bs (mkCIOS False)
+              -- Mark the original buffer as unused
+              return $ Yield1 bs (mkCIOS True)
           | otherwise            =
               return $ Yield1 (S.PS fpbuf 0 chunkSize) (mkCIOS False)
           where

@@ -1,59 +1,65 @@
 {-# LANGUAGE ScopedTypeVariables, CPP, BangPatterns #-}
+{-# OPTIONS_HADDOCK hide #-}
 -- |
 -- Copyright   : 2010-2012 Simon Meier, 2010 Jasper van der Jeugt
 -- License     : BSD3-style (see LICENSE)
 --
 -- Maintainer  : Simon Meier <iridcode@gmail.com>
--- Stability   : experimental
+-- Stability   : unstable, private
 -- Portability : GHC
 --
--- This module is internal. It is only intended to be used by the 'bytestring'
--- and the 'text' library. Please contact the maintainer, if you need to use
--- this module in your library. We are glad to accept patches for further
+-- *Warning:* this module is internal. If you find that you need it please
+-- contact the maintainers and explain what you are trying to do and discuss
+-- what you would need in the public API. It is important that you do this as
+-- the module may not be exposed at all in future releases.
+--
+-- The maintainers are glad to accept patches for further
 -- standard encodings of standard Haskell values.
 --
--- If you need to write your own primitive encoding, then be aware that you are
+-- If you need to write your own builder primitives, then be aware that you are
 -- writing code with /all saftey belts off/; i.e.,
--- your code may enable the next buffer-overflow attack on Haskell code.
--- Please test your encodings thoroughly!
+-- *this is the code that might make your application vulnerable to buffer-overflow attacks!*
+-- The "Data.ByteString.Builder.Prim.Tests" module provides you with
+-- utilities for testing your encodings thoroughly.
 --
-module Data.ByteString.Lazy.Builder.BasicEncoding.Internal (
-  -- * Fixed-size encodings
+module Data.ByteString.Builder.Prim.Internal (
+  -- * Fixed-size builder primitives
     Size
-  , FixedEncoding
+  , FixedPrim
   , fixedEncoding
   , size
   , runF
-
-  , storableToF
 
   , emptyF
   , contramapF
   , pairF
   -- , liftIOF
 
+  , storableToF
 
-  -- * Bounded-size encodings
-  , BoundedEncoding
+  -- * Bounded-size builder primitives
+  , BoundedPrim
   , boundedEncoding
   , sizeBound
   , runB
-
-  , fromF
 
   , emptyB
   , contramapB
   , pairB
   , eitherB
-  , ifB
+  , condB
 
   -- , liftIOB
+
+  , toB
+  , liftFixedToBounded
 
   -- , withSizeFB
   -- , withSizeBB
 
-  -- * Shared contramap operator
+  -- * Shared operators
   , (>$<)
+  , (>*<)
 
   ) where
 
@@ -69,212 +75,214 @@ import Prelude hiding (maxBound)
 -- Supporting infrastructure
 ------------------------------------------------------------------------------
 
--- | Contravariant functors as in the 'contravariant' package.
+-- | Contravariant functors as in the @contravariant@ package.
 class Contravariant f where
     contramap :: (b -> a) -> f a -> f b
 
 infixl 4 >$<
 
--- | An overloaded infix operator for 'contramapF' and 'contramapB'.
+-- | A fmap-like operator for builder primitives, both bounded and fixed size.
+--
+-- Builder primitives are contravariant so it's like the normal fmap, but
+-- backwards (look at the type). (If it helps to remember, the operator symbol
+-- is like (<$>) but backwards.)
 --
 -- We can use it for example to prepend and/or append fixed values to an
--- encoding. The following implementation surrounds an UTF-8 encoded character
--- with singlequotes; e.g., @'showF' singleQuotedUtf8 \'a\' = \"\'a\'\"@.
+-- primitive.
 --
--- @
--- singleQuotedUtf8 :: 'FixedEncoding' 'Char'
--- singleQuotedUtf8 =
---   ((\x -> (\'\\\'\', (x, \'\\\'\'))) '>$<' 'pairF' 'char7' ('pairF' 'charUtf8' 'char7')
--- @
+-- >showEncoding ((\x -> ('\'', (x, '\''))) >$< fixed3) 'x' = "'x'"
+-- >  where
+-- >    fixed3 = char7 >*< char7 >*< char7
 --
 -- Note that the rather verbose syntax for composition stems from the
--- requirement to be able to compute the 'size's and 'sizeBound's at
--- compile time.
+-- requirement to be able to compute the size / size bound at compile time.
 --
-(>$<) :: Contravariant f => (a -> b) -> f b -> f a
+(>$<) :: Contravariant f => (b -> a) -> f a -> f b
 (>$<) = contramap
-{-# INLINE (>$<) #-}
 
-instance Contravariant FixedEncoding where
+
+instance Contravariant FixedPrim where
     contramap = contramapF
 
-instance Contravariant BoundedEncoding where
+instance Contravariant BoundedPrim where
     contramap = contramapB
 
--- | The type used for 'size's and 'sizeBound's.
+
+-- | Type-constructors supporting lifting of type-products.
+class Monoidal f where
+    pair :: f a -> f b -> f (a, b)
+
+instance Monoidal FixedPrim where
+    pair = pairF
+
+instance Monoidal BoundedPrim where
+    pair = pairB
+
+infixr 5 >*<
+
+-- | A pairing/concatenation operator for builder primitives, both bounded and
+-- fixed size.
+--
+-- For example,
+--
+-- > toLazyByteString (primFixed (char7 >*< char7) ('x','y')) = "xy"
+--
+-- We can combine multiple primitives using '>*<' multiple times.
+--
+-- > toLazyByteString (primFixed (char7 >*< char7 >*< char7) ('x',('y','z'))) = "xyz"
+--
+(>*<) :: Monoidal f => f a -> f b -> f (a, b)
+(>*<) = pair
+
+
+-- | The type used for sizes and sizeBounds of sizes.
 type Size = Int
 
 
 ------------------------------------------------------------------------------
--- Fixed-size Encodings
+-- Fixed-size builder primitives
 ------------------------------------------------------------------------------
 
--- | An encoding that always results in a sequence of bytes of a
+-- | A builder primitive that always results in a sequence of bytes of a
 -- pre-determined, fixed size.
-data FixedEncoding a = FE {-# UNPACK #-} !Int (a -> Ptr Word8 -> IO ())
+data FixedPrim a = FE {-# UNPACK #-} !Int (a -> Ptr Word8 -> IO ())
 
--- | Construct a 'FixedEncoding' from an 'IO' action. This 'IO' action
--- /must/ be referentially transparent in the sense that it always encodes a
--- value to the same sequence of bytes.
-{-# INLINE CONLIKE fixedEncoding #-}
-fixedEncoding :: Int  -- ^ Size of an encoded value
-              -> (a -> Ptr Word8 -> IO ()) 
-              -- ^ 'IO' action that encodes a value starting from a pointer to
-              -- the first free byte in the output buffer
-              -> FixedEncoding a
-              -- ^ Resulting 'FixedEncoding'
+fixedEncoding :: Int -> (a -> Ptr Word8 -> IO ()) -> FixedPrim a
 fixedEncoding = FE
 
--- | The fixed size of the sequences of bytes generated by this
--- 'FixedEncoding'.
+-- | The size of the sequences of bytes generated by this 'FixedPrim'.
 {-# INLINE CONLIKE size #-}
-size :: FixedEncoding a -> Int
+size :: FixedPrim a -> Int
 size (FE l _) = l
 
--- | Run a 'FixedEncoding'.
 {-# INLINE CONLIKE runF #-}
-runF :: FixedEncoding a -- ^ 'FixedEncoding' to execute
-     -> a               -- ^ Value to encode
-     -> Ptr Word8       -- ^ Pointer to the first free byte in the output buffer
-     -> IO ()           -- ^ 'IO' action performing the encoding
+runF :: FixedPrim a -> a -> Ptr Word8 -> IO ()
 runF (FE _ io) = io
 
--- | The 'FixedEncoding' that always results in the zero-length sequence.
+-- | The 'FixedPrim' that always results in the zero-length sequence.
 {-# INLINE CONLIKE emptyF #-}
-emptyF :: FixedEncoding a
+emptyF :: FixedPrim a
 emptyF = FE 0 (\_ _ -> return ())
 
 -- | Encode a pair by encoding its first component and then its second component.
 {-# INLINE CONLIKE pairF #-}
-pairF :: FixedEncoding a -> FixedEncoding b -> FixedEncoding (a, b)
+pairF :: FixedPrim a -> FixedPrim b -> FixedPrim (a, b)
 pairF (FE l1 io1) (FE l2 io2) =
     FE (l1 + l2) (\(x1,x2) op -> io1 x1 op >> io2 x2 (op `plusPtr` l1))
 
--- | Change an encoding such that it first applies a function to the value
+-- | Change a primitives such that it first applies a function to the value
 -- to be encoded.
 --
--- Note that encodings are 'Contrafunctors'
--- <http://hackage.haskell.org/package/contravariant>. 
--- The following laws hold.
+-- Note that primitives are 'Contrafunctors'
+-- <http://hackage.haskell.org/package/contravariant>. Hence, the following
+-- laws hold.
 --
 -- >contramapF id = id
 -- >contramapF f . contramapF g = contramapF (g . f)
 {-# INLINE CONLIKE contramapF #-}
-contramapF :: (b -> a) -> FixedEncoding a -> FixedEncoding b
+contramapF :: (b -> a) -> FixedPrim a -> FixedPrim b
 contramapF f (FE l io) = FE l (\x op -> io (f x) op)
 
--- | Construct a 'FixedEncoding' encoding using the 'poke' action associated
--- to a 'Storable' value.
+-- | Convert a 'FixedPrim' to a 'BoundedPrim'.
+{-# INLINE CONLIKE toB #-}
+toB :: FixedPrim a -> BoundedPrim a
+toB (FE l io) = BE l (\x op -> io x op >> (return $! op `plusPtr` l))
+
+-- | Lift a 'FixedPrim' to a 'BoundedPrim'.
+{-# INLINE CONLIKE liftFixedToBounded #-}
+liftFixedToBounded :: FixedPrim a -> BoundedPrim a
+liftFixedToBounded = toB
+
 {-# INLINE CONLIKE storableToF #-}
-storableToF :: forall a. Storable a => FixedEncoding a
+storableToF :: forall a. Storable a => FixedPrim a
 storableToF = FE (sizeOf (undefined :: a)) (\x op -> poke (castPtr op) x)
 
 {-
 {-# INLINE CONLIKE liftIOF #-}
-liftIOF :: FixedEncoding a -> FixedEncoding (IO a)
+liftIOF :: FixedPrim a -> FixedPrim (IO a)
 liftIOF (FE l io) = FE l (\xWrapped op -> do x <- xWrapped; io x op)
 -}
 
 ------------------------------------------------------------------------------
--- Bounded-size Encodings
+-- Bounded-size builder primitives
 ------------------------------------------------------------------------------
 
--- | An encoding that always results in sequence of bytes that is no longer
+-- | A builder primitive that always results in sequence of bytes that is no longer
 -- than a pre-determined bound.
-data BoundedEncoding a = BE {-# UNPACK #-} !Int (a -> Ptr Word8 -> IO (Ptr Word8))
+data BoundedPrim a = BE {-# UNPACK #-} !Int (a -> Ptr Word8 -> IO (Ptr Word8))
 
--- | The bound on the size of sequences of bytes generated by this
--- 'BoundedEncoding'.
+-- | The bound on the size of sequences of bytes generated by this 'BoundedPrim'.
 {-# INLINE CONLIKE sizeBound #-}
-sizeBound :: BoundedEncoding a -> Int
+sizeBound :: BoundedPrim a -> Int
 sizeBound (BE b _) = b
 
--- | Construct a 'BoundedEncoding' from an 'IO' action. This 'IO' action
--- /must/ be referentially transparent in the sense that it always encodes a
--- value to the same sequence of bytes.
-boundedEncoding 
-    :: Int 
-    -- ^ Maximal size of an encoded value
-    -> (a -> Ptr Word8 -> IO (Ptr Word8)) 
-    -- ^ 'IO' action that encodes a value starting from a pointer to the
-    -- first free byte in the output buffer and returns the pointer to the
-    -- next free byte in the output buffer.
-    -> BoundedEncoding a
-    -- ^ Resulting 'BoundedEncoding'
+-- | Construct a bounded-size builder primitive. Note that it must 
+-- always result in  the same sequence of bytes, if given the same
+-- value to encode.
+boundedEncoding :: Int -> (a -> Ptr Word8 -> IO (Ptr Word8)) -> BoundedPrim a
 boundedEncoding = BE
 
--- | Convert a 'FixedEncoding' to a 'BoundedEncoding'.
-{-# INLINE CONLIKE fromF #-}
-fromF :: FixedEncoding a -> BoundedEncoding a
-fromF (FE l io) = BE l (\x op -> io x op >> (return $! op `plusPtr` l))
-
--- | Run a 'BoundedEncoding'.
 {-# INLINE CONLIKE runB #-}
-runB :: BoundedEncoding a -- ^ 'BoundedEncoding' to execute
-     -> a                 -- ^ Value to encode
-     -> Ptr Word8         -- ^ First free byte in the output buffer
-     -> IO (Ptr Word8)    
-     -- ^ 'IO' action performing the encoding and returning the next free byte
-     -- after the encoded value
+runB :: BoundedPrim a -> a -> Ptr Word8 -> IO (Ptr Word8)
 runB (BE _ io) = io
 
--- | Change a 'BoundedEncoding' such that it first applies a function to the
+-- | Change a 'BoundedPrim' such that it first applies a function to the
 -- value to be encoded.
 --
--- Note that 'BoundedEncoding's are 'Contrafunctors'
--- <http://hackage.haskell.org/package/contravariant>. 
--- The following laws hold.
+-- Note that 'BoundedPrim's are 'Contrafunctors'
+-- <http://hackage.haskell.org/package/contravariant>. Hence, the following
+-- laws hold.
 --
 -- >contramapB id = id
 -- >contramapB f . contramapB g = contramapB (g . f)
 {-# INLINE CONLIKE contramapB #-}
-contramapB :: (b -> a) -> BoundedEncoding a -> BoundedEncoding b
+contramapB :: (b -> a) -> BoundedPrim a -> BoundedPrim b
 contramapB f (BE b io) = BE b (\x op -> io (f x) op)
 
--- | The 'BoundedEncoding' that always results in the zero-length sequence.
+-- | The 'BoundedPrim' that always results in the zero-length sequence.
 {-# INLINE CONLIKE emptyB #-}
-emptyB :: BoundedEncoding a
+emptyB :: BoundedPrim a
 emptyB = BE 0 (\_ op -> return op)
 
 -- | Encode a pair by encoding its first component and then its second component.
 {-# INLINE CONLIKE pairB #-}
-pairB :: BoundedEncoding a -> BoundedEncoding b -> BoundedEncoding (a, b)
+pairB :: BoundedPrim a -> BoundedPrim b -> BoundedPrim (a, b)
 pairB (BE b1 io1) (BE b2 io2) =
     BE (b1 + b2) (\(x1,x2) op -> io1 x1 op >>= io2 x2)
 
--- | Encode an 'Either' value using the first 'BoundedEncoding' for 'Left'
--- values and the second 'BoundedEncoding' for 'Right' values.
+-- | Encode an 'Either' value using the first 'BoundedPrim' for 'Left'
+-- values and the second 'BoundedPrim' for 'Right' values.
 --
 -- Note that the functions 'eitherB', 'pairB', and 'contramapB' (written below
--- using '>$<') suffice to construct 'BoundedEncoding's for all non-recursive
+-- using '>$<') suffice to construct 'BoundedPrim's for all non-recursive
 -- algebraic datatypes. For example,
 --
 -- @
---maybeB :: BoundedEncoding () -> BoundedEncoding a -> BoundedEncoding (Maybe a)
+--maybeB :: BoundedPrim () -> BoundedPrim a -> BoundedPrim (Maybe a)
 --maybeB nothing just = 'maybe' (Left ()) Right '>$<' eitherB nothing just
 -- @
 {-# INLINE CONLIKE eitherB #-}
-eitherB :: BoundedEncoding a -> BoundedEncoding b -> BoundedEncoding (Either a b)
+eitherB :: BoundedPrim a -> BoundedPrim b -> BoundedPrim (Either a b)
 eitherB (BE b1 io1) (BE b2 io2) =
     BE (max b1 b2)
         (\x op -> case x of Left x1 -> io1 x1 op; Right x2 -> io2 x2 op)
 
--- | Conditionally select a 'BoundedEncoding'.
--- For example, we can implement the ASCII encoding that drops characters with
+-- | Conditionally select a 'BoundedPrim'.
+-- For example, we can implement the ASCII primitive that drops characters with
 -- Unicode codepoints above 127 as follows.
 --
 -- @
---charASCIIDrop = 'ifB' (< '\128') ('fromF' 'char7') 'emptyB'
+--charASCIIDrop = 'condB' (< '\128') ('fromF' 'char7') 'emptyB'
 -- @
-{-# INLINE CONLIKE ifB #-}
-ifB :: (a -> Bool) -> BoundedEncoding a -> BoundedEncoding a -> BoundedEncoding a
-ifB p be1 be2 =
+{-# INLINE CONLIKE condB #-}
+condB :: (a -> Bool) -> BoundedPrim a -> BoundedPrim a -> BoundedPrim a
+condB p be1 be2 =
     contramapB (\x -> if p x then Left x else Right x) (eitherB be1 be2)
 
 
 {-
 {-# INLINE withSizeFB #-}
-withSizeFB :: (Word -> FixedEncoding Word) -> BoundedEncoding a -> BoundedEncoding a
+withSizeFB :: (Word -> FixedPrim Word) -> BoundedPrim a -> BoundedPrim a
 withSizeFB feSize (BE b io) =
     BE (lSize + b)
        (\x op0 -> do let !op1 = op0 `plusPtr` lSize
@@ -286,7 +294,7 @@ withSizeFB feSize (BE b io) =
 
 
 {-# INLINE withSizeBB #-}
-withSizeBB :: BoundedEncoding Word -> BoundedEncoding a -> BoundedEncoding a
+withSizeBB :: BoundedPrim Word -> BoundedPrim a -> BoundedPrim a
 withSizeBB (BE bSize ioSize) (BE b io) =
     BE (bSize + 2*b)
        (\x op0 -> do let !opTmp = op0 `plusPtr` (bSize + b)
@@ -297,19 +305,19 @@ withSizeBB (BE bSize ioSize) (BE b io) =
                      return $! op1 `plusPtr` s)
 
 {-# INLINE CONLIKE liftIOB #-}
-liftIOB :: BoundedEncoding a -> BoundedEncoding (IO a)
+liftIOB :: BoundedPrim a -> BoundedPrim (IO a)
 liftIOB (BE l io) = BE l (\xWrapped op -> do x <- xWrapped; io x op)
 -}
 
 ------------------------------------------------------------------------------
--- Encodings from 'ByteString's.
+-- Builder primitives from 'ByteString's.
 ------------------------------------------------------------------------------
 
 {-
--- | A 'FixedEncoding' that always results in the same byte sequence given as a
--- strict 'S.ByteString'. We can use this encoding to insert fixed ...
+-- | A 'FixedPrim' that always results in the same byte sequence given as a
+-- strict 'S.ByteString'. We can use this primitive to insert fixed ...
 {-# INLINE CONLIKE constByteStringF #-}
-constByteStringF :: S.ByteString -> FixedEncoding ()
+constByteStringF :: S.ByteString -> FixedPrim ()
 constByteStringF bs =
     FE len io
   where
@@ -323,7 +331,7 @@ constByteStringF bs =
 {-# INLINE byteStringPrefixB #-}
 byteStringTakeB :: Int  -- ^ Length of the prefix. It should be smaller than
                         -- 100 bytes, as otherwise
-                -> BoundedEncoding S.ByteString
+                -> BoundedPrim S.ByteString
 byteStringTakeB n0 =
     BE n io
   where
@@ -335,3 +343,22 @@ byteStringTakeB n0 =
         touchForeignPtr fp
         return $! op `plusPtr` s
 -}
+
+{-
+
+httpChunkedTransfer :: Builder -> Builder
+httpChunkedTransfer =
+    encodeChunked 32 (word64HexFixedBound '0')
+                     ((\_ -> ('\r',('\n',('\r','\n')))) >$< char8x4)
+  where
+    char8x4 = toB (char8 >*< char8 >*< char8 >*< char8)
+
+
+
+chunked :: Builder -> Builder
+chunked = encodeChunked 16 word64VarFixedBound emptyB
+
+-}
+
+
+

@@ -6,15 +6,13 @@
 -- Maintainer    : Simon Meier <iridcode@gmail.com>
 -- Portability   : GHC
 --
-module Data.ByteString.Lazy.Builder.BasicEncoding.Binary (
+module Data.ByteString.Builder.Prim.Binary (
 
   -- ** Binary encodings
     int8
   , word8
 
-  -- *** Fixed-length
-
-  -- **** Big-endian
+  -- *** Big-endian
   , int16BE
   , int32BE
   , int64BE
@@ -26,7 +24,7 @@ module Data.ByteString.Lazy.Builder.BasicEncoding.Binary (
   , floatBE
   , doubleBE
 
-  -- **** Little-endian
+  -- *** Little-endian
   , int16LE
   , int32LE
   , int64LE
@@ -38,7 +36,7 @@ module Data.ByteString.Lazy.Builder.BasicEncoding.Binary (
   , floatLE
   , doubleLE
 
-  -- **** Non-portable, host-dependent
+  -- *** Non-portable, host-dependent
   , intHost
   , int16Host
   , int32Host
@@ -69,9 +67,9 @@ module Data.ByteString.Lazy.Builder.BasicEncoding.Binary (
 
   ) where
 
-import Data.ByteString.Lazy.Builder.BasicEncoding.Internal
-import Data.ByteString.Lazy.Builder.BasicEncoding.Internal.UncheckedShifts
-import Data.ByteString.Lazy.Builder.BasicEncoding.Internal.Floating
+import Data.ByteString.Builder.Prim.Internal
+import Data.ByteString.Builder.Prim.Internal.UncheckedShifts
+import Data.ByteString.Builder.Prim.Internal.Floating
 
 import Foreign
 import Foreign.C.Types
@@ -88,7 +86,7 @@ import Foreign.C.Types
 -- | Encoding single unsigned bytes as-is.
 --
 {-# INLINE word8 #-}
-word8 :: FixedEncoding Word8
+word8 :: FixedPrim Word8
 word8 = storableToF
 
 --
@@ -98,7 +96,7 @@ word8 = storableToF
 
 -- | Encoding 'Word16's in big endian format.
 {-# INLINE word16BE #-}
-word16BE :: FixedEncoding Word16
+word16BE :: FixedPrim Word16
 #ifdef WORD_BIGENDIAN
 word16BE = word16Host
 #else
@@ -109,7 +107,7 @@ word16BE = fixedEncoding 2 $ \w p -> do
 
 -- | Encoding 'Word16's in little endian format.
 {-# INLINE word16LE #-}
-word16LE :: FixedEncoding Word16
+word16LE :: FixedPrim Word16
 #ifdef WORD_BIGENDIAN
 word16LE = fixedEncoding 2 $ \w p -> do
     poke p               (fromIntegral (w)              :: Word8)
@@ -120,7 +118,7 @@ word16LE = word16Host
 
 -- | Encoding 'Word32's in big endian format.
 {-# INLINE word32BE #-}
-word32BE :: FixedEncoding Word32
+word32BE :: FixedPrim Word32
 #ifdef WORD_BIGENDIAN
 word32BE = word32Host
 #else
@@ -133,7 +131,7 @@ word32BE = fixedEncoding 4 $ \w p -> do
 
 -- | Encoding 'Word32's in little endian format.
 {-# INLINE word32LE #-}
-word32LE :: FixedEncoding Word32
+word32LE :: FixedPrim Word32
 #ifdef WORD_BIGENDIAN
 word32LE = fixedEncoding 4 $ \w p -> do
     poke p               (fromIntegral (w)               :: Word8)
@@ -149,7 +147,7 @@ word32LE = word32Host
 
 -- | Encoding 'Word64's in big endian format.
 {-# INLINE word64BE #-}
-word64BE :: FixedEncoding Word64
+word64BE :: FixedPrim Word64
 #ifdef WORD_BIGENDIAN
 word64BE = word64Host
 #else
@@ -185,7 +183,7 @@ word64BE = fixedEncoding 8 $ \w p -> do
 
 -- | Encoding 'Word64's in little endian format.
 {-# INLINE word64LE #-}
-word64LE :: FixedEncoding Word64
+word64LE :: FixedPrim Word64
 #ifdef WORD_BIGENDIAN
 #if WORD_SIZE_IN_BITS < 64
 word64LE =
@@ -223,22 +221,22 @@ word64LE = word64Host
 -- conversion.
 --
 {-# INLINE wordHost #-}
-wordHost :: FixedEncoding Word
+wordHost :: FixedPrim Word
 wordHost = storableToF
 
 -- | Encoding 'Word16's in native host order and host endianness.
 {-# INLINE word16Host #-}
-word16Host :: FixedEncoding Word16
+word16Host :: FixedPrim Word16
 word16Host = storableToF
 
 -- | Encoding 'Word32's in native host order and host endianness.
 {-# INLINE word32Host #-}
-word32Host :: FixedEncoding Word32
+word32Host :: FixedPrim Word32
 word32Host = storableToF
 
 -- | Encoding 'Word64's in native host order and host endianness.
 {-# INLINE word64Host #-}
-word64Host :: FixedEncoding Word64
+word64Host :: FixedPrim Word64
 word64Host = storableToF
 
 
@@ -254,37 +252,37 @@ word64Host = storableToF
 -- | Encoding single signed bytes as-is.
 --
 {-# INLINE int8 #-}
-int8 :: FixedEncoding Int8
+int8 :: FixedPrim Int8
 int8 = fromIntegral >$< word8
 
 -- | Encoding 'Int16's in big endian format.
 {-# INLINE int16BE #-}
-int16BE :: FixedEncoding Int16
+int16BE :: FixedPrim Int16
 int16BE = fromIntegral >$< word16BE
 
 -- | Encoding 'Int16's in little endian format.
 {-# INLINE int16LE #-}
-int16LE :: FixedEncoding Int16
+int16LE :: FixedPrim Int16
 int16LE = fromIntegral >$< word16LE
 
 -- | Encoding 'Int32's in big endian format.
 {-# INLINE int32BE #-}
-int32BE :: FixedEncoding Int32
+int32BE :: FixedPrim Int32
 int32BE = fromIntegral >$< word32BE
 
 -- | Encoding 'Int32's in little endian format.
 {-# INLINE int32LE #-}
-int32LE :: FixedEncoding Int32
+int32LE :: FixedPrim Int32
 int32LE = fromIntegral >$< word32LE
 
 -- | Encoding 'Int64's in big endian format.
 {-# INLINE int64BE #-}
-int64BE :: FixedEncoding Int64
+int64BE :: FixedPrim Int64
 int64BE = fromIntegral >$< word64BE
 
 -- | Encoding 'Int64's in little endian format.
 {-# INLINE int64LE #-}
-int64LE :: FixedEncoding Int64
+int64LE :: FixedPrim Int64
 int64LE = fromIntegral >$< word64LE
 
 
@@ -298,58 +296,58 @@ int64LE = fromIntegral >$< word64LE
 -- conversion.
 --
 {-# INLINE intHost #-}
-intHost :: FixedEncoding Int
+intHost :: FixedPrim Int
 intHost = storableToF
 
 -- | Encoding 'Int16's in native host order and host endianness.
 {-# INLINE int16Host #-}
-int16Host :: FixedEncoding Int16
+int16Host :: FixedPrim Int16
 int16Host = storableToF
 
 -- | Encoding 'Int32's in native host order and host endianness.
 {-# INLINE int32Host #-}
-int32Host :: FixedEncoding Int32
+int32Host :: FixedPrim Int32
 int32Host = storableToF
 
 -- | Encoding 'Int64's in native host order and host endianness.
 {-# INLINE int64Host #-}
-int64Host :: FixedEncoding Int64
+int64Host :: FixedPrim Int64
 int64Host = storableToF
 
 -- IEEE Floating Point Numbers
 ------------------------------
 
--- | Encode an IEEE 'Float' in big endian format.
+-- | Encode a 'Float' in big endian format.
 {-# INLINE floatBE #-}
-floatBE :: FixedEncoding Float
+floatBE :: FixedPrim Float
 floatBE = encodeFloatViaWord32F word32BE
 
--- | Encode an IEEE 'Float' in little endian format.
+-- | Encode a 'Float' in little endian format.
 {-# INLINE floatLE #-}
-floatLE :: FixedEncoding Float
+floatLE :: FixedPrim Float
 floatLE = encodeFloatViaWord32F word32LE
 
--- | Encode an IEEE 'Double' in big endian format.
+-- | Encode a 'Double' in big endian format.
 {-# INLINE doubleBE #-}
-doubleBE :: FixedEncoding Double
+doubleBE :: FixedPrim Double
 doubleBE = encodeDoubleViaWord64F word64BE
 
--- | Encode an IEEE 'Double' in little endian format.
+-- | Encode a 'Double' in little endian format.
 {-# INLINE doubleLE #-}
-doubleLE :: FixedEncoding Double
+doubleLE :: FixedPrim Double
 doubleLE = encodeDoubleViaWord64F word64LE
 
 
--- | Encode an IEEE 'Float' in native host order and host endianness. Values written
+-- | Encode a 'Float' in native host order and host endianness. Values written
 -- this way are not portable to different endian machines, without conversion.
 --
 {-# INLINE floatHost #-}
-floatHost :: FixedEncoding Float
+floatHost :: FixedPrim Float
 floatHost = storableToF
 
--- | Encode an IEEE 'Double' in native host order and host endianness.
+-- | Encode a 'Double' in native host order and host endianness.
 {-# INLINE doubleHost #-}
-doubleHost :: FixedEncoding Double
+doubleHost :: FixedPrim Double
 doubleHost = storableToF
 
 

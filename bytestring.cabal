@@ -75,45 +75,30 @@ library
                      Data.ByteString.Lazy.Builder
                      Data.ByteString.Lazy.Builder.Extras
                      Data.ByteString.Lazy.Builder.ASCII
-                     Data.ByteString.Lazy.Builder.Internal
-                     Data.ByteString.Lazy.Builder.BasicEncoding
-                     Data.ByteString.Lazy.Builder.BasicEncoding.Internal
-
-  other-modules:     Data.ByteString.Lazy.Builder.BasicEncoding.Binary
-                     Data.ByteString.Lazy.Builder.BasicEncoding.ASCII
-                     Data.ByteString.Lazy.Builder.BasicEncoding.Internal.Floating
-                     Data.ByteString.Lazy.Builder.BasicEncoding.Internal.UncheckedShifts
-                     Data.ByteString.Lazy.Builder.BasicEncoding.Internal.Base16
+  other-modules:
+                     Data.ByteString.Builder.ASCII
+                     Data.ByteString.Builder.Prim.Binary
+                     Data.ByteString.Builder.Prim.ASCII
+                     Data.ByteString.Builder.Prim.Internal.Floating
+                     Data.ByteString.Builder.Prim.Internal.UncheckedShifts
+                     Data.ByteString.Builder.Prim.Internal.Base16
 
   extensions:        CPP,
                      ForeignFunctionInterface,
                      BangPatterns
-
-  if impl(ghc)
-      extensions:   UnliftedFFITypes,
-                    MagicHash,
-                    UnboxedTuples,
-                    DeriveDataTypeable
-                    ScopedTypeVariables
-                    Rank2Types
-  if impl(ghc >= 6.11)
-      extensions:   NamedFieldPuns
+                     UnliftedFFITypes,
+                     MagicHash,
+                     UnboxedTuples,
+                     DeriveDataTypeable
+                     ScopedTypeVariables
+                     Rank2Types
+                     NamedFieldPuns
 
   ghc-options:      -Wall
                     -O2
                     -fmax-simplifier-iterations=10
                     -fdicts-cheap
-  if impl(ghc >= 6.10)
-    ghc-options:    -fspec-constr-count=6
-
-  -- flags for the decimal integer serialization code
-  if impl(ghc >= 6.11)
-    cpp-options: -DINTEGER_GMP
-    build-depends: integer-gmp >= 0.2 && < 0.5
-
-  if impl(ghc >= 6.9) && impl(ghc < 6.11)
-    cpp-options: -DINTEGER_GMP
-    build-depends: integer >= 0.1 && < 0.2
+                    -fspec-constr-count=6
 
   c-sources:         cbits/fpstring.c
                      cbits/itoa.c
@@ -122,59 +107,46 @@ library
   includes:          fpstring.h
   install-includes:  fpstring.h
 
-  nhc98-options:     -K4M -K3M
 
 -- QC properties, with GHC RULES disabled
 test-suite prop-compiled
   type:             exitcode-stdio-1.0
   main-is:          Properties.hs
+  other-modules:    Rules
+                    QuickCheckUtils
+                    TestFramework
   hs-source-dirs:   . tests
-  build-depends:    base, deepseq, random, directory
-                  , QuickCheck                 >= 2.3 && < 3
-                  , HUnit                      == 1.2.*
-  if impl(ghc >= 6.10)
-    build-depends:  ghc-prim
+  build-depends:    base, ghc-prim, deepseq, random, directory,
+                    QuickCheck >= 2.3 && < 3
   c-sources:        cbits/fpstring.c
   include-dirs:     include
   ghc-options:      -fwarn-unused-binds
-  if impl(ghc >= 6.10)
-    ghc-options:    -fno-enable-rewrite-rules
-  else
-    ghc-options:    -fno-rewrite-rules
+                    -fno-enable-rewrite-rules
   extensions:       BangPatterns
-  if impl(ghc)
-      extensions:   UnliftedFFITypes,
+                    UnliftedFFITypes,
                     MagicHash,
                     UnboxedTuples,
                     DeriveDataTypeable
                     ScopedTypeVariables
-  if impl(ghc >= 6.11)
-      extensions:   NamedFieldPuns
-  -- flags for the decimal integer serialization code
-  if impl(ghc >= 6.11)
-    cpp-options: -DINTEGER_GMP
-    build-depends: integer-gmp >= 0.2 && < 0.5
-
-  if impl(ghc >= 6.9) && impl(ghc < 6.11)
-    cpp-options: -DINTEGER_GMP
-    build-depends: integer >= 0.1 && < 0.2
-
+                    NamedFieldPuns
 
 test-suite test-builder
   type:             exitcode-stdio-1.0
   hs-source-dirs:   . tests tests/builder
   main-is:          TestSuite.hs
+  other-modules:    Data.ByteString.Builder.Tests
+                    Data.ByteString.Builder.Prim.Tests
+                    Data.ByteString.Builder.Prim.TestUtils
+                    Data.ByteString.Builder.Prim.Extra
+                    TestFramework
 
-  build-depends:    base, ghc-prim, integer-gmp
-                  , deepseq
-                  , QuickCheck                 >= 2.4 && < 3
-                  , HUnit                      == 1.2.*
-                  , byteorder                  == 1.0.*
-                  , dlist                      == 0.5.*
-                  , directory                  >= 1.0 && < 2
-                  , mtl                        == 2.0.*
-                  , deepseq                    >= 1.2 && < 2
-
+  build-depends:    base, ghc-prim,
+                    deepseq,
+                    QuickCheck                 >= 2.4 && < 3,
+                    byteorder                  == 1.0.*,
+                    dlist                      == 0.5.*,
+                    directory                  >= 1.0 && < 1.2,
+                    mtl                        >= 2.0 && < 2.2
 
   ghc-options:      -Wall -fwarn-tabs
 
@@ -202,3 +174,31 @@ test-suite test-builder
   if impl(ghc >= 6.9) && impl(ghc < 6.11)
     cpp-options: -DINTEGER_GMP
     build-depends: integer >= 0.1 && < 0.2
+
+benchmark bench-builder-all
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   . bench
+  main-is:          BenchAll.hs
+  build-depends:    base, deepseq, ghc-prim,
+                    criterion
+  c-sources:        cbits/fpstring.c
+                    cbits/itoa.c
+  include-dirs:     include
+  ghc-options:      -O2
+                    -fmax-simplifier-iterations=10
+                    -fdicts-cheap
+                    -fspec-constr-count=6
+
+benchmark bench-builder-boundscheck
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   . bench
+  main-is:          BoundsCheckFusion.hs
+  build-depends:    base, deepseq, ghc-prim,
+                    criterion
+  c-sources:        cbits/fpstring.c
+                    cbits/itoa.c
+  include-dirs:     include
+  ghc-options:      -O2
+                    -fmax-simplifier-iterations=10
+                    -fdicts-cheap
+                    -fspec-constr-count=6
